@@ -25,6 +25,13 @@ class MainActivity : ComponentActivity() {
                     SheetSetActions(
                         importPdfs = viewModel::importPdfs,
                         createSetlist = viewModel::createSetlist,
+                        openScore = viewModel::openScore,
+                        openSetlistScore = viewModel::openSetlistScore,
+                        closeReader = viewModel::closeReader,
+                        previousPage = viewModel::previousPage,
+                        nextPage = viewModel::nextPage,
+                        saveStrokes = viewModel::saveStrokes,
+                        exportPdf = viewModel::exportPdf,
                         renameScore = viewModel::renameScore,
                         deleteScore = viewModel::deleteScore,
                         renameSetlist = viewModel::renameSetlist,

@@ -36,11 +36,18 @@ import androidx.compose.ui.unit.sp
 import cz.teply.sheetset.LibraryUiState
 import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
+import cz.teply.sheetset.pdf.Stroke
 
 data class SheetSetActions(
     val importPdfs: (List<Uri>) -> Unit = {},
     val createSetlist: (String) -> Unit = {},
     val openScore: (Score) -> Unit = {},
+    val openSetlistScore: (String, Int) -> Unit = { _, _ -> },
+    val closeReader: () -> Unit = {},
+    val previousPage: () -> Unit = {},
+    val nextPage: () -> Unit = {},
+    val saveStrokes: (List<Stroke>) -> Unit = {},
+    val exportPdf: (Uri) -> Unit = {},
     val renameScore: (String, String) -> Unit = { _, _ -> },
     val deleteScore: (String) -> Unit = {},
     val renameSetlist: (String, String) -> Unit = { _, _ -> },
@@ -66,9 +73,18 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
     val errorMessage = stringResource(R.string.action_failed)
     val snackbarHost = remember { SnackbarHostState() }
     val activeSetlist = state.catalog.setlists.firstOrNull { it.id == activeSetlistId }
+    val closeCreateDialog = {
+        setlistName = ""
+        createSetlist = false
+    }
 
     LaunchedEffect(state.error) {
         if (state.error) snackbarHost.showSnackbar(errorMessage)
+    }
+
+    state.reader?.let { reader ->
+        ReaderScreen(reader, actions)
+        return
     }
 
     if (activeSetlist != null) {
@@ -142,7 +158,7 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
 
     if (createSetlist) {
         AlertDialog(
-            onDismissRequest = { createSetlist = false },
+            onDismissRequest = closeCreateDialog,
             title = { Text(stringResource(R.string.new_setlist)) },
             text = {
                 OutlinedTextField(
@@ -157,13 +173,12 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
                     enabled = setlistName.isNotBlank(),
                     onClick = {
                         actions.createSetlist(setlistName)
-                        setlistName = ""
-                        createSetlist = false
+                        closeCreateDialog()
                     },
                 ) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
-                TextButton(onClick = { createSetlist = false }) {
+                TextButton(onClick = closeCreateDialog) {
                     Text(stringResource(R.string.cancel))
                 }
             },

@@ -48,6 +48,10 @@ class LibraryRepositoryTest {
 
         assertEquals("Practice", score.title)
         assertEquals(2, score.pageCount)
+        assertEquals(
+            File(root, "scores/${score.fileName}").canonicalPath,
+            repository.pdfFile(score).canonicalPath,
+        )
         assertEquals(listOf(score), LibraryRepository(root).load().scores)
     }
 

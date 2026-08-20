@@ -204,7 +204,9 @@ private fun SetlistScoreRow(
     val up = stringResource(R.string.move_up)
     val down = stringResource(R.string.move_down)
     Row(
-        Modifier.fillMaxWidth().clickable { actions.openScore(score) }.padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable {
+            actions.openSetlistScore(setlist.id, index)
+        }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("${index + 1}", modifier = Modifier.padding(end = 12.dp), fontWeight = FontWeight.Bold)

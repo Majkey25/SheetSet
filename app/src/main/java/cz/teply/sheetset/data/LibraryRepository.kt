@@ -41,6 +41,14 @@ class LibraryRepository(private val root: File) {
         mutex.withLock { importLocked(source) }
     }
 
+    fun pdfFile(score: Score): File {
+        require(score.fileName.matches(Regex("[A-Za-z0-9-]+\\.pdf"))) { "Invalid score file" }
+        val file = File(scoresDirectory, score.fileName).canonicalFile
+        require(file.parentFile == scoresDirectory.canonicalFile) { "Invalid score path" }
+        require(file.isFile) { "Score file is missing" }
+        return file
+    }
+
     suspend fun loadAnnotations(scoreId: String): DocumentAnnotations = withContext(Dispatchers.IO) {
         mutex.withLock {
             val file = annotationFile(scoreId)
@@ -127,7 +135,7 @@ class LibraryRepository(private val root: File) {
             val catalog = loadCatalog()
             try {
                 writeCatalog(catalog.copy(scores = catalog.scores + score))
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 destination.delete()
                 throw error
             }
@@ -136,7 +144,7 @@ class LibraryRepository(private val root: File) {
             throw error
         } catch (error: PdfImportException) {
             throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             throw PdfImportException("Could not read PDF", error)
         } finally {
             temporary.delete()
@@ -201,7 +209,7 @@ class LibraryRepository(private val root: File) {
         }
     } catch (error: PdfImportException) {
         throw error
-    } catch (error: Throwable) {
+    } catch (error: Exception) {
         throw PdfImportException("File is not a readable PDF", error)
     }
 
@@ -213,7 +221,7 @@ class LibraryRepository(private val root: File) {
             output.write(text.toByteArray(Charsets.UTF_8))
             output.fd.sync()
             atomicFile.finishWrite(output)
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             atomicFile.failWrite(output)
             throw error
         }

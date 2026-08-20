@@ -2,6 +2,7 @@ package cz.teply.sheetset.pdf
 
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.hypot
 
 const val MAX_POINTS_PER_STROKE = 4_096
 const val MAX_STROKES_PER_PAGE = 10_000
@@ -17,6 +18,21 @@ data class NormalizedPoint(val x: Float, val y: Float) {
     init {
         require(x in 0f..1f && y in 0f..1f) { "Point must be normalized" }
     }
+}
+
+data class PageBounds(val left: Float, val top: Float, val width: Float, val height: Float) {
+    init {
+        require(width > 0f && height > 0f) { "Page bounds must be positive" }
+    }
+}
+
+fun normalizePoint(x: Float, y: Float, bounds: PageBounds): NormalizedPoint? {
+    if (x !in bounds.left..(bounds.left + bounds.width)) return null
+    if (y !in bounds.top..(bounds.top + bounds.height)) return null
+    return NormalizedPoint(
+        x = (x - bounds.left) / bounds.width,
+        y = (y - bounds.top) / bounds.height,
+    )
 }
 
 data class Stroke(
@@ -37,6 +53,13 @@ data class DocumentAnnotations(val pages: Map<Int, List<Stroke>> = emptyMap()) {
         require(pages.all { (page, strokes) ->
             page >= 0 && strokes.size <= MAX_STROKES_PER_PAGE
         }) { "Invalid page annotations" }
+    }
+
+    fun withPage(page: Int, strokes: List<Stroke>): DocumentAnnotations {
+        require(page >= 0) { "Page index must not be negative" }
+        val next = pages.toMutableMap()
+        if (strokes.isEmpty()) next.remove(page) else next[page] = strokes
+        return DocumentAnnotations(next)
     }
 }
 
@@ -68,9 +91,44 @@ data class AnnotationHistory(
         )
     }
 
+    fun erase(point: NormalizedPoint, radius: Float): AnnotationHistory {
+        require(radius > 0f) { "Eraser radius must be positive" }
+        val remaining = strokes.filterNot { it.isNear(point, radius) }
+        return if (remaining.size == strokes.size) this else replace(remaining)
+    }
+
     private fun replace(next: List<Stroke>): AnnotationHistory = AnnotationHistory(
         strokes = next,
         undoStates = (undoStates + listOf(strokes)).takeLast(MAX_HISTORY_STEPS),
+    )
+}
+
+private fun Stroke.isNear(point: NormalizedPoint, radius: Float): Boolean {
+    if (points.size == 1) return distance(points.single(), point) <= radius
+    return points.zipWithNext().any { (start, end) ->
+        distanceToSegment(point, start, end) <= radius
+    }
+}
+
+private fun distance(first: NormalizedPoint, second: NormalizedPoint): Float = hypot(
+    first.x - second.x,
+    first.y - second.y,
+)
+
+private fun distanceToSegment(
+    point: NormalizedPoint,
+    start: NormalizedPoint,
+    end: NormalizedPoint,
+): Float {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val lengthSquared = dx * dx + dy * dy
+    if (lengthSquared == 0f) return distance(point, start)
+    val projection = (((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+        .coerceIn(0f, 1f)
+    return hypot(
+        point.x - (start.x + projection * dx),
+        point.y - (start.y + projection * dy),
     )
 }
 

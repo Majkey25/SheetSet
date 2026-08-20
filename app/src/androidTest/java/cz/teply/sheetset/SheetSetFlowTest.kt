@@ -3,21 +3,25 @@ package cz.teply.sheetset
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
+import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
 import org.junit.Rule
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 @Suppress("DEPRECATION")
 class SheetSetFlowTest {
@@ -119,5 +123,52 @@ class SheetSetFlowTest {
         composeRule.onNodeWithText("Add").performClick()
 
         composeRule.onNodeWithText("Song").assertIsDisplayed()
+    }
+
+    @Test
+    fun readerOpensAnnotationTools() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Annotate").performClick()
+
+        composeRule.onNodeWithText("Pen").assertIsDisplayed()
+        composeRule.onNodeWithText("Highlighter").assertIsDisplayed()
+        composeRule.onNodeWithText("Eraser").assertIsDisplayed()
+        composeRule.onNodeWithText("Undo").assertIsDisplayed()
+        composeRule.onNodeWithText("Redo").assertIsDisplayed()
+    }
+
+    @Test
+    fun cancelledSetlistNameIsCleared() {
+        composeRule.setContent {
+            SheetSetTheme { SheetSetApp(LibraryUiState(), SheetSetActions()) }
+        }
+        composeRule.onNodeWithText("Setlists").performClick()
+        composeRule.onNodeWithContentDescription("New setlist").performClick()
+        composeRule.onNodeWithText("Setlist name").performTextInput("Old name")
+        composeRule.onNodeWithText("Cancel").performClick()
+
+        composeRule.onNodeWithContentDescription("New setlist").performClick()
+
+        composeRule.onAllNodesWithText("Old name").assertCountEquals(0)
     }
 }
