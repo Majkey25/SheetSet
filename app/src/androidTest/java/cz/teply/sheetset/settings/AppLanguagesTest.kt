@@ -32,6 +32,18 @@ class AppLanguagesTest {
         AppLanguages.select(context, null)
         AppLanguages.initialize(context)
         assertTrue(localeManager.applicationLocales.isEmpty)
+        assertTrue(preferences.getBoolean("language_initialized", false))
+    }
+
+    @Test
+    fun selectingLanguageSetsLocaleAndMarksInitialized() {
+        preferences.edit().clear().commit()
+        localeManager.applicationLocales = LocaleList.getEmptyLocaleList()
+
+        AppLanguages.select(context, "cs")
+
+        assertEquals("cs", localeManager.applicationLocales.toLanguageTags())
+        assertTrue(preferences.getBoolean("language_initialized", false))
     }
 
     @Test

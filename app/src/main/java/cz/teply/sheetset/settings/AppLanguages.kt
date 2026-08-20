@@ -18,10 +18,10 @@ object AppLanguages {
 
     fun select(context: Context, languageTag: String?) {
         require(languageTag == null || languageTag in supportedTags) { "Unsupported language" }
+        context.getSharedPreferences("sheetset-settings", Context.MODE_PRIVATE)
+            .edit().putBoolean("language_initialized", true).commit()
         context.getSystemService(LocaleManager::class.java).applicationLocales =
             if (languageTag == null) LocaleList.getEmptyLocaleList()
             else LocaleList.forLanguageTags(languageTag)
-        context.getSharedPreferences("sheetset-settings", Context.MODE_PRIVATE)
-            .edit().putBoolean("language_initialized", true).apply()
     }
 }
