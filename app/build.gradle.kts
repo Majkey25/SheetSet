@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "cz.teply.sheetset"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 36
         versionCode = 2
         versionName = "0.2.0-alpha.1"
