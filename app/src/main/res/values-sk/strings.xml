@@ -15,6 +15,8 @@
     <string name="save">Uložiť</string>
     <string name="cancel">Zrušiť</string>
     <string name="search_pdfs">Hľadať v PDF</string>
+    <string name="no_search_results">Žiadne výsledky</string>
+    <string name="edit_order">Upraviť poradie</string>
     <string name="rename">Premenovať</string>
     <string name="delete">Odstrániť</string>
     <string name="more_options">Ďalšie možnosti</string>

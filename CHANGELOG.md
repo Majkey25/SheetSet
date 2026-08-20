@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0-alpha.1] - 2026-08-20
+
+### Changed
+
+- Reworked the library, setlist, dialogs, and reader controls into one restrained monochrome interface.
+- Moved import and search actions into one header and removed the duplicate PDF heading.
+- Replaced the filled tab bar with a lighter paper-style selection indicator.
+- Tightened spacing and control bars so scores keep more of the screen.
+
+### Fixed
+
+- Tabs and annotation tools now report their selected state to screen readers.
+
 ## [0.1.0-alpha.1] - 2026-08-20
 
 ### Added

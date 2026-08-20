@@ -65,6 +65,10 @@ class PdfPageView(context: Context) : View(context) {
     private var lastTapY = 0f
     private val preview = mutableListOf<NormalizedPoint>()
 
+    init {
+        isClickable = true
+    }
+
     var tool = ReaderTool.VIEW
         set(value) {
             field = value
@@ -78,6 +82,7 @@ class PdfPageView(context: Context) : View(context) {
         }
     var onPreviousPage: () -> Unit = {}
     var onNextPage: () -> Unit = {}
+    var onPageClick: () -> Unit = {}
     var onAddStroke: (Stroke) -> Unit = {}
     var onErase: (NormalizedPoint) -> Unit = {}
     var onRenderError: () -> Unit = {}
@@ -96,7 +101,7 @@ class PdfPageView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(Color.rgb(238, 238, 238))
+        canvas.drawColor(Color.rgb(18, 18, 18))
         val page = bitmap ?: return
         val bounds = pageBounds(page)
         canvas.drawBitmap(page, null, bounds, pagePaint)
@@ -126,6 +131,7 @@ class PdfPageView(context: Context) : View(context) {
 
     override fun performClick(): Boolean {
         super.performClick()
+        onPageClick()
         return true
     }
 
@@ -168,23 +174,32 @@ class PdfPageView(context: Context) : View(context) {
         }
         if (hypot(dx, dy) > 24f) return false
         val now = System.currentTimeMillis()
-        if (now - lastTapAt < 300 && hypot(event.x - lastTapX, event.y - lastTapY) < 60f) {
+        if (
+            zoom > 1f &&
+            now - lastTapAt < 300 &&
+            hypot(event.x - lastTapX, event.y - lastTapY) < 60f
+        ) {
             zoom = 1f
             panX = 0f
             panY = 0f
             lastTapAt = 0L
             invalidate()
-            return true
+            return false
         }
         lastTapAt = now
         lastTapX = event.x
         lastTapY = event.y
-        when {
-            event.x < width / 3f -> onPreviousPage()
-            event.x > width * 2f / 3f -> onNextPage()
-            else -> Unit
+        return when {
+            event.x < width / 3f -> {
+                onPreviousPage()
+                false
+            }
+            event.x > width * 2f / 3f -> {
+                onNextPage()
+                false
+            }
+            else -> true
         }
-        return true
     }
 
     private fun handleAnnotationTouch(event: MotionEvent): Boolean {

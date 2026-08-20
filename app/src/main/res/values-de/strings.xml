@@ -15,6 +15,8 @@
     <string name="save">Speichern</string>
     <string name="cancel">Abbrechen</string>
     <string name="search_pdfs">PDFs suchen</string>
+    <string name="no_search_results">Keine Treffer</string>
+    <string name="edit_order">Reihenfolge ändern</string>
     <string name="rename">Umbenennen</string>
     <string name="delete">Löschen</string>
     <string name="more_options">Weitere Optionen</string>

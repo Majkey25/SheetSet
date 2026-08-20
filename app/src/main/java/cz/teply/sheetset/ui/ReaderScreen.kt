@@ -1,30 +1,43 @@
 package cz.teply.sheetset.ui
 
-import androidx.compose.foundation.horizontalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import cz.teply.sheetset.R
 import cz.teply.sheetset.ReaderUiState
@@ -32,10 +45,10 @@ import cz.teply.sheetset.pdf.AnnotationHistory
 import cz.teply.sheetset.pdf.PdfPageView
 import cz.teply.sheetset.pdf.ReaderTool
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(reader: ReaderUiState, actions: SheetSetActions) {
     var tool by remember { mutableStateOf(ReaderTool.VIEW) }
+    var controlsVisible by remember { mutableStateOf(true) }
     var history by remember(reader.score.id, reader.pageIndex) {
         mutableStateOf(AnnotationHistory(reader.annotations.pages[reader.pageIndex].orEmpty()))
     }
@@ -47,96 +60,197 @@ fun ReaderScreen(reader: ReaderUiState, actions: SheetSetActions) {
         actions.saveStrokes(next.strokes)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(reader.score.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
-                navigationIcon = {
-                    TextButton(onClick = actions.closeReader) {
-                        Text(stringResource(R.string.close))
-                    }
-                },
-                actions = {
-                    TextButton(
-                        onClick = {
-                            exportLauncher.launch(
-                                reader.score.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                                    .take(100) + "-annotated.pdf",
-                            )
-                        },
-                    ) { Text(stringResource(R.string.export)) }
-                },
-            )
-        },
-        bottomBar = {
-            Surface {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    if (tool == ReaderTool.VIEW) {
-                        TextButton(onClick = actions.previousPage) {
-                            Text(stringResource(R.string.previous))
-                        }
-                        Text(
-                            stringResource(
-                                R.string.page_position,
-                                reader.pageIndex + 1,
-                                reader.score.pageCount,
-                            ),
-                            modifier = Modifier.padding(vertical = 14.dp),
-                        )
-                        TextButton(onClick = actions.nextPage) {
-                            Text(stringResource(R.string.next))
-                        }
-                        TextButton(onClick = { tool = ReaderTool.PEN }) {
-                            Text(stringResource(R.string.annotate))
-                        }
-                    } else {
-                        TextButton(onClick = { tool = ReaderTool.PEN }) {
-                            Text(stringResource(R.string.pen))
-                        }
-                        TextButton(onClick = { tool = ReaderTool.HIGHLIGHTER }) {
-                            Text(stringResource(R.string.highlighter))
-                        }
-                        TextButton(onClick = { tool = ReaderTool.ERASER }) {
-                            Text(stringResource(R.string.eraser))
-                        }
-                        TextButton(onClick = { updateHistory(history.undo()) }) {
-                            Text(stringResource(R.string.undo))
-                        }
-                        TextButton(onClick = { updateHistory(history.redo()) }) {
-                            Text(stringResource(R.string.redo))
-                        }
-                        TextButton(onClick = { tool = ReaderTool.VIEW }) {
-                            Text(stringResource(R.string.done))
-                        }
-                    }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context -> PdfPageView(context) },
+            update = { view ->
+                view.contentDescription = view.context.getString(
+                    R.string.pdf_page,
+                    reader.pageIndex + 1,
+                    reader.score.pageCount,
+                )
+                view.tool = tool
+                view.strokes = history.strokes
+                view.onPreviousPage = actions.previousPage
+                view.onNextPage = actions.nextPage
+                view.onPageClick = {
+                    if (tool == ReaderTool.VIEW) controlsVisible = !controlsVisible
                 }
-            }
-        },
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context -> PdfPageView(context) },
-                update = { view ->
-                    view.contentDescription = view.context.getString(
-                        R.string.pdf_page,
-                        reader.pageIndex + 1,
-                        reader.score.pageCount,
+                view.onAddStroke = { updateHistory(history.add(it)) }
+                view.onErase = { point -> updateHistory(history.erase(point, 0.025f)) }
+                view.showPage(reader.file, reader.pageIndex)
+            },
+        )
+        AnimatedVisibility(
+            visible = controlsVisible,
+            modifier = Modifier.align(Alignment.TopCenter),
+            enter = fadeIn(tween(140)),
+            exit = fadeOut(tween(140)),
+        ) {
+            ReaderTopBar(
+                title = reader.score.title,
+                onClose = actions.closeReader,
+                onExport = {
+                    exportLauncher.launch(
+                        reader.score.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                            .take(100) + "-annotated.pdf",
                     )
-                    view.tool = tool
-                    view.strokes = history.strokes
-                    view.onPreviousPage = actions.previousPage
-                    view.onNextPage = actions.nextPage
-                    view.onAddStroke = { updateHistory(history.add(it)) }
-                    view.onErase = { point -> updateHistory(history.erase(point, 0.025f)) }
-                    view.showPage(reader.file, reader.pageIndex)
                 },
             )
         }
+        AnimatedVisibility(
+            visible = controlsVisible,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(tween(140)),
+            exit = fadeOut(tween(140)),
+        ) {
+            if (tool == ReaderTool.VIEW) {
+                ReaderNavigationBar(reader, actions) {
+                    tool = ReaderTool.PEN
+                    controlsVisible = true
+                }
+            } else {
+                AnnotationBar(
+                    tool = tool,
+                    onTool = { tool = it },
+                    onUndo = { updateHistory(history.undo()) },
+                    onRedo = { updateHistory(history.redo()) },
+                    onDone = {
+                        tool = ReaderTool.VIEW
+                        controlsVisible = true
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderTopBar(title: String, onClose: () -> Unit, onExport: () -> Unit) {
+    Surface(color = Color.Black.copy(alpha = 0.9f), contentColor = Color.White) {
+        Row(
+            Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReaderControl(stringResource(R.string.close), "×", onClick = onClose)
+            Text(
+                title,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            ReaderControl(stringResource(R.string.export), "⇩", onClick = onExport)
+        }
+    }
+}
+
+@Composable
+private fun ReaderNavigationBar(
+    reader: ReaderUiState,
+    actions: SheetSetActions,
+    onAnnotate: () -> Unit,
+) {
+    val previousEnabled = reader.pageIndex > 0 || reader.scoreIndex > 0
+    val nextEnabled = reader.pageIndex < reader.score.pageCount - 1 ||
+        reader.scoreIndex < reader.scoreIds.lastIndex
+    Surface(color = Color.Black.copy(alpha = 0.9f), contentColor = Color.White) {
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReaderControl(
+                stringResource(R.string.previous),
+                "‹",
+                enabled = previousEnabled,
+                onClick = actions.previousPage,
+            )
+            Text(
+                stringResource(
+                    R.string.page_position,
+                    reader.pageIndex + 1,
+                    reader.score.pageCount,
+                ),
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+            )
+            ReaderControl(
+                stringResource(R.string.next),
+                "›",
+                enabled = nextEnabled,
+                onClick = actions.nextPage,
+            )
+            ReaderControl(stringResource(R.string.annotate), "✎", onClick = onAnnotate)
+        }
+    }
+}
+
+@Composable
+private fun AnnotationBar(
+    tool: ReaderTool,
+    onTool: (ReaderTool) -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Surface(color = Color.Black.copy(alpha = 0.9f), contentColor = Color.White) {
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReaderControl(
+                stringResource(R.string.pen),
+                "✎",
+                selected = tool == ReaderTool.PEN,
+            ) { onTool(ReaderTool.PEN) }
+            ReaderControl(
+                stringResource(R.string.highlighter),
+                "▰",
+                selected = tool == ReaderTool.HIGHLIGHTER,
+            ) { onTool(ReaderTool.HIGHLIGHTER) }
+            ReaderControl(
+                stringResource(R.string.eraser),
+                "⌫",
+                selected = tool == ReaderTool.ERASER,
+            ) { onTool(ReaderTool.ERASER) }
+            ReaderControl(stringResource(R.string.undo), "↶", onClick = onUndo)
+            ReaderControl(stringResource(R.string.redo), "↷", onClick = onRedo)
+            ReaderControl(stringResource(R.string.done), "✓", onClick = onDone)
+        }
+    }
+}
+
+@Composable
+private fun ReaderControl(
+    label: String,
+    glyph: String,
+    selected: Boolean? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        modifier = Modifier.size(48.dp)
+            .background(
+                if (selected == true) Color.White else Color.Transparent,
+                RoundedCornerShape(2.dp),
+            )
+            .semantics {
+                contentDescription = label
+                selected?.let { this.selected = it }
+            },
+        enabled = enabled,
+        onClick = onClick,
+    ) {
+        Text(
+            glyph,
+            color = when {
+                !enabled -> Color.Gray
+                selected == true -> Color.Black
+                else -> Color.White
+            },
+            fontSize = 22.sp,
+        )
     }
 }
