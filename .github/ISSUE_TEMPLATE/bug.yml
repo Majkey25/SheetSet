@@ -1,0 +1,30 @@
+name: Bug report
+description: Report reproducible broken behavior
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include the exact steps and the expected result.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SheetSet version
+      placeholder: 0.1.0-alpha.1
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Android device and version
+    validations:
+      required: true
+  - type: textarea
+    id: pdf
+    attributes:
+      label: PDF details
+      description: Page count, approximate size, and whether another PDF shows the same issue. Do not upload copyrighted material.
