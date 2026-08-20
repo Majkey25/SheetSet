@@ -6,6 +6,7 @@
     <string name="no_pdfs">Zatiaľ žiadne PDF</string>
     <string name="import_hint">Importujte prvé PDF.</string>
     <string name="import_pdf">Importovať PDF</string>
+    <string name="untitled_pdf_file">Bez názvu.pdf</string>
     <string name="no_setlists">Zatiaľ žiadne setlisty</string>
     <string name="setlist_hint">Vytvorte setlist na skúšku alebo koncert.</string>
     <string name="new_setlist">Nový setlist</string>

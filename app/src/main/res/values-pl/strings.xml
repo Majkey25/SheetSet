@@ -6,6 +6,7 @@
     <string name="no_pdfs">Brak plików PDF</string>
     <string name="import_hint">Zaimportuj pierwszy plik PDF.</string>
     <string name="import_pdf">Importuj PDF</string>
+    <string name="untitled_pdf_file">Bez nazwy.pdf</string>
     <string name="no_setlists">Brak setlist</string>
     <string name="setlist_hint">Utwórz setlistę na próbę lub koncert.</string>
     <string name="new_setlist">Nowa setlista</string>

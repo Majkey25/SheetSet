@@ -6,6 +6,7 @@
     <string name="no_pdfs">Noch keine PDFs</string>
     <string name="import_hint">Importiere dein erstes PDF.</string>
     <string name="import_pdf">PDF importieren</string>
+    <string name="untitled_pdf_file">Unbenannt.pdf</string>
     <string name="no_setlists">Noch keine Setlists</string>
     <string name="setlist_hint">Erstelle eine Setlist für Probe oder Auftritt.</string>
     <string name="new_setlist">Neue Setlist</string>

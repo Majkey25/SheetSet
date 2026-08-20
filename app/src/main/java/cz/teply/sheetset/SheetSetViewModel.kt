@@ -182,7 +182,8 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun pdfImport(uri: Uri): PdfImport = withContext(Dispatchers.IO) {
         val resolver = getApplication<Application>().contentResolver
-        var name = uri.lastPathSegment?.substringAfterLast('/') ?: "Untitled.pdf"
+        val fallbackName = getApplication<Application>().getString(R.string.untitled_pdf_file)
+        var name = uri.lastPathSegment?.substringAfterLast('/').orEmpty().ifBlank { fallbackName }
         var size: Long? = null
         resolver.query(
             uri,
@@ -198,6 +199,7 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                 if (sizeColumn >= 0 && !cursor.isNull(sizeColumn)) size = cursor.getLong(sizeColumn)
             }
         }
+        if (name.isBlank()) name = fallbackName
         PdfImport(name, resolver.getType(uri), size) {
             resolver.openInputStream(uri) ?: throw FileNotFoundException(uri.toString())
         }
