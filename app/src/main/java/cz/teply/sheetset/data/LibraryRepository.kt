@@ -57,6 +57,47 @@ class LibraryRepository(private val root: File) {
         }
     }
 
+    suspend fun createSetlist(name: String): Setlist {
+        val id = UUID.randomUUID().toString()
+        return updateCatalog { it.createSetlist(name, id) }.setlists.first { it.id == id }
+    }
+
+    suspend fun renameScore(scoreId: String, title: String) {
+        updateCatalog { it.renameScore(scoreId, title) }
+    }
+
+    suspend fun renameSetlist(setlistId: String, name: String) {
+        updateCatalog { it.renameSetlist(setlistId, name) }
+    }
+
+    suspend fun deleteSetlist(setlistId: String) {
+        updateCatalog { it.deleteSetlist(setlistId) }
+    }
+
+    suspend fun addScoreToSetlist(setlistId: String, scoreId: String) {
+        updateCatalog { it.addScoreToSetlist(setlistId, scoreId) }
+    }
+
+    suspend fun removeScoreFromSetlist(setlistId: String, index: Int) {
+        updateCatalog { it.removeScoreFromSetlist(setlistId, index) }
+    }
+
+    suspend fun moveScore(setlistId: String, fromIndex: Int, toIndex: Int) {
+        updateCatalog { it.moveScore(setlistId, fromIndex, toIndex) }
+    }
+
+    suspend fun deleteScore(scoreId: String) {
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val catalog = loadCatalog()
+                val score = catalog.scores.firstOrNull { it.id == scoreId } ?: return@withLock
+                writeCatalog(catalog.deleteScore(scoreId))
+                File(scoresDirectory, score.fileName).delete()
+                annotationFile(scoreId).delete()
+            }
+        }
+    }
+
     private fun importLocked(source: PdfImport): Score {
         if (source.mimeType != null && !source.mimeType.equals("application/pdf", ignoreCase = true)) {
             throw PdfImportException("Only PDF files are supported")
@@ -110,6 +151,14 @@ class LibraryRepository(private val root: File) {
 
     private fun writeCatalog(catalog: LibraryCatalog) {
         writeAtomic(catalogFile, CatalogJson.encode(catalog))
+    }
+
+    private suspend fun updateCatalog(
+        transform: (LibraryCatalog) -> LibraryCatalog,
+    ): LibraryCatalog = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            transform(loadCatalog()).also(::writeCatalog)
+        }
     }
 
     private fun annotationFile(scoreId: String): File {

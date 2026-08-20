@@ -5,6 +5,10 @@ import org.json.JSONObject
 
 const val MAX_TITLE_LENGTH = 120
 
+private fun cleanTitle(value: String): String = value.trim().take(MAX_TITLE_LENGTH).also {
+    require(it.isNotEmpty()) { "Title must not be blank" }
+}
+
 data class Score(
     val id: String,
     val title: String,
@@ -24,10 +28,42 @@ data class LibraryCatalog(
     val setlists: List<Setlist> = emptyList(),
 ) {
     fun createSetlist(name: String, id: String): LibraryCatalog {
-        val cleanName = name.trim().take(MAX_TITLE_LENGTH)
-        require(cleanName.isNotEmpty()) { "Setlist name must not be blank" }
         require(id.isNotBlank()) { "Setlist ID must not be blank" }
-        return copy(setlists = setlists + Setlist(id, cleanName))
+        return copy(setlists = setlists + Setlist(id, cleanTitle(name)))
+    }
+
+    fun renameScore(scoreId: String, title: String): LibraryCatalog = copy(
+        scores = scores.map { score ->
+            if (score.id == scoreId) score.copy(title = cleanTitle(title)) else score
+        },
+    )
+
+    fun renameSetlist(setlistId: String, name: String): LibraryCatalog = copy(
+        setlists = setlists.map { setlist ->
+            if (setlist.id == setlistId) setlist.copy(name = cleanTitle(name)) else setlist
+        },
+    )
+
+    fun deleteSetlist(setlistId: String): LibraryCatalog = copy(
+        setlists = setlists.filterNot { it.id == setlistId },
+    )
+
+    fun addScoreToSetlist(setlistId: String, scoreId: String): LibraryCatalog {
+        require(scores.any { it.id == scoreId }) { "Score does not exist" }
+        require(setlists.any { it.id == setlistId }) { "Setlist does not exist" }
+        return copy(setlists = setlists.map { setlist ->
+            if (setlist.id == setlistId) setlist.copy(scoreIds = setlist.scoreIds + scoreId)
+            else setlist
+        })
+    }
+
+    fun removeScoreFromSetlist(setlistId: String, index: Int): LibraryCatalog {
+        val setlist = setlists.firstOrNull { it.id == setlistId } ?: return this
+        if (index !in setlist.scoreIds.indices) return this
+        val remaining = setlist.scoreIds.toMutableList().apply { removeAt(index) }
+        return copy(setlists = setlists.map { current ->
+            if (current.id == setlistId) current.copy(scoreIds = remaining) else current
+        })
     }
 
     fun deleteScore(scoreId: String): LibraryCatalog = copy(

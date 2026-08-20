@@ -3,6 +3,7 @@ package cz.teply.sheetset.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LibraryCatalogTest {
@@ -52,5 +53,44 @@ class LibraryCatalogTest {
         )
         assertEquals(original, original.moveScore("set-1", fromIndex = -1, toIndex = 0))
         assertEquals(original, original.moveScore("missing", fromIndex = 0, toIndex = 1))
+    }
+
+    @Test
+    fun `score can be renamed and added to setlist`() {
+        val score = Score("score-1", "Old", "score-1.pdf", 1, 1L)
+        val catalog = LibraryCatalog(
+            scores = listOf(score),
+            setlists = listOf(Setlist("set-1", "Show")),
+        )
+
+        val updated = catalog
+            .renameScore(score.id, "  New title  ")
+            .addScoreToSetlist("set-1", score.id)
+
+        assertEquals("New title", updated.scores.single().title)
+        assertEquals(listOf(score.id), updated.setlists.single().scoreIds)
+    }
+
+    @Test
+    fun `setlist can be renamed and deleted`() {
+        val catalog = LibraryCatalog().createSetlist("Show", "set-1")
+
+        val renamed = catalog.renameSetlist("set-1", "  Encore  ")
+
+        assertEquals("Encore", renamed.setlists.single().name)
+        assertTrue(renamed.deleteSetlist("set-1").setlists.isEmpty())
+    }
+
+    @Test
+    fun `score occurrence can be removed from setlist`() {
+        val catalog = LibraryCatalog(
+            setlists = listOf(Setlist("set-1", "Show", listOf("a", "b", "a"))),
+        )
+
+        assertEquals(
+            listOf("a", "a"),
+            catalog.removeScoreFromSetlist("set-1", 1).setlists.single().scoreIds,
+        )
+        assertEquals(catalog, catalog.removeScoreFromSetlist("set-1", 9))
     }
 }

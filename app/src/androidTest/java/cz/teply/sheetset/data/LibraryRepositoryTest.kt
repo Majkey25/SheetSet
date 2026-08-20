@@ -12,6 +12,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
@@ -107,6 +108,26 @@ class LibraryRepositoryTest {
         }
 
         assertSame(cancellation, thrown)
+    }
+
+    @Test
+    fun setlistsPersistAndScoreDeletionCleansReferences() = runBlocking {
+        val source = createPdf("song.pdf", pages = 1)
+        val repository = LibraryRepository(root)
+        val score = repository.importPdf(
+            PdfImport("Song.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        repeat(4) { index -> repository.createSetlist("Set ${index + 1}") }
+        val firstSetlist = repository.load().setlists.first()
+        repository.addScoreToSetlist(firstSetlist.id, score.id)
+
+        repository.deleteScore(score.id)
+
+        val reloaded = LibraryRepository(root).load()
+        assertEquals(4, reloaded.setlists.size)
+        assertTrue(reloaded.setlists.all { score.id !in it.scoreIds })
+        assertTrue(reloaded.scores.isEmpty())
+        assertTrue(!File(root, "scores/${score.fileName}").exists())
     }
 
     private fun createPdf(name: String, pages: Int): File {
