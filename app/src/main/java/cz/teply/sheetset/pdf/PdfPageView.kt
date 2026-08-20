@@ -12,6 +12,7 @@ import android.os.ParcelFileDescriptor
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import androidx.core.graphics.createBitmap
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -106,11 +107,7 @@ class PdfPageView(context: Context) : View(context) {
             else -> null
         }
         if (previewTool != null && preview.isNotEmpty()) {
-            drawStroke(
-                canvas,
-                Stroke(previewTool, widthFor(previewTool), preview.toList()),
-                bounds,
-            )
+            drawStroke(canvas, previewTool, widthFor(previewTool), preview, bounds)
         }
     }
 
@@ -120,7 +117,11 @@ class PdfPageView(context: Context) : View(context) {
             preview.clear()
             return true
         }
-        return if (tool == ReaderTool.VIEW) handleViewTouch(event) else handleAnnotationTouch(event)
+        if (tool == ReaderTool.VIEW) {
+            if (handleViewTouch(event)) performClick()
+            return true
+        }
+        return handleAnnotationTouch(event)
     }
 
     override fun performClick(): Boolean {
@@ -137,6 +138,7 @@ class PdfPageView(context: Context) : View(context) {
     }
 
     private fun handleViewTouch(event: MotionEvent): Boolean {
+        var clicked = false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
@@ -152,19 +154,19 @@ class PdfPageView(context: Context) : View(context) {
                 clampPan()
                 invalidate()
             }
-            MotionEvent.ACTION_UP -> finishViewGesture(event)
+            MotionEvent.ACTION_UP -> clicked = finishViewGesture(event)
         }
-        return true
+        return clicked
     }
 
-    private fun finishViewGesture(event: MotionEvent) {
+    private fun finishViewGesture(event: MotionEvent): Boolean {
         val dx = event.x - downX
         val dy = event.y - downY
         if (zoom == 1f && abs(dx) > 80f && abs(dx) > abs(dy)) {
             if (dx < 0f) onNextPage() else onPreviousPage()
-            return
+            return false
         }
-        if (hypot(dx, dy) > 24f) return
+        if (hypot(dx, dy) > 24f) return false
         val now = System.currentTimeMillis()
         if (now - lastTapAt < 300 && hypot(event.x - lastTapX, event.y - lastTapY) < 60f) {
             zoom = 1f
@@ -172,7 +174,7 @@ class PdfPageView(context: Context) : View(context) {
             panY = 0f
             lastTapAt = 0L
             invalidate()
-            return
+            return true
         }
         lastTapAt = now
         lastTapX = event.x
@@ -180,8 +182,9 @@ class PdfPageView(context: Context) : View(context) {
         when {
             event.x < width / 3f -> onPreviousPage()
             event.x > width * 2f / 3f -> onNextPage()
-            else -> performClick()
+            else -> Unit
         }
+        return true
     }
 
     private fun handleAnnotationTouch(event: MotionEvent): Boolean {
@@ -231,15 +234,25 @@ class PdfPageView(context: Context) : View(context) {
     }
 
     private fun drawStroke(canvas: Canvas, stroke: Stroke, bounds: RectF) {
-        val first = stroke.points.first()
+        drawStroke(canvas, stroke.tool, stroke.width, stroke.points, bounds)
+    }
+
+    private fun drawStroke(
+        canvas: Canvas,
+        annotationTool: AnnotationTool,
+        lineWidth: Float,
+        points: List<NormalizedPoint>,
+        bounds: RectF,
+    ) {
+        val first = points.first()
         val path = Path().apply {
             moveTo(pointX(first, bounds), pointY(first, bounds))
-            stroke.points.drop(1).forEach { point -> lineTo(pointX(point, bounds), pointY(point, bounds)) }
+            points.drop(1).forEach { point -> lineTo(pointX(point, bounds), pointY(point, bounds)) }
         }
-        strokePaint.color = if (stroke.tool == AnnotationTool.PEN) Color.BLACK else Color.DKGRAY
-        strokePaint.alpha = if (stroke.tool == AnnotationTool.PEN) 255 else 95
-        strokePaint.strokeWidth = stroke.width * min(bounds.width(), bounds.height())
-        if (stroke.points.size == 1) {
+        strokePaint.color = if (annotationTool == AnnotationTool.PEN) Color.BLACK else Color.DKGRAY
+        strokePaint.alpha = if (annotationTool == AnnotationTool.PEN) 255 else 95
+        strokePaint.strokeWidth = lineWidth * min(bounds.width(), bounds.height())
+        if (points.size == 1) {
             canvas.drawPoint(pointX(first, bounds), pointY(first, bounds), strokePaint)
         } else {
             canvas.drawPath(path, strokePaint)
@@ -305,7 +318,7 @@ class PdfPageView(context: Context) : View(context) {
                         3_072f / page.height,
                         sqrt(12_000_000f / (page.width.toFloat() * page.height)),
                     )
-                    Bitmap.createBitmap(
+                    createBitmap(
                         (page.width * scale).roundToInt(),
                         (page.height * scale).roundToInt(),
                         Bitmap.Config.ARGB_8888,

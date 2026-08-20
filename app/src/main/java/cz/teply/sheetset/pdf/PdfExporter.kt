@@ -8,6 +8,7 @@ import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import androidx.core.graphics.createBitmap
 import java.io.File
 import java.io.OutputStream
 import kotlin.math.min
@@ -57,7 +58,7 @@ object PdfExporter {
             4_096f / page.height,
             sqrt(12_000_000f / (page.width.toFloat() * page.height)),
         )
-        return Bitmap.createBitmap(
+        return createBitmap(
             (page.width * scale).roundToInt().coerceAtLeast(1),
             (page.height * scale).roundToInt().coerceAtLeast(1),
             Bitmap.Config.ARGB_8888,

@@ -33,7 +33,6 @@
     <string name="choose_pdfs">Choose PDFs from your library.</string>
     <string name="import_first">Import PDFs in the PDF tab first.</string>
     <string name="action_failed">The action could not be completed.</string>
-    <string name="dismiss">Dismiss</string>
     <string name="close">Close</string>
     <string name="export">Export</string>
     <string name="annotate">Annotate</string>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SheetSet</string>
+    <string name="tab_pdf">PDF</string>
+    <string name="tab_setlists">Setlisty</string>
+    <string name="no_pdfs">Brak plików PDF</string>
+    <string name="import_hint">Zaimportuj pierwszy plik PDF.</string>
+    <string name="import_pdf">Importuj PDF</string>
+    <string name="no_setlists">Brak setlist</string>
+    <string name="setlist_hint">Utwórz setlistę na próbę lub koncert.</string>
+    <string name="new_setlist">Nowa setlista</string>
+    <string name="setlist_name">Nazwa setlisty</string>
+    <string name="name">Nazwa</string>
+    <string name="save">Zapisz</string>
+    <string name="cancel">Anuluj</string>
+    <string name="search_pdfs">Szukaj plików PDF</string>
+    <string name="rename">Zmień nazwę</string>
+    <string name="delete">Usuń</string>
+    <string name="more_options">Więcej opcji</string>
+    <string name="rename_score">Zmień nazwę PDF</string>
+    <string name="rename_setlist">Zmień nazwę setlisty</string>
+    <string name="delete_score">Usunąć PDF?</string>
+    <string name="delete_score_message">PDF i jego adnotacje zostaną usunięte ze wszystkich setlist.</string>
+    <string name="delete_setlist">Usunąć setlistę?</string>
+    <string name="delete_setlist_message">Pliki PDF pozostaną w bibliotece.</string>
+    <string name="add_pdfs">Dodaj pliki PDF</string>
+    <string name="add">Dodaj</string>
+    <string name="remove">Usuń</string>
+    <string name="move_up">Przesuń w górę</string>
+    <string name="move_down">Przesuń w dół</string>
+    <string name="back">Wstecz</string>
+    <string name="no_scores_in_setlist">Brak plików PDF w tej setliście</string>
+    <string name="choose_pdfs">Wybierz pliki PDF z biblioteki.</string>
+    <string name="import_first">Najpierw zaimportuj pliki na karcie PDF.</string>
+    <string name="action_failed">Nie udało się ukończyć działania.</string>
+    <string name="close">Zamknij</string>
+    <string name="export">Eksportuj</string>
+    <string name="annotate">Dodaj adnotację</string>
+    <string name="pen">Pióro</string>
+    <string name="highlighter">Zakreślacz</string>
+    <string name="eraser">Gumka</string>
+    <string name="undo">Cofnij</string>
+    <string name="redo">Ponów</string>
+    <string name="done">Gotowe</string>
+    <string name="previous">Poprzednia</string>
+    <string name="next">Następna</string>
+    <string name="pdf_page">Strona PDF %1$d z %2$d</string>
+    <string name="page_position">%1$d / %2$d</string>
+    <plurals name="page_count">
+        <item quantity="one">%d strona</item>
+        <item quantity="few">%d strony</item>
+        <item quantity="many">%d stron</item>
+        <item quantity="other">%d strony</item>
+    </plurals>
+    <plurals name="score_count">
+        <item quantity="one">%d plik PDF</item>
+        <item quantity="few">%d pliki PDF</item>
+        <item quantity="many">%d plików PDF</item>
+        <item quantity="other">%d pliku PDF</item>
+    </plurals>
+</resources>

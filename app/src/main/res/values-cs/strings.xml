@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SheetSet</string>
+    <string name="tab_pdf">PDF</string>
+    <string name="tab_setlists">Setlisty</string>
+    <string name="no_pdfs">Zatím žádná PDF</string>
+    <string name="import_hint">Importujte první PDF.</string>
+    <string name="import_pdf">Importovat PDF</string>
+    <string name="no_setlists">Zatím žádné setlisty</string>
+    <string name="setlist_hint">Vytvořte setlist pro zkoušku nebo koncert.</string>
+    <string name="new_setlist">Nový setlist</string>
+    <string name="setlist_name">Název setlistu</string>
+    <string name="name">Název</string>
+    <string name="save">Uložit</string>
+    <string name="cancel">Zrušit</string>
+    <string name="search_pdfs">Hledat v PDF</string>
+    <string name="rename">Přejmenovat</string>
+    <string name="delete">Smazat</string>
+    <string name="more_options">Další možnosti</string>
+    <string name="rename_score">Přejmenovat PDF</string>
+    <string name="rename_setlist">Přejmenovat setlist</string>
+    <string name="delete_score">Smazat PDF?</string>
+    <string name="delete_score_message">PDF a jeho anotace budou odstraněny ze všech setlistů.</string>
+    <string name="delete_setlist">Smazat setlist?</string>
+    <string name="delete_setlist_message">PDF zůstanou v knihovně.</string>
+    <string name="add_pdfs">Přidat PDF</string>
+    <string name="add">Přidat</string>
+    <string name="remove">Odebrat</string>
+    <string name="move_up">Posunout nahoru</string>
+    <string name="move_down">Posunout dolů</string>
+    <string name="back">Zpět</string>
+    <string name="no_scores_in_setlist">V tomto setlistu nejsou žádná PDF</string>
+    <string name="choose_pdfs">Vyberte PDF z knihovny.</string>
+    <string name="import_first">Nejprve importujte PDF na záložce PDF.</string>
+    <string name="action_failed">Akci se nepodařilo dokončit.</string>
+    <string name="close">Zavřít</string>
+    <string name="export">Exportovat</string>
+    <string name="annotate">Anotovat</string>
+    <string name="pen">Pero</string>
+    <string name="highlighter">Zvýrazňovač</string>
+    <string name="eraser">Guma</string>
+    <string name="undo">Vrátit</string>
+    <string name="redo">Znovu</string>
+    <string name="done">Hotovo</string>
+    <string name="previous">Předchozí</string>
+    <string name="next">Další</string>
+    <string name="pdf_page">Stránka PDF %1$d z %2$d</string>
+    <string name="page_position">%1$d / %2$d</string>
+    <plurals name="page_count">
+        <item quantity="one">%d stránka</item>
+        <item quantity="few">%d stránky</item>
+        <item quantity="many">%d stránky</item>
+        <item quantity="other">%d stran</item>
+    </plurals>
+    <plurals name="score_count">
+        <item quantity="one">%d PDF</item>
+        <item quantity="few">%d PDF</item>
+        <item quantity="many">%d PDF</item>
+        <item quantity="other">%d PDF</item>
+    </plurals>
+</resources>
