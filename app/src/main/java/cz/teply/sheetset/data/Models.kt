@@ -1,5 +1,8 @@
 package cz.teply.sheetset.data
 
+import org.json.JSONArray
+import org.json.JSONObject
+
 const val MAX_TITLE_LENGTH = 120
 
 data class Score(
@@ -44,5 +47,92 @@ data class LibraryCatalog(
         return copy(setlists = setlists.map { current ->
             if (current.id == setlistId) current.copy(scoreIds = reordered) else current
         })
+    }
+}
+
+object CatalogJson {
+    private const val VERSION = 1
+
+    fun encode(catalog: LibraryCatalog): String = JSONObject()
+        .put("version", VERSION)
+        .put(
+            "scores",
+            JSONArray().apply {
+                catalog.scores.forEach { score ->
+                    put(
+                        JSONObject()
+                            .put("id", score.id)
+                            .put("title", score.title)
+                            .put("fileName", score.fileName)
+                            .put("pageCount", score.pageCount)
+                            .put("importedAtEpochMs", score.importedAtEpochMs),
+                    )
+                }
+            },
+        )
+        .put(
+            "setlists",
+            JSONArray().apply {
+                catalog.setlists.forEach { setlist ->
+                    put(
+                        JSONObject()
+                            .put("id", setlist.id)
+                            .put("name", setlist.name)
+                            .put("scoreIds", JSONArray(setlist.scoreIds)),
+                    )
+                }
+            },
+        )
+        .toString()
+
+    fun decode(raw: String): LibraryCatalog {
+        val root = JSONObject(raw)
+        require(root.getInt("version") == VERSION) { "Unsupported catalog version" }
+        val scoresJson = root.getJSONArray("scores")
+        val scores = List(scoresJson.length()) { index ->
+            scoresJson.getJSONObject(index).toScore()
+        }
+        require(scores.map(Score::id).distinct().size == scores.size) {
+            "Duplicate score ID"
+        }
+        val setlistsJson = root.getJSONArray("setlists")
+        val setlists = List(setlistsJson.length()) { index ->
+            setlistsJson.getJSONObject(index).toSetlist()
+        }
+        require(setlists.map(Setlist::id).distinct().size == setlists.size) {
+            "Duplicate setlist ID"
+        }
+        val scoreIds = scores.mapTo(mutableSetOf(), Score::id)
+        require(setlists.all { setlist -> setlist.scoreIds.all(scoreIds::contains) }) {
+            "Setlist references a missing score"
+        }
+        return LibraryCatalog(scores, setlists)
+    }
+
+    private fun JSONObject.toScore(): Score {
+        val id = getString("id")
+        val title = getString("title")
+        val fileName = getString("fileName")
+        val pageCount = getInt("pageCount")
+        val importedAt = getLong("importedAtEpochMs")
+        require(id.isNotBlank()) { "Score ID must not be blank" }
+        require(title.isNotBlank() && title.length <= MAX_TITLE_LENGTH) { "Invalid score title" }
+        require(fileName.matches(Regex("[A-Za-z0-9-]+\\.pdf"))) { "Invalid score file name" }
+        require(pageCount > 0) { "Page count must be positive" }
+        require(importedAt >= 0) { "Import time must not be negative" }
+        return Score(id, title, fileName, pageCount, importedAt)
+    }
+
+    private fun JSONObject.toSetlist(): Setlist {
+        val id = getString("id")
+        val name = getString("name")
+        val scoreIdsJson = getJSONArray("scoreIds")
+        require(id.isNotBlank()) { "Setlist ID must not be blank" }
+        require(name.isNotBlank() && name.length <= MAX_TITLE_LENGTH) { "Invalid setlist name" }
+        return Setlist(
+            id = id,
+            name = name,
+            scoreIds = List(scoreIdsJson.length(), scoreIdsJson::getString),
+        )
     }
 }
