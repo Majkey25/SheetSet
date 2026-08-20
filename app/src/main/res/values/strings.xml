@@ -1,4 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SheetSet</string>
+    <string name="tab_pdf">PDF</string>
+    <string name="tab_setlists">Setlists</string>
+    <string name="no_pdfs">No PDFs yet</string>
+    <string name="import_hint">Import a PDF to start.</string>
+    <string name="import_pdf">Import PDF</string>
+    <string name="no_setlists">No setlists yet</string>
+    <string name="setlist_hint">Create a setlist for your next rehearsal or show.</string>
+    <string name="new_setlist">New setlist</string>
+    <string name="setlist_name">Setlist name</string>
+    <string name="name">Name</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="search_pdfs">Search PDFs</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
+    <string name="more_options">More options</string>
+    <string name="rename_score">Rename PDF</string>
+    <string name="rename_setlist">Rename setlist</string>
+    <string name="delete_score">Delete PDF?</string>
+    <string name="delete_score_message">The PDF and its annotations will be removed from every setlist.</string>
+    <string name="delete_setlist">Delete setlist?</string>
+    <string name="delete_setlist_message">The PDFs will stay in your library.</string>
+    <string name="add_pdfs">Add PDFs</string>
+    <string name="add">Add</string>
+    <string name="remove">Remove</string>
+    <string name="move_up">Move up</string>
+    <string name="move_down">Move down</string>
+    <string name="back">Back</string>
+    <string name="no_scores_in_setlist">No PDFs in this setlist</string>
+    <string name="choose_pdfs">Choose PDFs from your library.</string>
+    <string name="import_first">Import PDFs in the PDF tab first.</string>
+    <string name="action_failed">The action could not be completed.</string>
+    <string name="dismiss">Dismiss</string>
+    <plurals name="page_count">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+    <plurals name="score_count">
+        <item quantity="one">%d PDF</item>
+        <item quantity="other">%d PDFs</item>
+    </plurals>
 </resources>
