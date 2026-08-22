@@ -120,4 +120,5 @@
     <string name="color_blue">Niebieski</string>
     <string name="color_purple">Fioletowy</string>
     <string name="color_pink">Różowy</string>
+    <string name="delete_annotation">Usuń adnotację</string>
 </resources>

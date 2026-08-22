@@ -210,6 +210,7 @@ fun ReaderScreen(
                 AnnotationPalette(
                     tool = tool,
                     color = color,
+                    selectedAnnotationId = selectedAnnotationId,
                     expandedLayout = windowLayout == WindowLayout.EXPANDED,
                     onTool = {
                         tool = it
@@ -219,6 +220,12 @@ fun ReaderScreen(
                         selectedAnnotationId = null
                     },
                     onColor = { color = it },
+                    onDelete = {
+                        selectedAnnotationId?.let { id ->
+                            selectedAnnotationId = null
+                            updateHistory(history.delete(id))
+                        }
+                    },
                     onUndo = {
                         selectedAnnotationId = null
                         updateHistory(history.undo())
@@ -367,9 +374,11 @@ private val editorTools = listOf(
 private fun AnnotationPalette(
     tool: ReaderTool,
     color: AnnotationColor,
+    selectedAnnotationId: String?,
     expandedLayout: Boolean,
     onTool: (ReaderTool) -> Unit,
     onColor: (AnnotationColor) -> Unit,
+    onDelete: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDone: () -> Unit,
@@ -382,7 +391,17 @@ private fun AnnotationPalette(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                ToolControls(tool, color, onTool, onColor, onUndo, onRedo, onDone)
+                ToolControls(
+                    tool,
+                    color,
+                    selectedAnnotationId,
+                    onTool,
+                    onColor,
+                    onDelete,
+                    onUndo,
+                    onRedo,
+                    onDone,
+                )
             }
         } else {
             Row(
@@ -391,7 +410,17 @@ private fun AnnotationPalette(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ToolControls(tool, color, onTool, onColor, onUndo, onRedo, onDone)
+                ToolControls(
+                    tool,
+                    color,
+                    selectedAnnotationId,
+                    onTool,
+                    onColor,
+                    onDelete,
+                    onUndo,
+                    onRedo,
+                    onDone,
+                )
             }
         }
     }
@@ -401,8 +430,10 @@ private fun AnnotationPalette(
 private fun ToolControls(
     tool: ReaderTool,
     color: AnnotationColor,
+    selectedAnnotationId: String?,
     onTool: (ReaderTool) -> Unit,
     onColor: (AnnotationColor) -> Unit,
+    onDelete: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDone: () -> Unit,
@@ -417,6 +448,13 @@ private fun ToolControls(
         }
     }
     ColorControl(color, onColor)
+    if (selectedAnnotationId != null) {
+        ReaderControl(
+            stringResource(R.string.delete_annotation),
+            R.drawable.ic_delete_24,
+            onClick = onDelete,
+        )
+    }
     ReaderControl(stringResource(R.string.undo), R.drawable.ic_undo_24, onClick = onUndo)
     ReaderControl(stringResource(R.string.redo), R.drawable.ic_redo_24, onClick = onRedo)
     ReaderControl(stringResource(R.string.done), R.drawable.ic_done_24, onClick = onDone)

@@ -120,4 +120,5 @@
     <string name="color_blue">Modrá</string>
     <string name="color_purple">Fialová</string>
     <string name="color_pink">Ružová</string>
+    <string name="delete_annotation">Odstrániť anotáciu</string>
 </resources>

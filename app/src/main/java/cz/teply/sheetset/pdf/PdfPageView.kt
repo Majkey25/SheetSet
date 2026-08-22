@@ -73,6 +73,7 @@ class PdfPageView(context: Context) : View(context) {
     private var dragCurrent: NormalizedPoint? = null
     private var gestureOriginal: PageAnnotation? = null
     private var gesturePreview: PageAnnotation? = null
+    private var resizeHandle: AnnotationHandle? = null
     private val erasedIds = mutableSetOf<String>()
 
     init {
@@ -276,7 +277,13 @@ class PdfPageView(context: Context) : View(context) {
         dragCurrent = point
         when (tool) {
             ReaderTool.SELECT -> {
-                val hit = annotations.topmostHit(point, 0.025f / zoom)
+                val selected = annotations.firstOrNull { it.id == selectedAnnotationId }
+                resizeHandle = selected?.handleAt(point, 0.04f / zoom)
+                val hit = if (resizeHandle != null) {
+                    selected
+                } else {
+                    annotations.topmostHit(point, 0.025f / zoom)
+                }
                 selectedAnnotationId = hit?.id
                 onSelectAnnotation(hit?.id)
                 gestureOriginal = hit
@@ -295,7 +302,8 @@ class PdfPageView(context: Context) : View(context) {
             ReaderTool.SELECT -> {
                 val original = gestureOriginal ?: return
                 val start = dragStart ?: return
-                gesturePreview = original.translated(point.x - start.x, point.y - start.y)
+                gesturePreview = resizeHandle?.let { original.resized(it, point) }
+                    ?: original.translated(point.x - start.x, point.y - start.y)
             }
             ReaderTool.PEN -> {
                 val previous = previewPoints.lastOrNull()
@@ -454,6 +462,7 @@ class PdfPageView(context: Context) : View(context) {
         dragCurrent = null
         gestureOriginal = null
         gesturePreview = null
+        resizeHandle = null
         erasedIds.clear()
         invalidate()
     }
@@ -551,4 +560,11 @@ class PdfPageView(context: Context) : View(context) {
         first.x - second.x,
         first.y - second.y,
     )
+
+    private fun PageAnnotation.handleAt(
+        point: NormalizedPoint,
+        radius: Float,
+    ): AnnotationHandle? = resizeHandles().minByOrNull { (_, handlePoint) ->
+        distance(point, handlePoint)
+    }?.takeIf { (_, handlePoint) -> distance(point, handlePoint) <= radius }?.key
 }

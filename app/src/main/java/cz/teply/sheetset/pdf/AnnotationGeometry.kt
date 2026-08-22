@@ -7,6 +7,8 @@ import kotlin.math.pow
 
 private const val MIN_ANNOTATION_SIZE = 0.01f
 
+enum class AnnotationHandle { TOP_LEFT, TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT, START, END }
+
 fun List<PageAnnotation>.topmostHit(
     point: NormalizedPoint,
     radius: Float,
@@ -73,6 +75,47 @@ fun PageAnnotation.resized(start: NormalizedPoint, end: NormalizedPoint): PageAn
     }
 }
 
+fun PageAnnotation.resizeHandles(): Map<AnnotationHandle, NormalizedPoint> = when (this) {
+    is InkAnnotation -> emptyMap()
+    is ShapeAnnotation -> when (kind) {
+        ShapeKind.LINE, ShapeKind.ARROW -> mapOf(
+            AnnotationHandle.START to start,
+            AnnotationHandle.END to end,
+        )
+        ShapeKind.RECTANGLE, ShapeKind.ELLIPSE -> annotationBounds().cornerHandles()
+    }
+    is MarkupAnnotation, is TextBoxAnnotation -> annotationBounds().cornerHandles()
+}
+
+fun PageAnnotation.resized(handle: AnnotationHandle, point: NormalizedPoint): PageAnnotation {
+    if (this is InkAnnotation) return this
+    if (this is ShapeAnnotation && kind in setOf(ShapeKind.LINE, ShapeKind.ARROW)) {
+        return when (handle) {
+            AnnotationHandle.START -> {
+                val line = minimumLine(point, end)
+                copy(start = line.first, end = line.second)
+            }
+            AnnotationHandle.END -> {
+                val line = minimumLine(start, point)
+                copy(start = line.first, end = line.second)
+            }
+            else -> this
+        }
+    }
+    val bounds = annotationBounds()
+    val topLeft = NormalizedPoint(bounds.left, bounds.top)
+    val topRight = NormalizedPoint(bounds.right, bounds.top)
+    val bottomRight = NormalizedPoint(bounds.right, bounds.bottom)
+    val bottomLeft = NormalizedPoint(bounds.left, bounds.bottom)
+    return when (handle) {
+        AnnotationHandle.TOP_LEFT -> resized(point, bottomRight)
+        AnnotationHandle.TOP_RIGHT -> resized(bottomLeft, point)
+        AnnotationHandle.BOTTOM_RIGHT -> resized(topLeft, point)
+        AnnotationHandle.BOTTOM_LEFT -> resized(topRight, point)
+        AnnotationHandle.START, AnnotationHandle.END -> this
+    }
+}
+
 fun manualMarkup(start: NormalizedPoint, end: NormalizedPoint): List<NormalizedRect> =
     listOf(minimumRect(start, end))
 
@@ -89,6 +132,13 @@ private data class Bounds(
         point.x in (left - radius).coerceAtLeast(0f)..(right + radius).coerceAtMost(1f) &&
             point.y in (top - radius).coerceAtLeast(0f)..(bottom + radius).coerceAtMost(1f)
 }
+
+private fun Bounds.cornerHandles(): Map<AnnotationHandle, NormalizedPoint> = mapOf(
+    AnnotationHandle.TOP_LEFT to NormalizedPoint(left, top),
+    AnnotationHandle.TOP_RIGHT to NormalizedPoint(right, top),
+    AnnotationHandle.BOTTOM_RIGHT to NormalizedPoint(right, bottom),
+    AnnotationHandle.BOTTOM_LEFT to NormalizedPoint(left, bottom),
+)
 
 private fun PageAnnotation.annotationBounds(): Bounds = when (this) {
     is InkAnnotation -> points.bounds()

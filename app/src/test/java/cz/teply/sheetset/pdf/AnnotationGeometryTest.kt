@@ -94,4 +94,38 @@ class AnnotationGeometryTest {
             manualMarkup(NormalizedPoint(0.8f, 0.9f), NormalizedPoint(0.2f, 0.3f)),
         )
     }
+
+    @Test
+    fun cornerAndEndpointHandlesResizeExpectedGeometry() {
+        val rectangle = ShapeAnnotation(
+            id = "rectangle",
+            kind = ShapeKind.RECTANGLE,
+            start = NormalizedPoint(0.2f, 0.2f),
+            end = NormalizedPoint(0.6f, 0.6f),
+            width = 0.004f,
+        )
+        val line = ShapeAnnotation(
+            id = "line",
+            kind = ShapeKind.LINE,
+            start = NormalizedPoint(0.1f, 0.1f),
+            end = NormalizedPoint(0.5f, 0.5f),
+            width = 0.004f,
+        )
+
+        assertEquals(
+            NormalizedPoint(0.8f, 0.9f),
+            (rectangle.resized(
+                AnnotationHandle.BOTTOM_RIGHT,
+                NormalizedPoint(0.8f, 0.9f),
+            ) as ShapeAnnotation).end,
+        )
+        assertEquals(
+            NormalizedPoint(0.9f, 0.2f),
+            (line.resized(
+                AnnotationHandle.END,
+                NormalizedPoint(0.9f, 0.2f),
+            ) as ShapeAnnotation).end,
+        )
+        assertTrue(stroke.resizeHandles().isEmpty())
+    }
 }

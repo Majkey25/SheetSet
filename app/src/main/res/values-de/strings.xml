@@ -116,4 +116,5 @@
     <string name="color_blue">Blau</string>
     <string name="color_purple">Violett</string>
     <string name="color_pink">Rosa</string>
+    <string name="delete_annotation">Annotation löschen</string>
 </resources>
