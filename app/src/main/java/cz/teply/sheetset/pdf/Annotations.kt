@@ -14,6 +14,7 @@ private const val MAX_HISTORY_STEPS = 100
 enum class InkKind { PEN, HIGHLIGHTER }
 enum class MarkupKind { HIGHLIGHT, UNDERLINE, STRIKE_THROUGH }
 enum class ShapeKind { LINE, ARROW, RECTANGLE, ELLIPSE }
+enum class AnnotationColor { BLACK, RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, PINK }
 
 data class NormalizedPoint(val x: Float, val y: Float) {
     init {
@@ -59,6 +60,7 @@ data class InkAnnotation(
     val kind: InkKind,
     val width: Float,
     val points: List<NormalizedPoint>,
+    val color: AnnotationColor = AnnotationColor.BLACK,
 ) : PageAnnotation {
     init {
         requireValidId(id)
@@ -73,6 +75,7 @@ data class MarkupAnnotation(
     override val id: String,
     val kind: MarkupKind,
     val bounds: List<NormalizedRect>,
+    val color: AnnotationColor = AnnotationColor.BLACK,
 ) : PageAnnotation {
     init {
         requireValidId(id)
@@ -87,6 +90,7 @@ data class TextBoxAnnotation(
     val bounds: NormalizedRect,
     val text: String,
     val size: AnnotationTextSize,
+    val color: AnnotationColor = AnnotationColor.BLACK,
 ) : PageAnnotation {
     init {
         requireValidId(id)
@@ -100,6 +104,7 @@ data class ShapeAnnotation(
     val start: NormalizedPoint,
     val end: NormalizedPoint,
     val width: Float,
+    val color: AnnotationColor = AnnotationColor.BLACK,
 ) : PageAnnotation {
     init {
         requireValidId(id)
@@ -247,6 +252,7 @@ object AnnotationJson {
             .put("id", id)
             .put("type", "ink")
             .put("kind", kind.name)
+            .put("color", color.name)
             .put("width", width.toDouble())
             .put("points", JSONArray().apply { points.forEach { put(it.toJson()) } })
 
@@ -254,6 +260,7 @@ object AnnotationJson {
             .put("id", id)
             .put("type", "markup")
             .put("kind", kind.name)
+            .put("color", color.name)
             .put("bounds", JSONArray().apply { bounds.forEach { put(it.toJson()) } })
 
         is TextBoxAnnotation -> JSONObject()
@@ -262,6 +269,7 @@ object AnnotationJson {
             .put("bounds", bounds.toJson())
             .put("text", text)
             .put("size", size.name)
+            .put("color", color.name)
 
         is ShapeAnnotation -> JSONObject()
             .put("id", id)
@@ -270,27 +278,49 @@ object AnnotationJson {
             .put("start", start.toJson())
             .put("end", end.toJson())
             .put("width", width.toDouble())
+            .put("color", color.name)
     }
 
     private fun JSONObject.toAnnotation(): PageAnnotation = when (getString("type")) {
-        "ink" -> InkAnnotation(
-            id = getString("id"),
-            kind = InkKind.valueOf(getString("kind")),
-            width = getDouble("width").toFloat(),
-            points = getJSONArray("points").toPoints(),
-        )
+        "ink" -> {
+            val kind = InkKind.valueOf(getString("kind"))
+            InkAnnotation(
+                id = getString("id"),
+                kind = kind,
+                width = getDouble("width").toFloat(),
+                points = getJSONArray("points").toPoints(),
+                color = annotationColor(
+                    if (kind == InkKind.HIGHLIGHTER) {
+                        AnnotationColor.YELLOW
+                    } else {
+                        AnnotationColor.BLACK
+                    },
+                ),
+            )
+        }
 
-        "markup" -> MarkupAnnotation(
-            id = getString("id"),
-            kind = MarkupKind.valueOf(getString("kind")),
-            bounds = getJSONArray("bounds").toRects(),
-        )
+        "markup" -> {
+            val kind = MarkupKind.valueOf(getString("kind"))
+            MarkupAnnotation(
+                id = getString("id"),
+                kind = kind,
+                bounds = getJSONArray("bounds").toRects(),
+                color = annotationColor(
+                    if (kind == MarkupKind.HIGHLIGHT) {
+                        AnnotationColor.YELLOW
+                    } else {
+                        AnnotationColor.BLACK
+                    },
+                ),
+            )
+        }
 
         "text" -> TextBoxAnnotation(
             id = getString("id"),
             bounds = getJSONArray("bounds").toRect(),
             text = getString("text"),
             size = AnnotationTextSize.valueOf(getString("size")),
+            color = annotationColor(AnnotationColor.BLACK),
         )
 
         "shape" -> ShapeAnnotation(
@@ -299,6 +329,7 @@ object AnnotationJson {
             start = getJSONArray("start").toPoint(),
             end = getJSONArray("end").toPoint(),
             width = getDouble("width").toFloat(),
+            color = annotationColor(AnnotationColor.BLACK),
         )
 
         else -> throw IllegalArgumentException("Unsupported annotation type")
@@ -309,7 +340,15 @@ object AnnotationJson {
         kind = InkKind.valueOf(getString("tool")),
         width = getDouble("width").toFloat(),
         points = getJSONArray("points").toPoints(),
+        color = if (getString("tool") == InkKind.HIGHLIGHTER.name) {
+            AnnotationColor.YELLOW
+        } else {
+            AnnotationColor.BLACK
+        },
     )
+
+    private fun JSONObject.annotationColor(default: AnnotationColor): AnnotationColor =
+        optString("color", "").takeIf(String::isNotBlank)?.let(AnnotationColor::valueOf) ?: default
 
     private fun NormalizedPoint.toJson(): JSONArray = JSONArray(listOf(x, y))
 

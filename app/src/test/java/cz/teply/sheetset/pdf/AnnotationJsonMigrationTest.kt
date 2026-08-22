@@ -20,6 +20,7 @@ class AnnotationJsonMigrationTest {
 
         assertEquals(InkKind.PEN, (page[0] as InkAnnotation).kind)
         assertEquals(InkKind.HIGHLIGHTER, (page[1] as InkAnnotation).kind)
+        assertEquals(AnnotationColor.YELLOW, (page[1] as InkAnnotation).color)
         assertEquals("legacy-0-0", page[0].id)
         assertEquals(decoded, AnnotationJson.decode(AnnotationJson.encode(decoded)))
     }
@@ -111,5 +112,34 @@ class AnnotationJsonMigrationTest {
                 size = AnnotationTextSize.SMALL,
             )
         }
+    }
+
+    @Test
+    fun annotationColorsPersistAndOldVersionTwoGetsSafeDefaults() {
+        val colored = DocumentAnnotations(
+            mapOf(
+                0 to listOf(
+                    InkAnnotation(
+                        id = "red-pen",
+                        kind = InkKind.PEN,
+                        width = 0.004f,
+                        points = listOf(NormalizedPoint(0.1f, 0.1f)),
+                        color = AnnotationColor.RED,
+                    ),
+                ),
+            ),
+        )
+        val oldVersionTwo = """
+            {"version":2,"pages":{"0":[
+              {"id":"old","type":"ink","kind":"HIGHLIGHTER","width":0.02,
+               "points":[[0.2,0.2]]}
+            ]}}
+        """.trimIndent()
+
+        assertEquals(colored, AnnotationJson.decode(AnnotationJson.encode(colored)))
+        assertEquals(
+            AnnotationColor.YELLOW,
+            (AnnotationJson.decode(oldVersionTwo).pages.getValue(0).single() as InkAnnotation).color,
+        )
     }
 }

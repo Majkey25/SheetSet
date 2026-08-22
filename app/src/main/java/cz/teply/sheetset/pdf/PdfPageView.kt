@@ -249,6 +249,11 @@ class PdfPageView(context: Context) : View(context) {
                     kind = annotationTool,
                     width = widthFor(annotationTool),
                     points = preview.toList(),
+                    color = if (annotationTool == InkKind.HIGHLIGHTER) {
+                        AnnotationColor.YELLOW
+                    } else {
+                        AnnotationColor.BLACK
+                    },
                 ),
             )
         }
