@@ -266,6 +266,34 @@ class SheetSetFlowTest {
     }
 
     @Test
+    fun setlistEditorUsesIconsInsteadOfTextGlyphs() {
+        val first = Score("score-1", "First song", "score-1.pdf", 2, 1L)
+        val second = Score("score-2", "Second song", "score-2.pdf", 2, 2L)
+        val setlist = Setlist("set-1", "Show", listOf(first.id, second.id))
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(
+                            scores = listOf(first, second),
+                            setlists = listOf(setlist),
+                        ),
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Setlists").performClick()
+        composeRule.onNodeWithText("Show").performClick()
+        composeRule.onNodeWithText("Edit order").performClick()
+
+        listOf("‹", "↑", "↓", "×").forEach { glyph ->
+            composeRule.onAllNodesWithText(glyph).assertCountEquals(0)
+        }
+    }
+
+    @Test
     fun readerOpensAnnotationTools() {
         val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
         val reader = ReaderUiState(
@@ -299,6 +327,36 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Eraser").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Undo").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Redo").assertIsDisplayed()
+    }
+
+    @Test
+    fun readerUsesIconsInsteadOfTextGlyphs() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Annotate").performClick()
+
+        listOf("×", "⇩", "‹", "›", "✎", "▰", "⌫", "↶", "↷", "✓").forEach { glyph ->
+            composeRule.onAllNodesWithText(glyph).assertCountEquals(0)
+        }
     }
 
     @Test

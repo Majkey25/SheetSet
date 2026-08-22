@@ -44,7 +44,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
@@ -242,7 +241,12 @@ private fun SetlistHeader(title: String, onBack: () -> Unit) {
             IconButton(
                 modifier = Modifier.semantics { contentDescription = back },
                 onClick = onBack,
-            ) { Text("‹", fontSize = 34.sp) }
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_chevron_left_24),
+                    contentDescription = null,
+                )
+            }
             Text(
                 title,
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
@@ -280,19 +284,32 @@ private fun SetlistScoreRow(
                 IconButton(
                     modifier = Modifier.semantics { contentDescription = up },
                     onClick = { actions.moveScore(setlist.id, index, index - 1) },
-                ) { Text("↑", fontSize = 20.sp) }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_up_24),
+                        contentDescription = null,
+                    )
+                }
             }
             if (index < setlist.scoreIds.lastIndex) {
                 IconButton(
                     modifier = Modifier.semantics { contentDescription = down },
                     onClick = { actions.moveScore(setlist.id, index, index + 1) },
-                ) { Text("↓", fontSize = 20.sp) }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_down_24),
+                        contentDescription = null,
+                    )
+                }
             }
             IconButton(
                 modifier = Modifier.semantics { contentDescription = remove },
                 onClick = { actions.removeScore(setlist.id, index) },
             ) {
-                Text("×", fontSize = 22.sp)
+                Icon(
+                    painter = painterResource(R.drawable.ic_delete_24),
+                    contentDescription = null,
+                )
             }
         }
     }

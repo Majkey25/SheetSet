@@ -2,6 +2,7 @@ package cz.teply.sheetset.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -37,7 +40,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import cz.teply.sheetset.R
 import cz.teply.sheetset.ReaderUiState
@@ -133,7 +135,7 @@ private fun ReaderTopBar(title: String, onClose: () -> Unit, onExport: () -> Uni
             Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ReaderControl(stringResource(R.string.close), "×", onClick = onClose)
+            ReaderControl(stringResource(R.string.close), R.drawable.ic_close_24, onClick = onClose)
             Text(
                 title,
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
@@ -141,7 +143,7 @@ private fun ReaderTopBar(title: String, onClose: () -> Unit, onExport: () -> Uni
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            ReaderControl(stringResource(R.string.export), "⇩", onClick = onExport)
+            ReaderControl(stringResource(R.string.export), R.drawable.ic_download_24, onClick = onExport)
         }
     }
 }
@@ -162,7 +164,7 @@ private fun ReaderNavigationBar(
         ) {
             ReaderControl(
                 stringResource(R.string.previous),
-                "‹",
+                R.drawable.ic_chevron_left_24,
                 enabled = previousEnabled,
                 onClick = actions.previousPage,
             )
@@ -177,11 +179,11 @@ private fun ReaderNavigationBar(
             )
             ReaderControl(
                 stringResource(R.string.next),
-                "›",
+                R.drawable.ic_chevron_right_24,
                 enabled = nextEnabled,
                 onClick = actions.nextPage,
             )
-            ReaderControl(stringResource(R.string.annotate), "✎", onClick = onAnnotate)
+            ReaderControl(stringResource(R.string.annotate), R.drawable.ic_edit_24, onClick = onAnnotate)
         }
     }
 }
@@ -202,22 +204,22 @@ private fun AnnotationBar(
         ) {
             ReaderControl(
                 stringResource(R.string.pen),
-                "✎",
+                R.drawable.ic_edit_24,
                 selected = tool == ReaderTool.PEN,
             ) { onTool(ReaderTool.PEN) }
             ReaderControl(
                 stringResource(R.string.highlighter),
-                "▰",
+                R.drawable.ic_highlighter_24,
                 selected = tool == ReaderTool.HIGHLIGHTER,
             ) { onTool(ReaderTool.HIGHLIGHTER) }
             ReaderControl(
                 stringResource(R.string.eraser),
-                "⌫",
+                R.drawable.ic_eraser_24,
                 selected = tool == ReaderTool.ERASER,
             ) { onTool(ReaderTool.ERASER) }
-            ReaderControl(stringResource(R.string.undo), "↶", onClick = onUndo)
-            ReaderControl(stringResource(R.string.redo), "↷", onClick = onRedo)
-            ReaderControl(stringResource(R.string.done), "✓", onClick = onDone)
+            ReaderControl(stringResource(R.string.undo), R.drawable.ic_undo_24, onClick = onUndo)
+            ReaderControl(stringResource(R.string.redo), R.drawable.ic_redo_24, onClick = onRedo)
+            ReaderControl(stringResource(R.string.done), R.drawable.ic_done_24, onClick = onDone)
         }
     }
 }
@@ -225,7 +227,7 @@ private fun AnnotationBar(
 @Composable
 private fun ReaderControl(
     label: String,
-    glyph: String,
+    @DrawableRes icon: Int,
     selected: Boolean? = null,
     enabled: Boolean = true,
     onClick: () -> Unit,
@@ -243,14 +245,15 @@ private fun ReaderControl(
         enabled = enabled,
         onClick = onClick,
     ) {
-        Text(
-            glyph,
-            color = when {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = when {
                 !enabled -> Color.Gray
                 selected == true -> Color.Black
                 else -> Color.White
             },
-            fontSize = 22.sp,
         )
     }
 }
