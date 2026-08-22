@@ -28,7 +28,7 @@ nav { display: flex; gap: 24px; }
 nav a { font-size: 14px; text-underline-offset: 4px; }
 
 main { overflow: hidden; }
-.hero, .proof {
+.hero, .proof, .tablet-proof {
   width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
   display: grid;
@@ -57,18 +57,22 @@ dt { font-weight: 750; }
 dd { margin: 0; color: #bbb; line-height: 1.6; }
 
 .proof { min-height: 700px; padding: 90px 0; }
-.proof p:not(.eyebrow) { max-width: 600px; color: #444; font-size: 20px; line-height: 1.65; }
+.proof p:not(.eyebrow), .tablet-proof p:not(.eyebrow) { max-width: 600px; color: #444; font-size: 20px; line-height: 1.65; }
+
+.tablet-proof { min-height: 620px; padding: 90px 0; grid-template-columns: minmax(260px, 0.65fr) minmax(0, 1.35fr); }
+.tablet { display: block; width: 100%; border: 1px solid #aaa; border-radius: 8px; box-shadow: 16px 18px 0 #e7e7e7; }
 
 footer { display: flex; justify-content: space-between; gap: 24px; padding: 32px clamp(20px, 5vw, 72px); border-top: 1px solid #d7d7d7; color: #555; font-size: 14px; }
 
 @media (max-width: 760px) {
   .masthead nav a:first-child { display: none; }
-  .hero, .proof { grid-template-columns: 1fr; }
+  .hero, .proof, .tablet-proof { grid-template-columns: 1fr; }
   .hero { padding-top: 52px; }
   .phone { width: min(76vw, 320px); }
   dl div { grid-template-columns: 1fr; gap: 10px; }
   .proof { padding: 72px 0; }
   .proof .phone { order: 2; }
+  .tablet-proof { padding: 72px 0; }
   footer { flex-direction: column; }
 }
 
