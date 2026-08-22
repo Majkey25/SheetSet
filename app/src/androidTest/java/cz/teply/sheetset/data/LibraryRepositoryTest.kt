@@ -2,10 +2,10 @@ package cz.teply.sheetset.data
 
 import android.graphics.pdf.PdfDocument
 import androidx.test.core.app.ApplicationProvider
-import cz.teply.sheetset.pdf.AnnotationTool
 import cz.teply.sheetset.pdf.DocumentAnnotations
+import cz.teply.sheetset.pdf.InkAnnotation
+import cz.teply.sheetset.pdf.InkKind
 import cz.teply.sheetset.pdf.NormalizedPoint
-import cz.teply.sheetset.pdf.Stroke
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -84,10 +84,11 @@ class LibraryRepositoryTest {
         val annotations = DocumentAnnotations(
             mapOf(
                 0 to listOf(
-                    Stroke(
-                        AnnotationTool.PEN,
-                        0.004f,
-                        listOf(NormalizedPoint(0.25f, 0.75f)),
+                    InkAnnotation(
+                        id = "ink",
+                        kind = InkKind.PEN,
+                        width = 0.004f,
+                        points = listOf(NormalizedPoint(0.25f, 0.75f)),
                     ),
                 ),
             ),

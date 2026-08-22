@@ -1,6 +1,8 @@
 package cz.teply.sheetset
 
 import android.app.Application
+import android.app.LocaleManager
+import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
@@ -8,8 +10,12 @@ import androidx.lifecycle.viewModelScope
 import cz.teply.sheetset.data.LibraryRepository
 import cz.teply.sheetset.data.PdfImport
 import cz.teply.sheetset.data.Score
-import cz.teply.sheetset.pdf.Stroke
+import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.pdf.PdfExporter
+import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.AppLanguages
+import cz.teply.sheetset.settings.SettingsStore
+import cz.teply.sheetset.settings.HighlightStrength
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,8 +30,13 @@ import java.io.FileNotFoundException
 
 class SheetSetViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = LibraryRepository(File(application.filesDir, "library"))
+    private val settingsStore = SettingsStore(
+        application.getSharedPreferences("sheetset-settings", Context.MODE_PRIVATE),
+    )
     private val annotationSaveMutex = Mutex()
-    private val mutableState = MutableStateFlow(LibraryUiState(loading = true))
+    private val mutableState = MutableStateFlow(
+        LibraryUiState(loading = true, settings = settingsStore.load()),
+    )
     val state = mutableState.asStateFlow()
 
     init {
@@ -60,6 +71,11 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
 
     fun moveScore(setlistId: String, fromIndex: Int, toIndex: Int) = launchAction {
         repository.moveScore(setlistId, fromIndex, toIndex)
+    }
+
+    fun updateSettings(settings: AppSettings) {
+        settingsStore.save(settings)
+        mutableState.update { it.copy(settings = settings) }
     }
 
     fun openScore(score: Score) {
@@ -97,9 +113,9 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun saveStrokes(strokes: List<Stroke>) {
+    fun saveAnnotations(pageAnnotations: List<PageAnnotation>) {
         val reader = state.value.reader ?: return
-        val annotations = reader.annotations.withPage(reader.pageIndex, strokes)
+        val annotations = reader.annotations.withPage(reader.pageIndex, pageAnnotations)
         mutableState.update { it.copy(reader = reader.copy(annotations = annotations)) }
         viewModelScope.launch {
             annotationSaveMutex.withLock {
@@ -122,10 +138,60 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                 withContext(Dispatchers.IO) {
                     val resolver = getApplication<Application>().contentResolver
                     resolver.openOutputStream(uri, "w")?.use { output ->
-                        PdfExporter.export(reader.file, output, reader.annotations)
+                        PdfExporter.export(
+                            reader.file,
+                            output,
+                            reader.annotations,
+                            state.value.settings.highlighterStrength.alpha(),
+                        )
                     } ?: throw FileNotFoundException(uri.toString())
                 }
                 mutableState.update { it.copy(loading = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.update { it.copy(loading = false, error = true) }
+            }
+        }
+    }
+
+    fun createBackup(uri: Uri) {
+        viewModelScope.launch {
+            mutableState.update { it.copy(loading = true, error = false) }
+            try {
+                val application = getApplication<Application>()
+                val locales = application.getSystemService(LocaleManager::class.java)
+                    .applicationLocales
+                val languageTag = if (locales.isEmpty) null else locales[0].language
+                application.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    repository.createBackup(output, state.value.settings, languageTag)
+                } ?: throw FileNotFoundException(uri.toString())
+                mutableState.update { it.copy(loading = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.update { it.copy(loading = false, error = true) }
+            }
+        }
+    }
+
+    fun restoreBackup(uri: Uri) {
+        viewModelScope.launch {
+            mutableState.update { it.copy(loading = true, error = false, reader = null) }
+            try {
+                val application = getApplication<Application>()
+                val metadata = application.contentResolver.openInputStream(uri)?.use { input ->
+                    repository.restoreBackup(input)
+                } ?: throw FileNotFoundException(uri.toString())
+                settingsStore.save(metadata.settings)
+                mutableState.update {
+                    it.copy(
+                        catalog = repository.load(),
+                        loading = false,
+                        settings = metadata.settings,
+                    )
+                }
+                AppLanguages.select(application, metadata.languageTag)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -139,7 +205,9 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             mutableState.update { it.copy(loading = true, error = false) }
             try {
                 action()
-                mutableState.value = LibraryUiState(catalog = repository.load())
+                mutableState.update {
+                    it.copy(catalog = repository.load(), loading = false, error = false)
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -204,4 +272,10 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             resolver.openInputStream(uri) ?: throw FileNotFoundException(uri.toString())
         }
     }
+}
+
+private fun HighlightStrength.alpha(): Int = when (this) {
+    HighlightStrength.LIGHT -> 70
+    HighlightStrength.MEDIUM -> 105
+    HighlightStrength.STRONG -> 150
 }

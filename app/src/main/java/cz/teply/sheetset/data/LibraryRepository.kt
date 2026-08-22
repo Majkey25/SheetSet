@@ -5,6 +5,7 @@ import android.os.ParcelFileDescriptor
 import android.util.AtomicFile
 import cz.teply.sheetset.pdf.AnnotationJson
 import cz.teply.sheetset.pdf.DocumentAnnotations
+import cz.teply.sheetset.settings.AppSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -14,6 +15,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 
 const val MAX_PDF_BYTES = 250L * 1024L * 1024L
@@ -63,6 +65,20 @@ class LibraryRepository(private val root: File) {
                 writeAtomic(annotationFile(scoreId), AnnotationJson.encode(annotations))
             }
         }
+    }
+
+    suspend fun createBackup(
+        destination: OutputStream,
+        settings: AppSettings,
+        languageTag: String?,
+    ) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            writeLibraryBackup(root, loadCatalog(), destination, settings, languageTag)
+        }
+    }
+
+    suspend fun restoreBackup(source: InputStream): BackupMetadata = withContext(Dispatchers.IO) {
+        mutex.withLock { restoreLibraryBackup(root, source) }
     }
 
     suspend fun createSetlist(name: String): Setlist {
@@ -120,8 +136,7 @@ class LibraryRepository(private val root: File) {
         val destination = File(scoresDirectory, "$id.pdf")
         try {
             source.open().use { input -> copyBounded(input, temporary) }
-            requirePdfSignature(temporary)
-            val pageCount = readPageCount(temporary)
+            val pageCount = validatePdfFile(temporary)
             if (!temporary.renameTo(destination)) {
                 throw PdfImportException("Could not store PDF")
             }
@@ -189,30 +204,6 @@ class LibraryRepository(private val root: File) {
         }
     }
 
-    private fun requirePdfSignature(file: File) {
-        val expected = "%PDF-".toByteArray(Charsets.US_ASCII)
-        val actual = ByteArray(expected.size)
-        FileInputStream(file).use { input ->
-            if (input.read(actual) != expected.size || !actual.contentEquals(expected)) {
-                throw PdfImportException("File is not a valid PDF")
-            }
-        }
-    }
-
-    private fun readPageCount(file: File): Int = try {
-        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-            PdfRenderer(descriptor).use { renderer ->
-                renderer.pageCount.also { count ->
-                    if (count < 1) throw PdfImportException("PDF has no pages")
-                }
-            }
-        }
-    } catch (error: PdfImportException) {
-        throw error
-    } catch (error: Exception) {
-        throw PdfImportException("File is not a readable PDF", error)
-    }
-
     private fun writeAtomic(file: File, text: String) {
         file.parentFile?.mkdirsOrThrow()
         val atomicFile = AtomicFile(file)
@@ -235,5 +226,20 @@ class LibraryRepository(private val root: File) {
 
     private fun File.mkdirsOrThrow() {
         if (!exists() && !mkdirs()) throw IllegalStateException("Could not create ${name}")
+    }
+}
+
+internal fun validatePdfFile(file: File): Int {
+    val expected = "%PDF-".toByteArray(Charsets.US_ASCII)
+    val actual = ByteArray(expected.size)
+    FileInputStream(file).use { input ->
+        require(input.read(actual) == expected.size && actual.contentEquals(expected)) {
+            "File is not a valid PDF"
+        }
+    }
+    return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+        PdfRenderer(descriptor).use { renderer ->
+            renderer.pageCount.also { count -> require(count > 0) { "PDF has no pages" } }
+        }
     }
 }

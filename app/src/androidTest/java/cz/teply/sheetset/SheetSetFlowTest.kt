@@ -3,14 +3,21 @@ package cz.teply.sheetset
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
@@ -42,6 +49,113 @@ class SheetSetFlowTest {
     }
 
     @Test
+    fun tabsExposeSelectedState() {
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(LibraryUiState(), SheetSetActions())
+            }
+        }
+
+        composeRule.onNodeWithText("PDF").assertIsSelected()
+        composeRule.onNodeWithText("Setlists").assertIsNotSelected().performClick()
+        composeRule.onNodeWithText("PDF").assertIsNotSelected()
+        composeRule.onNodeWithText("Setlists").assertIsSelected()
+    }
+
+    @Test
+    fun emptyLibraryShowsVisibleImportAction() {
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(LibraryUiState(), SheetSetActions())
+            }
+        }
+
+        composeRule.onNodeWithText("Import PDF").assertIsDisplayed()
+    }
+
+    @Test
+    fun headerUsesMenuAndPdfActionWithoutBrandTitle() {
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(LibraryUiState(), SheetSetActions())
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Menu").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Import PDF").assertIsDisplayed()
+        composeRule.onAllNodesWithText("SheetSet").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Import PDF").assertCountEquals(1)
+    }
+
+    @Test
+    fun emptySetlistsKeepsCreateOnlyInHeader() {
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(LibraryUiState(), SheetSetActions())
+            }
+        }
+
+        composeRule.onNodeWithText("Setlists").performClick()
+
+        composeRule.onNodeWithContentDescription("Create").assertIsDisplayed()
+        composeRule.onAllNodesWithText("New setlist").assertCountEquals(0)
+    }
+
+    @Test
+    fun searchOpensOnlyWhenRequested() {
+        val score = Score("score-1", "Moonlight Sonata", "score-1.pdf", 3, 1L)
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(catalog = LibraryCatalog(scores = listOf(score))),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithText("Search PDFs").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Search PDFs").performClick()
+        composeRule.onNodeWithText("Search PDFs").assertIsDisplayed()
+        composeRule.onNodeWithText("Search PDFs").performTextInput("missing")
+        composeRule.onAllNodesWithText("Moonlight Sonata").assertCountEquals(0)
+    }
+
+    @Test
+    fun libraryAvoidsDuplicateSectionHeading() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(catalog = LibraryCatalog(scores = listOf(score))),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithText("PDF").assertCountEquals(1)
+    }
+
+    @Test
+    fun searchClosesWhenLeavingLibrary() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(catalog = LibraryCatalog(scores = listOf(score))),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Search PDFs").performClick()
+        composeRule.onNodeWithText("Search PDFs").assertIsDisplayed()
+        composeRule.onNodeWithText("Setlists").performClick()
+        composeRule.onNodeWithText("PDF").performClick()
+
+        composeRule.onAllNodesWithText("Search PDFs").assertCountEquals(0)
+    }
+
+    @Test
     fun moreThanThreeSetlistsCanBeCreated() {
         var state by mutableStateOf(LibraryUiState())
         composeRule.setContent {
@@ -62,7 +176,7 @@ class SheetSetFlowTest {
         composeRule.onNodeWithText("Setlists").performClick()
 
         repeat(4) { index ->
-            composeRule.onNodeWithContentDescription("New setlist").performClick()
+            composeRule.onNodeWithContentDescription("Create").performClick()
             composeRule.onNodeWithText("Setlist name").performTextInput("Set ${index + 1}")
             composeRule.onNodeWithText("Save").performClick()
         }
@@ -126,6 +240,61 @@ class SheetSetFlowTest {
     }
 
     @Test
+    fun setlistEditingControlsStayOutOfBrowseMode() {
+        val first = Score("score-1", "First song", "score-1.pdf", 2, 1L)
+        val second = Score("score-2", "Second song", "score-2.pdf", 2, 2L)
+        val setlist = Setlist("set-1", "Show", listOf(first.id, second.id))
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(
+                            scores = listOf(first, second),
+                            setlists = listOf(setlist),
+                        ),
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Setlists").performClick()
+        composeRule.onNodeWithText("Show").performClick()
+        composeRule.onAllNodesWithContentDescription("Remove").assertCountEquals(0)
+        composeRule.onNodeWithText("Edit order").performClick()
+        composeRule.onNodeWithContentDescription("Move down").assertIsDisplayed()
+        composeRule.onAllNodesWithContentDescription("Remove").assertCountEquals(2)
+    }
+
+    @Test
+    fun setlistEditorUsesIconsInsteadOfTextGlyphs() {
+        val first = Score("score-1", "First song", "score-1.pdf", 2, 1L)
+        val second = Score("score-2", "Second song", "score-2.pdf", 2, 2L)
+        val setlist = Setlist("set-1", "Show", listOf(first.id, second.id))
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(
+                            scores = listOf(first, second),
+                            setlists = listOf(setlist),
+                        ),
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Setlists").performClick()
+        composeRule.onNodeWithText("Show").performClick()
+        composeRule.onNodeWithText("Edit order").performClick()
+
+        listOf("‹", "↑", "↓", "×").forEach { glyph ->
+            composeRule.onAllNodesWithText(glyph).assertCountEquals(0)
+        }
+    }
+
+    @Test
     fun readerOpensAnnotationTools() {
         val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
         val reader = ReaderUiState(
@@ -148,13 +317,126 @@ class SheetSetFlowTest {
             }
         }
 
-        composeRule.onNodeWithText("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Close").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Export").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Annotate").performClick()
 
-        composeRule.onNodeWithText("Pen").assertIsDisplayed()
-        composeRule.onNodeWithText("Highlighter").assertIsDisplayed()
-        composeRule.onNodeWithText("Eraser").assertIsDisplayed()
-        composeRule.onNodeWithText("Undo").assertIsDisplayed()
-        composeRule.onNodeWithText("Redo").assertIsDisplayed()
+        listOf(
+            "Select",
+            "Pen",
+            "Highlighter",
+            "Underline",
+            "Strike-through",
+            "Text box",
+            "Line",
+            "Arrow",
+            "Rectangle",
+            "Ellipse",
+            "Eraser",
+            "Color",
+            "Undo",
+            "Redo",
+            "Done",
+        ).forEach { label ->
+            composeRule.onAllNodesWithContentDescription(label).assertCountEquals(1)
+        }
+        composeRule.onNodeWithContentDescription("Select").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Rectangle").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Rectangle").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Pen").assertIsNotSelected()
+    }
+
+    @Test
+    fun readerUsesIconsInsteadOfTextGlyphs() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Annotate").performClick()
+
+        listOf("×", "⇩", "‹", "›", "✎", "▰", "⌫", "↶", "↷", "✓").forEach { glyph ->
+            composeRule.onAllNodesWithText(glyph).assertCountEquals(0)
+        }
+    }
+
+    @Test
+    fun readerPageTapTogglesControls() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Annotate").assertIsDisplayed()
+        composeRule.onRoot().performTouchInput { click(center) }
+        composeRule.onAllNodesWithContentDescription("Annotate").assertCountEquals(0)
+        composeRule.onRoot().performTouchInput { click(center) }
+        composeRule.onNodeWithContentDescription("Annotate").assertIsDisplayed()
+    }
+
+    @Test
+    fun readerAutoHidesControlsAfterManualReveal() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onRoot().performTouchInput { click(center) }
+        composeRule.onRoot().performTouchInput { click(center) }
+        composeRule.onNodeWithContentDescription("Annotate").assertIsDisplayed()
+
+        composeRule.waitUntil(timeoutMillis = 4_000) {
+            composeRule.onAllNodesWithContentDescription("Annotate")
+                .fetchSemanticsNodes().isEmpty()
+        }
     }
 
     @Test
@@ -163,11 +445,11 @@ class SheetSetFlowTest {
             SheetSetTheme { SheetSetApp(LibraryUiState(), SheetSetActions()) }
         }
         composeRule.onNodeWithText("Setlists").performClick()
-        composeRule.onNodeWithContentDescription("New setlist").performClick()
+        composeRule.onNodeWithContentDescription("Create").performClick()
         composeRule.onNodeWithText("Setlist name").performTextInput("Old name")
         composeRule.onNodeWithText("Cancel").performClick()
 
-        composeRule.onNodeWithContentDescription("New setlist").performClick()
+        composeRule.onNodeWithContentDescription("Create").performClick()
 
         composeRule.onAllNodesWithText("Old name").assertCountEquals(0)
     }

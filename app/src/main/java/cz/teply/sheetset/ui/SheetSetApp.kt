@@ -1,42 +1,67 @@
 package cz.teply.sheetset.ui
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import cz.teply.sheetset.LibraryUiState
 import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
-import cz.teply.sheetset.pdf.Stroke
+import cz.teply.sheetset.pdf.PageAnnotation
+import cz.teply.sheetset.settings.AppSettings
+import kotlinx.coroutines.launch
 
 data class SheetSetActions(
     val importPdfs: (List<Uri>) -> Unit = {},
@@ -46,7 +71,7 @@ data class SheetSetActions(
     val closeReader: () -> Unit = {},
     val previousPage: () -> Unit = {},
     val nextPage: () -> Unit = {},
-    val saveStrokes: (List<Stroke>) -> Unit = {},
+    val saveAnnotations: (List<PageAnnotation>) -> Unit = {},
     val exportPdf: (Uri) -> Unit = {},
     val renameScore: (String, String) -> Unit = { _, _ -> },
     val deleteScore: (String) -> Unit = {},
@@ -55,21 +80,38 @@ data class SheetSetActions(
     val addScores: (String, List<String>) -> Unit = { _, _ -> },
     val removeScore: (String, Int) -> Unit = { _, _ -> },
     val moveScore: (String, Int, Int) -> Unit = { _, _, _ -> },
+    val updateSettings: (AppSettings) -> Unit = {},
+    val selectLanguage: (String?) -> Unit = {},
+    val createBackup: (Uri) -> Unit = {},
+    val restoreBackup: (Uri) -> Unit = {},
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
+fun SheetSetApp(
+    state: LibraryUiState,
+    actions: SheetSetActions,
+    windowLayout: WindowLayout = WindowLayout.COMPACT,
+) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var activeSetlistId by rememberSaveable { mutableStateOf<String?>(null) }
     var createSetlist by rememberSaveable { mutableStateOf(false) }
+    var librarySearching by rememberSaveable { mutableStateOf(false) }
+    var importOptions by rememberSaveable { mutableStateOf(false) }
+    var pendingRestore by rememberSaveable { mutableStateOf<Uri?>(null) }
     var setlistName by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
         actions.importPdfs,
     )
-    val newSetlistDescription = stringResource(R.string.new_setlist)
-    val importDescription = stringResource(R.string.import_pdf)
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> uri?.let(actions.createBackup) }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> pendingRestore = uri }
     val errorMessage = stringResource(R.string.action_failed)
     val snackbarHost = remember { SnackbarHostState() }
     val activeSetlist = state.catalog.setlists.firstOrNull { it.id == activeSetlistId }
@@ -83,11 +125,11 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
     }
 
     state.reader?.let { reader ->
-        ReaderScreen(reader, actions)
+        ReaderScreen(reader, state.settings, windowLayout, actions)
         return
     }
 
-    if (activeSetlist != null) {
+    if (activeSetlist != null && windowLayout != WindowLayout.EXPANDED) {
         SetlistDetail(
             setlist = activeSetlist,
             scores = state.catalog.scores,
@@ -97,63 +139,130 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
         return
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(title = { Text(stringResource(R.string.app_name)) })
-                if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
+    SettingsDrawer(
+        drawerState = drawerState,
+        destination = if (selectedTab == 0) AppDestination.PDF else AppDestination.SETLISTS,
+        settings = state.settings,
+        onDestination = { destination ->
+            selectedTab = if (destination == AppDestination.PDF) 0 else 1
+            if (destination != AppDestination.PDF) librarySearching = false
         },
-        snackbarHost = { SnackbarHost(snackbarHost) },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Text(stringResource(R.string.tab_pdf), fontWeight = FontWeight.SemiBold) },
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = { Text(stringResource(R.string.tab_setlists), fontWeight = FontWeight.SemiBold) },
-                )
-            }
+        onSettings = actions.updateSettings,
+        onLanguage = actions.selectLanguage,
+        onBackup = { backupLauncher.launch("SheetSet-Backup.zip") },
+        onRestore = {
+            restoreLauncher.launch(
+                arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"),
+            )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                modifier = Modifier.semantics {
-                    contentDescription = if (selectedTab == 0) {
-                        importDescription
-                    } else {
-                        newSetlistDescription
+    ) {
+        Scaffold(
+            topBar = {
+                Column {
+                    SheetHeader(
+                        actionLabel = if (selectedTab == 0) R.string.import_pdf else R.string.create,
+                        actionDescription = if (selectedTab == 0) R.string.import_pdf else R.string.create,
+                        actionIcon = if (selectedTab == 0) R.drawable.ic_upload_file_24 else R.drawable.ic_add_24,
+                        onMenu = { scope.launch { drawerState.open() } },
+                        onAction = {
+                            if (selectedTab == 0) importOptions = true
+                            else createSetlist = true
+                        },
+                    )
+                    if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbarHost) },
+            bottomBar = {
+                if (windowLayout == WindowLayout.COMPACT) {
+                    SheetNavigation(
+                        windowLayout = windowLayout,
+                        destination = if (selectedTab == 0) {
+                            AppDestination.PDF
+                        } else {
+                            AppDestination.SETLISTS
+                        },
+                    ) { destination ->
+                        selectedTab = if (destination == AppDestination.PDF) 0 else 1
+                        if (destination != AppDestination.PDF) librarySearching = false
                     }
-                },
-                onClick = {
-                    if (selectedTab == 0) importLauncher.launch(arrayOf("application/pdf"))
-                    else createSetlist = true
-                },
-            ) {
-                Text("+", fontSize = 28.sp)
+                }
+            },
+        ) { padding ->
+            Row(Modifier.fillMaxSize().padding(padding)) {
+                if (windowLayout != WindowLayout.COMPACT) {
+                    SheetNavigation(
+                        windowLayout = windowLayout,
+                        destination = if (selectedTab == 0) {
+                            AppDestination.PDF
+                        } else {
+                            AppDestination.SETLISTS
+                        },
+                    ) { destination ->
+                        selectedTab = if (destination == AppDestination.PDF) 0 else 1
+                        if (destination != AppDestination.PDF) librarySearching = false
+                    }
+                }
+                if (selectedTab == 0) {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        LibraryScreen(
+                            scores = state.catalog.scores,
+                            onOpen = actions.openScore,
+                            onRename = actions.renameScore,
+                            onDelete = actions.deleteScore,
+                            searching = librarySearching,
+                            onSearchingChange = { librarySearching = it },
+                            modifier = Modifier.widthIn(max = 720.dp).fillMaxHeight(),
+                        )
+                    }
+                } else if (windowLayout == WindowLayout.EXPANDED) {
+                    SetlistsScreen(
+                        setlists = state.catalog.setlists,
+                        onOpen = { activeSetlistId = it.id },
+                        onRename = actions.renameSetlist,
+                        onDelete = actions.deleteSetlist,
+                        modifier = Modifier.width(360.dp).fillMaxHeight(),
+                    )
+                    VerticalDivider(Modifier.fillMaxHeight())
+                    if (activeSetlist != null) {
+                        SetlistDetail(
+                            setlist = activeSetlist,
+                            scores = state.catalog.scores,
+                            actions = actions,
+                            onBack = { activeSetlistId = null },
+                            modifier = Modifier.weight(1f),
+                            embedded = true,
+                        )
+                    } else {
+                        Box(Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        SetlistsScreen(
+                            setlists = state.catalog.setlists,
+                            onOpen = { activeSetlistId = it.id },
+                            onRename = actions.renameSetlist,
+                            onDelete = actions.deleteSetlist,
+                            modifier = Modifier.widthIn(max = 720.dp).fillMaxHeight(),
+                        )
+                    }
+                }
             }
-        },
-    ) { padding ->
-        if (selectedTab == 0) {
-            LibraryScreen(
-                scores = state.catalog.scores,
-                onOpen = actions.openScore,
-                onRename = actions.renameScore,
-                onDelete = actions.deleteScore,
-                modifier = Modifier.padding(padding),
-            )
-        } else {
-            SetlistsScreen(
-                setlists = state.catalog.setlists,
-                onOpen = { activeSetlistId = it.id },
-                onRename = actions.renameSetlist,
-                onDelete = actions.deleteSetlist,
-                modifier = Modifier.padding(padding),
-            )
         }
+    }
+
+    if (importOptions) {
+        ImportSourceSheet(
+            onDismiss = { importOptions = false },
+            onFiles = { importLauncher.launch(arrayOf("application/pdf")) },
+            onScan = { openScanIt(context) },
+        )
     }
 
     if (createSetlist) {
@@ -184,4 +293,42 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
             },
         )
     }
+
+    pendingRestore?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingRestore = null },
+            title = { Text(stringResource(R.string.restore_backup)) },
+            text = { Text(stringResource(R.string.restore_backup_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingRestore = null
+                        actions.restoreBackup(uri)
+                    },
+                ) {
+                    Text(stringResource(R.string.restore))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestore = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+private const val SCAN_IT_PACKAGE = "com.majkeylab.scanit"
+
+private fun openScanIt(context: Context) {
+    val market = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("market://details?id=$SCAN_IT_PACKAGE"),
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val web = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("https://play.google.com/store/apps/details?id=$SCAN_IT_PACKAGE"),
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(market) }
+        .getOrElse { context.startActivity(web) }
 }
