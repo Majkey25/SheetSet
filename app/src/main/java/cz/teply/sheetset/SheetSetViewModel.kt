@@ -13,6 +13,7 @@ import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.pdf.PdfExporter
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.SettingsStore
+import cz.teply.sheetset.settings.HighlightStrength
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -135,7 +136,12 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                 withContext(Dispatchers.IO) {
                     val resolver = getApplication<Application>().contentResolver
                     resolver.openOutputStream(uri, "w")?.use { output ->
-                        PdfExporter.export(reader.file, output, reader.annotations)
+                        PdfExporter.export(
+                            reader.file,
+                            output,
+                            reader.annotations,
+                            state.value.settings.highlighterStrength.alpha(),
+                        )
                     } ?: throw FileNotFoundException(uri.toString())
                 }
                 mutableState.update { it.copy(loading = false) }
@@ -219,4 +225,10 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             resolver.openInputStream(uri) ?: throw FileNotFoundException(uri.toString())
         }
     }
+}
+
+private fun HighlightStrength.alpha(): Int = when (this) {
+    HighlightStrength.LIGHT -> 70
+    HighlightStrength.MEDIUM -> 105
+    HighlightStrength.STRONG -> 150
 }

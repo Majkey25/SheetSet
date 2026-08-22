@@ -12,6 +12,8 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import androidx.core.graphics.createBitmap
+import cz.teply.sheetset.settings.AnnotationTextSize
+import cz.teply.sheetset.settings.PageFit
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -24,8 +26,16 @@ import kotlin.math.sqrt
 
 enum class ReaderTool {
     VIEW,
+    SELECT,
     PEN,
     HIGHLIGHTER,
+    UNDERLINE,
+    STRIKE_THROUGH,
+    TEXT_BOX,
+    LINE,
+    ARROW,
+    RECTANGLE,
+    ELLIPSE,
     ERASER,
 }
 
@@ -58,7 +68,12 @@ class PdfPageView(context: Context) : View(context) {
     private var lastTapAt = 0L
     private var lastTapX = 0f
     private var lastTapY = 0f
-    private val preview = mutableListOf<NormalizedPoint>()
+    private val previewPoints = mutableListOf<NormalizedPoint>()
+    private var dragStart: NormalizedPoint? = null
+    private var dragCurrent: NormalizedPoint? = null
+    private var gestureOriginal: PageAnnotation? = null
+    private var gesturePreview: PageAnnotation? = null
+    private val erasedIds = mutableSetOf<String>()
 
     init {
         isClickable = true
@@ -67,9 +82,22 @@ class PdfPageView(context: Context) : View(context) {
     var tool = ReaderTool.VIEW
         set(value) {
             field = value
-            preview.clear()
+            resetGesture()
             invalidate()
         }
+    var annotationColor = AnnotationColor.BLACK
+    var penWidth = 0.004f
+    var shapeWidth = 0.004f
+    var textSize = AnnotationTextSize.MEDIUM
+    var highlighterAlpha = 105
+    var pageFit = PageFit.PAGE
+        set(value) {
+            field = value
+            clampPan()
+            invalidate()
+        }
+    var pageTurnTaps = true
+    var pageTurnSwipes = true
     var annotations: List<PageAnnotation> = emptyList()
         set(value) {
             field = value
@@ -83,8 +111,12 @@ class PdfPageView(context: Context) : View(context) {
     var onPreviousPage: () -> Unit = {}
     var onNextPage: () -> Unit = {}
     var onPageClick: () -> Unit = {}
+    var onSelectAnnotation: (String?) -> Unit = {}
     var onAddAnnotation: (PageAnnotation) -> Unit = {}
-    var onErase: (NormalizedPoint) -> Unit = {}
+    var onUpdateAnnotation: (PageAnnotation) -> Unit = {}
+    var onDeleteAnnotation: (String) -> Unit = {}
+    var onRequestText: (NormalizedRect) -> Unit = {}
+    var onRequestMarkup: (MarkupKind, NormalizedPoint, NormalizedPoint) -> Unit = { _, _, _ -> }
     var onRenderError: () -> Unit = {}
 
     fun showPage(file: File, index: Int) {
@@ -105,34 +137,22 @@ class PdfPageView(context: Context) : View(context) {
         val page = bitmap ?: return
         val bounds = pageBounds(page)
         canvas.drawBitmap(page, null, bounds, pagePaint)
-        annotations.forEach { annotation ->
+        annotations.forEach { stored ->
+            val annotation = gesturePreview?.takeIf { it.id == stored.id } ?: stored
             AnnotationRenderer.draw(
                 canvas = canvas,
                 annotation = annotation,
                 page = bounds,
                 selected = annotation.id == selectedAnnotationId,
+                highlighterAlpha = highlighterAlpha,
             )
         }
-        val previewTool = when (tool) {
-            ReaderTool.PEN -> InkKind.PEN
-            ReaderTool.HIGHLIGHTER -> InkKind.HIGHLIGHTER
-            else -> null
-        }
-        if (previewTool != null && preview.isNotEmpty()) {
+        previewAnnotation()?.let { preview ->
             AnnotationRenderer.draw(
-                canvas,
-                InkAnnotation(
-                    id = "preview",
-                    kind = previewTool,
-                    width = widthFor(previewTool),
-                    points = preview,
-                    color = if (previewTool == InkKind.HIGHLIGHTER) {
-                        AnnotationColor.YELLOW
-                    } else {
-                        AnnotationColor.BLACK
-                    },
-                ),
-                bounds,
+                canvas = canvas,
+                annotation = preview,
+                page = bounds,
+                highlighterAlpha = highlighterAlpha,
             )
         }
     }
@@ -140,14 +160,14 @@ class PdfPageView(context: Context) : View(context) {
     override fun onTouchEvent(event: MotionEvent): Boolean {
         scaleDetector.onTouchEvent(event)
         if (event.pointerCount > 1 || scaleDetector.isInProgress) {
-            preview.clear()
+            resetGesture()
             return true
         }
         if (tool == ReaderTool.VIEW) {
             if (handleViewTouch(event)) performClick()
             return true
         }
-        return handleAnnotationTouch(event)
+        return handleEditorTouch(event)
     }
 
     override fun performClick(): Boolean {
@@ -173,7 +193,7 @@ class PdfPageView(context: Context) : View(context) {
                 lastX = event.x
                 lastY = event.y
             }
-            MotionEvent.ACTION_MOVE -> if (zoom > 1f) {
+            MotionEvent.ACTION_MOVE -> if (canPan()) {
                 panX += event.x - lastX
                 panY += event.y - lastY
                 lastX = event.x
@@ -189,7 +209,13 @@ class PdfPageView(context: Context) : View(context) {
     private fun finishViewGesture(event: MotionEvent): Boolean {
         val dx = event.x - downX
         val dy = event.y - downY
-        if (zoom == 1f && abs(dx) > 80f && abs(dx) > abs(dy)) {
+        if (
+            pageTurnSwipes &&
+            zoom == 1f &&
+            abs(dx) > 80f &&
+            abs(dx) > abs(dy) &&
+            !canPanHorizontally()
+        ) {
             if (dx < 0f) onNextPage() else onPreviousPage()
             return false
         }
@@ -210,6 +236,7 @@ class PdfPageView(context: Context) : View(context) {
         lastTapAt = now
         lastTapX = event.x
         lastTapY = event.y
+        if (!pageTurnTaps) return true
         return when {
             event.x < width / 3f -> {
                 onPreviousPage()
@@ -223,7 +250,7 @@ class PdfPageView(context: Context) : View(context) {
         }
     }
 
-    private fun handleAnnotationTouch(event: MotionEvent): Boolean {
+    private fun handleEditorTouch(event: MotionEvent): Boolean {
         val page = bitmap ?: return true
         val bounds = pageBounds(page)
         val point = normalizePoint(
@@ -232,57 +259,207 @@ class PdfPageView(context: Context) : View(context) {
             PageBounds(bounds.left, bounds.top, bounds.width(), bounds.height()),
         )
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                preview.clear()
-                point?.let { if (tool == ReaderTool.ERASER) onErase(it) else preview.add(it) }
+            MotionEvent.ACTION_DOWN -> point?.let(::beginGesture)
+            MotionEvent.ACTION_MOVE -> point?.let(::updateGesture)
+            MotionEvent.ACTION_UP -> {
+                point?.let(::updateGesture)
+                finishGesture()
             }
-            MotionEvent.ACTION_MOVE -> point?.let { current ->
-                if (tool == ReaderTool.ERASER) {
-                    onErase(current)
-                } else {
-                    val previous = preview.lastOrNull()
-                    if (previous == null || hypot(current.x - previous.x, current.y - previous.y) > 0.001f) {
-                        if (preview.size < MAX_POINTS_PER_INK) preview.add(current)
-                        invalidate()
-                    }
-                }
-            }
-            MotionEvent.ACTION_UP -> commitPreview()
-            MotionEvent.ACTION_CANCEL -> {
-                preview.clear()
-                invalidate()
-            }
+            MotionEvent.ACTION_CANCEL -> resetGesture()
         }
         return true
     }
 
-    private fun commitPreview() {
-        val annotationTool = when (tool) {
-            ReaderTool.PEN -> InkKind.PEN
-            ReaderTool.HIGHLIGHTER -> InkKind.HIGHLIGHTER
+    private fun beginGesture(point: NormalizedPoint) {
+        resetGesture()
+        dragStart = point
+        dragCurrent = point
+        when (tool) {
+            ReaderTool.SELECT -> {
+                val hit = annotations.topmostHit(point, 0.025f / zoom)
+                selectedAnnotationId = hit?.id
+                onSelectAnnotation(hit?.id)
+                gestureOriginal = hit
+                gesturePreview = hit
+            }
+            ReaderTool.PEN -> previewPoints.add(point)
+            ReaderTool.ERASER -> eraseAt(point)
+            else -> Unit
+        }
+        invalidate()
+    }
+
+    private fun updateGesture(point: NormalizedPoint) {
+        dragCurrent = point
+        when (tool) {
+            ReaderTool.SELECT -> {
+                val original = gestureOriginal ?: return
+                val start = dragStart ?: return
+                gesturePreview = original.translated(point.x - start.x, point.y - start.y)
+            }
+            ReaderTool.PEN -> {
+                val previous = previewPoints.lastOrNull()
+                if (previous == null || distance(previous, point) > 0.001f) {
+                    if (previewPoints.size < MAX_POINTS_PER_INK) previewPoints.add(point)
+                }
+            }
+            ReaderTool.ERASER -> eraseAt(point)
+            else -> Unit
+        }
+        invalidate()
+    }
+
+    private fun finishGesture() {
+        val start = dragStart
+        val end = dragCurrent
+        when (tool) {
+            ReaderTool.SELECT -> {
+                val original = gestureOriginal
+                val updated = gesturePreview
+                if (original != null && updated != null && updated != original) {
+                    onUpdateAnnotation(updated)
+                }
+            }
+            ReaderTool.PEN -> if (previewPoints.isNotEmpty()) {
+                add(
+                    InkAnnotation(
+                        id = UUID.randomUUID().toString(),
+                        kind = InkKind.PEN,
+                        width = penWidth,
+                        points = previewPoints.toList(),
+                        color = annotationColor,
+                    ),
+                )
+            }
+            ReaderTool.HIGHLIGHTER -> requestMarkup(MarkupKind.HIGHLIGHT, start, end)
+            ReaderTool.UNDERLINE -> requestMarkup(MarkupKind.UNDERLINE, start, end)
+            ReaderTool.STRIKE_THROUGH -> requestMarkup(MarkupKind.STRIKE_THROUGH, start, end)
+            ReaderTool.TEXT_BOX -> if (start != null && end != null) {
+                onRequestText(manualMarkup(start, end).single())
+            }
+            ReaderTool.LINE -> addShape(ShapeKind.LINE, start, end)
+            ReaderTool.ARROW -> addShape(ShapeKind.ARROW, start, end)
+            ReaderTool.RECTANGLE -> addShape(ShapeKind.RECTANGLE, start, end)
+            ReaderTool.ELLIPSE -> addShape(ShapeKind.ELLIPSE, start, end)
+            ReaderTool.VIEW, ReaderTool.ERASER -> Unit
+        }
+        resetGesture()
+    }
+
+    private fun requestMarkup(
+        kind: MarkupKind,
+        start: NormalizedPoint?,
+        end: NormalizedPoint?,
+    ) {
+        if (start != null && end != null) onRequestMarkup(kind, start, end)
+    }
+
+    private fun addShape(
+        kind: ShapeKind,
+        start: NormalizedPoint?,
+        end: NormalizedPoint?,
+    ) {
+        if (start == null || end == null) return
+        val raw = ShapeAnnotation(
+            id = UUID.randomUUID().toString(),
+            kind = kind,
+            start = start,
+            end = end,
+            width = shapeWidth,
+            color = annotationColor,
+        )
+        add(raw.resized(start, end))
+    }
+
+    private fun add(annotation: PageAnnotation) {
+        onAddAnnotation(annotation)
+    }
+
+    private fun eraseAt(point: NormalizedPoint) {
+        val hit = annotations.topmostHit(point, 0.025f / zoom) ?: return
+        if (erasedIds.add(hit.id)) {
+            if (selectedAnnotationId == hit.id) {
+                selectedAnnotationId = null
+                onSelectAnnotation(null)
+            }
+            onDeleteAnnotation(hit.id)
+        }
+    }
+
+    private fun previewAnnotation(): PageAnnotation? {
+        val start = dragStart ?: return null
+        val end = dragCurrent ?: return null
+        return when (tool) {
+            ReaderTool.PEN -> if (previewPoints.isEmpty()) {
+                null
+            } else {
+                InkAnnotation(
+                    id = "preview",
+                    kind = InkKind.PEN,
+                    width = penWidth,
+                    points = previewPoints,
+                    color = annotationColor,
+                )
+            }
+            ReaderTool.HIGHLIGHTER -> MarkupAnnotation(
+                id = "preview",
+                kind = MarkupKind.HIGHLIGHT,
+                bounds = manualMarkup(start, end),
+                color = annotationColor,
+            )
+            ReaderTool.UNDERLINE -> MarkupAnnotation(
+                id = "preview",
+                kind = MarkupKind.UNDERLINE,
+                bounds = manualMarkup(start, end),
+                color = annotationColor,
+            )
+            ReaderTool.STRIKE_THROUGH -> MarkupAnnotation(
+                id = "preview",
+                kind = MarkupKind.STRIKE_THROUGH,
+                bounds = manualMarkup(start, end),
+                color = annotationColor,
+            )
+            ReaderTool.TEXT_BOX -> ShapeAnnotation(
+                id = "preview",
+                kind = ShapeKind.RECTANGLE,
+                start = start,
+                end = end,
+                width = shapeWidth,
+                color = annotationColor,
+            ).resized(start, end)
+            ReaderTool.LINE, ReaderTool.ARROW, ReaderTool.RECTANGLE, ReaderTool.ELLIPSE -> {
+                val kind = when (tool) {
+                    ReaderTool.LINE -> ShapeKind.LINE
+                    ReaderTool.ARROW -> ShapeKind.ARROW
+                    ReaderTool.RECTANGLE -> ShapeKind.RECTANGLE
+                    ReaderTool.ELLIPSE -> ShapeKind.ELLIPSE
+                    else -> error("Unsupported shape preview")
+                }
+                ShapeAnnotation(
+                    id = "preview",
+                    kind = kind,
+                    start = start,
+                    end = end,
+                    width = shapeWidth,
+                    color = annotationColor,
+                ).resized(start, end)
+            }
             else -> null
         }
-        if (annotationTool != null && preview.isNotEmpty()) {
-            onAddAnnotation(
-                InkAnnotation(
-                    id = UUID.randomUUID().toString(),
-                    kind = annotationTool,
-                    width = widthFor(annotationTool),
-                    points = preview.toList(),
-                    color = if (annotationTool == InkKind.HIGHLIGHTER) {
-                        AnnotationColor.YELLOW
-                    } else {
-                        AnnotationColor.BLACK
-                    },
-                ),
-            )
-        }
-        preview.clear()
+    }
+
+    private fun resetGesture() {
+        previewPoints.clear()
+        dragStart = null
+        dragCurrent = null
+        gestureOriginal = null
+        gesturePreview = null
+        erasedIds.clear()
         invalidate()
     }
 
     private fun pageBounds(page: Bitmap): RectF {
-        val fit = min(width.toFloat() / page.width, height.toFloat() / page.height)
+        val fit = baseScale(page)
         val drawWidth = page.width * fit * zoom
         val drawHeight = page.height * fit * zoom
         return RectF(
@@ -293,14 +470,32 @@ class PdfPageView(context: Context) : View(context) {
         )
     }
 
+    private fun baseScale(page: Bitmap): Float = when (pageFit) {
+        PageFit.PAGE -> min(width.toFloat() / page.width, height.toFloat() / page.height)
+        PageFit.WIDTH -> width.toFloat() / page.width
+    }
+
+    private fun canPan(): Boolean {
+        val page = bitmap ?: return false
+        return maxPanX(page) > 0f || maxPanY(page) > 0f
+    }
+
+    private fun canPanHorizontally(): Boolean {
+        val page = bitmap ?: return false
+        return maxPanX(page) > 0f
+    }
+
     private fun clampPan() {
         val page = bitmap ?: return
-        val fit = min(width.toFloat() / page.width, height.toFloat() / page.height)
-        val maxX = max(0f, (page.width * fit * zoom - width) / 2f)
-        val maxY = max(0f, (page.height * fit * zoom - height) / 2f)
-        panX = panX.coerceIn(-maxX, maxX)
-        panY = panY.coerceIn(-maxY, maxY)
+        panX = panX.coerceIn(-maxPanX(page), maxPanX(page))
+        panY = panY.coerceIn(-maxPanY(page), maxPanY(page))
     }
+
+    private fun maxPanX(page: Bitmap): Float =
+        max(0f, (page.width * baseScale(page) * zoom - width) / 2f)
+
+    private fun maxPanY(page: Bitmap): Float =
+        max(0f, (page.height * baseScale(page) * zoom - height) / 2f)
 
     private fun renderPage() {
         val file = source ?: return
@@ -352,6 +547,8 @@ class PdfPageView(context: Context) : View(context) {
             }
         }
 
-    private fun widthFor(kind: InkKind): Float = if (kind == InkKind.PEN) 0.004f else 0.02f
-
+    private fun distance(first: NormalizedPoint, second: NormalizedPoint): Float = hypot(
+        first.x - second.x,
+        first.y - second.y,
+    )
 }

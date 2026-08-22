@@ -103,4 +103,21 @@
     <string name="github_repository">Repozytorium GitHub</string>
     <string name="release_page">Wydania</string>
     <string name="pdf_navigation">Nawigacja PDF</string>
++    <string name="select">Wybierz</string>
+    <string name="underline">Podkreślenie</string>
+    <string name="strike_through">Przekreślenie</string>
+    <string name="text_box">Pole tekstowe</string>
+    <string name="line">Linia</string>
+    <string name="arrow">Strzałka</string>
+    <string name="rectangle">Prostokąt</string>
+    <string name="ellipse">Elipsa</string>
+    <string name="color">Kolor</string>
+    <string name="color_black">Czarny</string>
+    <string name="color_red">Czerwony</string>
+    <string name="color_orange">Pomarańczowy</string>
+    <string name="color_yellow">Żółty</string>
+    <string name="color_green">Zielony</string>
+    <string name="color_blue">Niebieski</string>
+    <string name="color_purple">Fioletowy</string>
+    <string name="color_pink">Różowy</string>
 </resources>

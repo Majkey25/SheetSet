@@ -116,7 +116,7 @@ fun SheetSetApp(
     }
 
     state.reader?.let { reader ->
-        ReaderScreen(reader, actions)
+        ReaderScreen(reader, state.settings, windowLayout, actions)
         return
     }
 

@@ -13,7 +13,13 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 object PdfExporter {
-    fun export(source: File, destination: OutputStream, annotations: DocumentAnnotations) {
+    fun export(
+        source: File,
+        destination: OutputStream,
+        annotations: DocumentAnnotations,
+        highlighterAlpha: Int = 105,
+    ) {
+        require(highlighterAlpha in 0..255) { "Invalid highlighter alpha" }
         val document = PdfDocument()
         try {
             ParcelFileDescriptor.open(source, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
@@ -29,7 +35,12 @@ object PdfExporter {
                                     val bounds = RectF(0f, 0f, page.width.toFloat(), page.height.toFloat())
                                     outputPage.canvas.drawBitmap(bitmap, null, bounds, null)
                                     annotations.pages[index].orEmpty().forEach { annotation ->
-                                        AnnotationRenderer.draw(outputPage.canvas, annotation, bounds)
+                                        AnnotationRenderer.draw(
+                                            outputPage.canvas,
+                                            annotation,
+                                            bounds,
+                                            highlighterAlpha = highlighterAlpha,
+                                        )
                                     }
                                 } finally {
                                     document.finishPage(outputPage)

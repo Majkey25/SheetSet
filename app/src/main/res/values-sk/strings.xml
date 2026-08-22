@@ -103,4 +103,21 @@
     <string name="github_repository">GitHub repozitár</string>
     <string name="release_page">Vydania</string>
     <string name="pdf_navigation">Navigácia PDF</string>
++    <string name="select">Vybrať</string>
+    <string name="underline">Podčiarknutie</string>
+    <string name="strike_through">Prečiarknutie</string>
+    <string name="text_box">Textové pole</string>
+    <string name="line">Čiara</string>
+    <string name="arrow">Šípka</string>
+    <string name="rectangle">Obdĺžnik</string>
+    <string name="ellipse">Elipsa</string>
+    <string name="color">Farba</string>
+    <string name="color_black">Čierna</string>
+    <string name="color_red">Červená</string>
+    <string name="color_orange">Oranžová</string>
+    <string name="color_yellow">Žltá</string>
+    <string name="color_green">Zelená</string>
+    <string name="color_blue">Modrá</string>
+    <string name="color_purple">Fialová</string>
+    <string name="color_pink">Ružová</string>
 </resources>

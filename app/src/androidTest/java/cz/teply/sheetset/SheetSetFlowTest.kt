@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import cz.teply.sheetset.data.LibraryCatalog
@@ -320,13 +321,29 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Export").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Annotate").performClick()
 
-        composeRule.onNodeWithContentDescription("Pen").assertIsSelected()
-        composeRule.onNodeWithContentDescription("Highlighter").assertIsNotSelected().performClick()
+        listOf(
+            "Select",
+            "Pen",
+            "Highlighter",
+            "Underline",
+            "Strike-through",
+            "Text box",
+            "Line",
+            "Arrow",
+            "Rectangle",
+            "Ellipse",
+            "Eraser",
+            "Color",
+            "Undo",
+            "Redo",
+            "Done",
+        ).forEach { label ->
+            composeRule.onAllNodesWithContentDescription(label).assertCountEquals(1)
+        }
+        composeRule.onNodeWithContentDescription("Select").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Rectangle").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Rectangle").assertIsSelected()
         composeRule.onNodeWithContentDescription("Pen").assertIsNotSelected()
-        composeRule.onNodeWithContentDescription("Highlighter").assertIsSelected()
-        composeRule.onNodeWithContentDescription("Eraser").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Undo").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Redo").assertIsDisplayed()
     }
 
     @Test

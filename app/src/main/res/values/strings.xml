@@ -99,4 +99,21 @@
     <string name="github_repository">GitHub repository</string>
     <string name="release_page">Releases</string>
     <string name="pdf_navigation">PDF navigation</string>
++    <string name="select">Select</string>
+    <string name="underline">Underline</string>
+    <string name="strike_through">Strike-through</string>
+    <string name="text_box">Text box</string>
+    <string name="line">Line</string>
+    <string name="arrow">Arrow</string>
+    <string name="rectangle">Rectangle</string>
+    <string name="ellipse">Ellipse</string>
+    <string name="color">Color</string>
+    <string name="color_black">Black</string>
+    <string name="color_red">Red</string>
+    <string name="color_orange">Orange</string>
+    <string name="color_yellow">Yellow</string>
+    <string name="color_green">Green</string>
+    <string name="color_blue">Blue</string>
+    <string name="color_purple">Purple</string>
+    <string name="color_pink">Pink</string>
 </resources>

@@ -23,21 +23,28 @@ object AnnotationRenderer {
         annotation: PageAnnotation,
         page: RectF,
         selected: Boolean = false,
+        highlighterAlpha: Int = 105,
     ) {
+        require(highlighterAlpha in 0..255) { "Invalid highlighter alpha" }
         when (annotation) {
-            is InkAnnotation -> drawInk(canvas, annotation, page)
-            is MarkupAnnotation -> drawMarkup(canvas, annotation, page)
+            is InkAnnotation -> drawInk(canvas, annotation, page, highlighterAlpha)
+            is MarkupAnnotation -> drawMarkup(canvas, annotation, page, highlighterAlpha)
             is TextBoxAnnotation -> drawTextBox(canvas, annotation, page)
             is ShapeAnnotation -> drawShape(canvas, annotation, page)
         }
         if (selected) drawSelection(canvas, annotation, page)
     }
 
-    private fun drawInk(canvas: Canvas, annotation: InkAnnotation, page: RectF) {
+    private fun drawInk(
+        canvas: Canvas,
+        annotation: InkAnnotation,
+        page: RectF,
+        highlighterAlpha: Int,
+    ) {
         val paint = strokePaint(
             annotation.color.argb(),
             annotation.width * min(page.width(), page.height()),
-            if (annotation.kind == InkKind.HIGHLIGHTER) 95 else 255,
+            if (annotation.kind == InkKind.HIGHLIGHTER) highlighterAlpha else 255,
         )
         val first = annotation.points.first()
         if (annotation.points.size == 1) {
@@ -51,7 +58,12 @@ object AnnotationRenderer {
         canvas.drawPath(path, paint)
     }
 
-    private fun drawMarkup(canvas: Canvas, annotation: MarkupAnnotation, page: RectF) {
+    private fun drawMarkup(
+        canvas: Canvas,
+        annotation: MarkupAnnotation,
+        page: RectF,
+        highlighterAlpha: Int,
+    ) {
         val color = annotation.color.argb()
         annotation.bounds.forEach { normalized ->
             val bounds = normalized.toRectF(page)
@@ -61,7 +73,7 @@ object AnnotationRenderer {
                     Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.FILL
                         this.color = color
-                        alpha = 105
+                        alpha = highlighterAlpha
                     },
                 )
                 MarkupKind.UNDERLINE -> canvas.drawLine(
