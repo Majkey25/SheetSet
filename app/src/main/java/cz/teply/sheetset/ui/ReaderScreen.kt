@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,6 +77,7 @@ import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.ReaderDefaultTool
 import cz.teply.sheetset.settings.ToolSize
 import java.util.UUID
+import kotlinx.coroutines.delay
 
 @Composable
 fun ReaderScreen(
@@ -86,6 +88,7 @@ fun ReaderScreen(
 ) {
     var tool by remember(reader.score.id) { mutableStateOf(ReaderTool.VIEW) }
     var controlsVisible by remember { mutableStateOf(true) }
+    var autoHideRequest by remember { mutableIntStateOf(0) }
     var selectedAnnotationId by remember(reader.score.id, reader.pageIndex) {
         mutableStateOf<String?>(null)
     }
@@ -107,6 +110,12 @@ fun ReaderScreen(
     }
     LaunchedEffect(reader.score.id, reader.pageIndex) {
         selectedAnnotationId = null
+    }
+    LaunchedEffect(autoHideRequest, settings.autoHideControls) {
+        if (autoHideRequest > 0 && settings.autoHideControls) {
+            delay(1_500)
+            if (tool == ReaderTool.VIEW && controlsVisible) controlsVisible = false
+        }
     }
 
     fun updateHistory(next: AnnotationHistory) {
@@ -142,7 +151,10 @@ fun ReaderScreen(
                 view.onPreviousPage = actions.previousPage
                 view.onNextPage = actions.nextPage
                 view.onPageClick = {
-                    if (tool == ReaderTool.VIEW) controlsVisible = !controlsVisible
+                    if (tool == ReaderTool.VIEW) {
+                        controlsVisible = !controlsVisible
+                        if (controlsVisible && settings.autoHideControls) autoHideRequest++
+                    }
                 }
                 view.onSelectAnnotation = { selectedAnnotationId = it }
                 view.onAddAnnotation = ::addAnnotation

@@ -407,6 +407,39 @@ class SheetSetFlowTest {
     }
 
     @Test
+    fun readerAutoHidesControlsAfterManualReveal() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                    ),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onRoot().performTouchInput { click(center) }
+        composeRule.onRoot().performTouchInput { click(center) }
+        composeRule.onNodeWithContentDescription("Annotate").assertIsDisplayed()
+
+        composeRule.waitUntil(timeoutMillis = 4_000) {
+            composeRule.onAllNodesWithContentDescription("Annotate")
+                .fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    @Test
     fun cancelledSetlistNameIsCleared() {
         composeRule.setContent {
             SheetSetTheme { SheetSetApp(LibraryUiState(), SheetSetActions()) }
