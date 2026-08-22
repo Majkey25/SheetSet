@@ -1,5 +1,7 @@
 package cz.teply.sheetset.ui
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
@@ -76,7 +79,10 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
     var activeSetlistId by rememberSaveable { mutableStateOf<String?>(null) }
     var createSetlist by rememberSaveable { mutableStateOf(false) }
     var librarySearching by rememberSaveable { mutableStateOf(false) }
+    var importOptions by rememberSaveable { mutableStateOf(false) }
+    var navigationMenu by rememberSaveable { mutableStateOf(false) }
     var setlistName by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
         actions.importPdfs,
@@ -111,33 +117,26 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
     Scaffold(
         topBar = {
             Column {
-                AppHeader(
-                    action = if (selectedTab == 0) R.string.import_pdf else R.string.new_setlist,
-                    actionVisible = if (selectedTab == 0) {
-                        state.catalog.scores.isNotEmpty()
-                    } else {
-                        state.catalog.setlists.isNotEmpty()
-                    },
+                SheetHeader(
+                    actionLabel = if (selectedTab == 0) R.string.import_pdf else R.string.create,
+                    actionDescription = if (selectedTab == 0) R.string.import_pdf else R.string.create,
+                    actionIcon = if (selectedTab == 0) R.drawable.ic_upload_file_24 else R.drawable.ic_add_24,
+                    onMenu = { navigationMenu = true },
                     onAction = {
-                        if (selectedTab == 0) importLauncher.launch(arrayOf("application/pdf"))
+                        if (selectedTab == 0) importOptions = true
                         else createSetlist = true
                     },
-                    secondaryAction = if (selectedTab == 0 && state.catalog.scores.isNotEmpty()) {
-                        R.string.search_pdfs
-                    } else {
-                        null
-                    },
-                    secondaryGlyph = if (librarySearching) "×" else "⌕",
-                    onSecondaryAction = { librarySearching = !librarySearching },
                 )
                 if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         },
         snackbarHost = { SnackbarHost(snackbarHost) },
         bottomBar = {
-            SheetTabs(selectedTab) { tab ->
-                selectedTab = tab
-                if (tab != 0) librarySearching = false
+            SheetNavigation(
+                destination = if (selectedTab == 0) AppDestination.PDF else AppDestination.SETLISTS,
+            ) { destination ->
+                selectedTab = if (destination == AppDestination.PDF) 0 else 1
+                if (destination != AppDestination.PDF) librarySearching = false
             }
         },
     ) { padding ->
@@ -147,8 +146,8 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
                 onOpen = actions.openScore,
                 onRename = actions.renameScore,
                 onDelete = actions.deleteScore,
-                onImport = { importLauncher.launch(arrayOf("application/pdf")) },
                 searching = librarySearching,
+                onSearchingChange = { librarySearching = it },
                 modifier = Modifier.padding(padding),
             )
         } else {
@@ -157,10 +156,28 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
                 onOpen = { activeSetlistId = it.id },
                 onRename = actions.renameSetlist,
                 onDelete = actions.deleteSetlist,
-                onCreate = { createSetlist = true },
                 modifier = Modifier.padding(padding),
             )
         }
+    }
+
+    if (navigationMenu) {
+        NavigationMenuSheet(
+            destination = if (selectedTab == 0) AppDestination.PDF else AppDestination.SETLISTS,
+            onDismiss = { navigationMenu = false },
+            onDestination = { destination ->
+                selectedTab = if (destination == AppDestination.PDF) 0 else 1
+                if (destination != AppDestination.PDF) librarySearching = false
+            },
+        )
+    }
+
+    if (importOptions) {
+        ImportSourceSheet(
+            onDismiss = { importOptions = false },
+            onFiles = { importLauncher.launch(arrayOf("application/pdf")) },
+            onScan = { openScanIt(context) },
+        )
     }
 
     if (createSetlist) {
@@ -193,89 +210,17 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
     }
 }
 
-@Composable
-private fun AppHeader(
-    action: Int,
-    actionVisible: Boolean,
-    onAction: () -> Unit,
-    secondaryAction: Int? = null,
-    secondaryGlyph: String = "",
-    onSecondaryAction: () -> Unit = {},
-) {
-    val actionDescription = stringResource(action)
-    val secondaryDescription = secondaryAction?.let { stringResource(it) }
-    Surface(color = MaterialTheme.colorScheme.surface) {
-        Column {
-            Row(
-                Modifier.fillMaxWidth().statusBarsPadding().height(68.dp)
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.app_name),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.displaySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (secondaryDescription != null) {
-                    IconButton(
-                        modifier = Modifier.semantics {
-                            contentDescription = secondaryDescription
-                        },
-                        onClick = onSecondaryAction,
-                    ) { Text(secondaryGlyph) }
-                }
-                if (actionVisible) {
-                    Button(
-                        modifier = Modifier.semantics { contentDescription = actionDescription },
-                        shape = MaterialTheme.shapes.small,
-                        onClick = onAction,
-                    ) {
-                        Text(stringResource(action))
-                    }
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-    }
-}
+private const val SCAN_IT_PACKAGE = "com.majkeylab.scanit"
 
-@Composable
-private fun SheetTabs(selected: Int, onSelect: (Int) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surface) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp).selectableGroup(),
-            ) {
-                listOf(R.string.tab_pdf, R.string.tab_setlists).forEachIndexed { index, label ->
-                    val active = selected == index
-                    Column(
-                        Modifier.weight(1f).fillMaxHeight()
-                            .selectable(
-                                selected = active,
-                                role = Role.Tab,
-                                onClick = { onSelect(index) },
-                            )
-                            .semantics(mergeDescendants = true) {},
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(
-                            Modifier.fillMaxWidth().height(3.dp).background(
-                                if (active) Color.Black else Color.Transparent,
-                            ),
-                        )
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text(
-                                stringResource(label),
-                                color = if (active) Color.Black else Color.DarkGray,
-                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
+private fun openScanIt(context: Context) {
+    val market = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("market://details?id=$SCAN_IT_PACKAGE"),
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val web = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("https://play.google.com/store/apps/details?id=$SCAN_IT_PACKAGE"),
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(market) }
+        .getOrElse { context.startActivity(web) }
 }

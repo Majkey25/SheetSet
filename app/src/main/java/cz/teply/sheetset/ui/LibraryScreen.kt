@@ -21,6 +21,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,8 +51,8 @@ fun LibraryScreen(
     onOpen: (Score) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
-    onImport: () -> Unit,
     searching: Boolean,
+    onSearchingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -70,20 +72,42 @@ fun LibraryScreen(
             R.string.no_pdfs,
             R.string.import_hint,
             modifier,
-            action = R.string.import_pdf,
-            onAction = onImport,
         )
         return
     }
     Column(modifier.fillMaxSize()) {
         if (searching) {
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-                value = query,
-                onValueChange = { query = it },
-                label = { Text(stringResource(R.string.search_pdfs)) },
-                singleLine = true,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.weight(1f),
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(stringResource(R.string.search_pdfs)) },
+                    singleLine = true,
+                )
+                TextButton(onClick = { onSearchingChange(false) }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                val searchDescription = stringResource(R.string.search_pdfs)
+                IconButton(
+                    modifier = Modifier.semantics { contentDescription = searchDescription },
+                    onClick = { onSearchingChange(true) },
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search_24),
+                        contentDescription = null,
+                    )
+                }
+            }
         }
         if (visibleScores.isEmpty()) {
             AppEmptyState(R.string.no_search_results, R.string.search_pdfs)
@@ -159,7 +183,12 @@ private fun ScoreRow(
             IconButton(
                 modifier = Modifier.semantics { contentDescription = more },
                 onClick = onMore,
-            ) { Text("⋮") }
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_vert_24),
+                    contentDescription = null,
+                )
+            }
             DropdownMenu(expanded = expanded, onDismissRequest = onDismissMenu) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.rename)) },
@@ -179,8 +208,6 @@ internal fun AppEmptyState(
     title: Int,
     message: Int,
     modifier: Modifier = Modifier,
-    action: Int? = null,
-    onAction: () -> Unit = {},
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -208,14 +235,6 @@ internal fun AppEmptyState(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (action != null) {
-                val actionDescription = stringResource(action)
-                Button(
-                    modifier = Modifier.semantics { contentDescription = actionDescription },
-                    shape = MaterialTheme.shapes.small,
-                    onClick = onAction,
-                ) { Text(actionDescription) }
-            }
         }
     }
 }

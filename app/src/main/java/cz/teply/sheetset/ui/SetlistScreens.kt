@@ -21,6 +21,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,7 +55,6 @@ fun SetlistsScreen(
     onOpen: (Setlist) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
-    onCreate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menuSetlistId by remember { mutableStateOf<String?>(null) }
@@ -64,8 +65,6 @@ fun SetlistsScreen(
             R.string.no_setlists,
             R.string.setlist_hint,
             modifier,
-            action = R.string.new_setlist,
-            onAction = onCreate,
         )
         return
     }
@@ -144,7 +143,12 @@ private fun SetlistRow(
             IconButton(
                 modifier = Modifier.semantics { contentDescription = more },
                 onClick = onMore,
-            ) { Text("⋮") }
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_vert_24),
+                    contentDescription = null,
+                )
+            }
             DropdownMenu(expanded = expanded, onDismissRequest = onDismissMenu) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.rename)) },

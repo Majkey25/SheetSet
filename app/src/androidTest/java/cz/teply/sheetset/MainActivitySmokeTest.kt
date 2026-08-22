@@ -2,7 +2,7 @@ package cz.teply.sheetset
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import org.junit.Rule
 import org.junit.Test
 
@@ -13,6 +13,6 @@ class MainActivitySmokeTest {
 
     @Test
     fun appLaunches() {
-        composeRule.onNodeWithText("SheetSet").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Import PDF").assertIsDisplayed()
     }
 }

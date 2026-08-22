@@ -73,6 +73,34 @@ class SheetSetFlowTest {
     }
 
     @Test
+    fun headerUsesMenuAndPdfActionWithoutBrandTitle() {
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(LibraryUiState(), SheetSetActions())
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Menu").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Import PDF").assertIsDisplayed()
+        composeRule.onAllNodesWithText("SheetSet").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Import PDF").assertCountEquals(1)
+    }
+
+    @Test
+    fun emptySetlistsKeepsCreateOnlyInHeader() {
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(LibraryUiState(), SheetSetActions())
+            }
+        }
+
+        composeRule.onNodeWithText("Setlists").performClick()
+
+        composeRule.onNodeWithContentDescription("Create").assertIsDisplayed()
+        composeRule.onAllNodesWithText("New setlist").assertCountEquals(0)
+    }
+
+    @Test
     fun searchOpensOnlyWhenRequested() {
         val score = Score("score-1", "Moonlight Sonata", "score-1.pdf", 3, 1L)
         composeRule.setContent {
@@ -147,7 +175,7 @@ class SheetSetFlowTest {
         composeRule.onNodeWithText("Setlists").performClick()
 
         repeat(4) { index ->
-            composeRule.onNodeWithContentDescription("New setlist").performClick()
+            composeRule.onNodeWithContentDescription("Create").performClick()
             composeRule.onNodeWithText("Setlist name").performTextInput("Set ${index + 1}")
             composeRule.onNodeWithText("Save").performClick()
         }
@@ -309,11 +337,11 @@ class SheetSetFlowTest {
             SheetSetTheme { SheetSetApp(LibraryUiState(), SheetSetActions()) }
         }
         composeRule.onNodeWithText("Setlists").performClick()
-        composeRule.onNodeWithContentDescription("New setlist").performClick()
+        composeRule.onNodeWithContentDescription("Create").performClick()
         composeRule.onNodeWithText("Setlist name").performTextInput("Old name")
         composeRule.onNodeWithText("Cancel").performClick()
 
-        composeRule.onNodeWithContentDescription("New setlist").performClick()
+        composeRule.onNodeWithContentDescription("Create").performClick()
 
         composeRule.onAllNodesWithText("Old name").assertCountEquals(0)
     }

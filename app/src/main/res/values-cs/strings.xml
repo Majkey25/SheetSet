@@ -6,6 +6,12 @@
     <string name="no_pdfs">Zatím žádná PDF</string>
     <string name="import_hint">Importujte první PDF.</string>
     <string name="import_pdf">Importovat PDF</string>
+    <string name="menu">Nabídka</string>
+    <string name="create">Vytvořit</string>
+    <string name="files">Soubory</string>
+    <string name="files_hint">Vyberte PDF z tohoto zařízení.</string>
+    <string name="scan_with_scanit">Skenovat pomocí ScanIt</string>
+    <string name="scan_with_scanit_hint">Otevřít ScanIt na Google Play.</string>
     <string name="untitled_pdf_file">Bez názvu.pdf</string>
     <string name="no_setlists">Zatím žádné setlisty</string>
     <string name="setlist_hint">Vytvořte setlist pro zkoušku nebo koncert.</string>

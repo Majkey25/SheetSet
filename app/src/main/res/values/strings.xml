@@ -6,6 +6,12 @@
     <string name="no_pdfs">No PDFs yet</string>
     <string name="import_hint">Import a PDF to start.</string>
     <string name="import_pdf">Import PDF</string>
+    <string name="menu">Menu</string>
+    <string name="create">Create</string>
+    <string name="files">Files</string>
+    <string name="files_hint">Choose PDFs from this device.</string>
+    <string name="scan_with_scanit">Scan with ScanIt</string>
+    <string name="scan_with_scanit_hint">Open ScanIt on Google Play.</string>
     <string name="untitled_pdf_file">Untitled.pdf</string>
     <string name="no_setlists">No setlists yet</string>
     <string name="setlist_hint">Create a setlist for your next rehearsal or show.</string>
