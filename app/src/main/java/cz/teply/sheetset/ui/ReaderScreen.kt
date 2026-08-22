@@ -59,7 +59,7 @@ fun ReaderScreen(reader: ReaderUiState, actions: SheetSetActions) {
     ) { uri -> uri?.let(actions.exportPdf) }
     fun updateHistory(next: AnnotationHistory) {
         history = next
-        actions.saveStrokes(next.strokes)
+        actions.saveAnnotations(next.annotations)
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -73,13 +73,13 @@ fun ReaderScreen(reader: ReaderUiState, actions: SheetSetActions) {
                     reader.score.pageCount,
                 )
                 view.tool = tool
-                view.strokes = history.strokes
+                view.annotations = history.annotations
                 view.onPreviousPage = actions.previousPage
                 view.onNextPage = actions.nextPage
                 view.onPageClick = {
                     if (tool == ReaderTool.VIEW) controlsVisible = !controlsVisible
                 }
-                view.onAddStroke = { updateHistory(history.add(it)) }
+                view.onAddAnnotation = { updateHistory(history.add(it)) }
                 view.onErase = { point -> updateHistory(history.erase(point, 0.025f)) }
                 view.showPage(reader.file, reader.pageIndex)
             },

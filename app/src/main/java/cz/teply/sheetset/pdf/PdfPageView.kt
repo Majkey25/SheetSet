@@ -14,6 +14,7 @@ import android.view.ScaleGestureDetector
 import android.view.View
 import androidx.core.graphics.createBitmap
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -75,7 +76,7 @@ class PdfPageView(context: Context) : View(context) {
             preview.clear()
             invalidate()
         }
-    var strokes: List<Stroke> = emptyList()
+    var annotations: List<PageAnnotation> = emptyList()
         set(value) {
             field = value
             invalidate()
@@ -83,7 +84,7 @@ class PdfPageView(context: Context) : View(context) {
     var onPreviousPage: () -> Unit = {}
     var onNextPage: () -> Unit = {}
     var onPageClick: () -> Unit = {}
-    var onAddStroke: (Stroke) -> Unit = {}
+    var onAddAnnotation: (PageAnnotation) -> Unit = {}
     var onErase: (NormalizedPoint) -> Unit = {}
     var onRenderError: () -> Unit = {}
 
@@ -105,14 +106,14 @@ class PdfPageView(context: Context) : View(context) {
         val page = bitmap ?: return
         val bounds = pageBounds(page)
         canvas.drawBitmap(page, null, bounds, pagePaint)
-        strokes.forEach { drawStroke(canvas, it, bounds) }
+        annotations.filterIsInstance<InkAnnotation>().forEach { drawInk(canvas, it, bounds) }
         val previewTool = when (tool) {
-            ReaderTool.PEN -> AnnotationTool.PEN
-            ReaderTool.HIGHLIGHTER -> AnnotationTool.HIGHLIGHTER
+            ReaderTool.PEN -> InkKind.PEN
+            ReaderTool.HIGHLIGHTER -> InkKind.HIGHLIGHTER
             else -> null
         }
         if (previewTool != null && preview.isNotEmpty()) {
-            drawStroke(canvas, previewTool, widthFor(previewTool), preview, bounds)
+            drawInk(canvas, previewTool, widthFor(previewTool), preview, bounds)
         }
     }
 
@@ -221,7 +222,7 @@ class PdfPageView(context: Context) : View(context) {
                 } else {
                     val previous = preview.lastOrNull()
                     if (previous == null || hypot(current.x - previous.x, current.y - previous.y) > 0.001f) {
-                        if (preview.size < MAX_POINTS_PER_STROKE) preview.add(current)
+                        if (preview.size < MAX_POINTS_PER_INK) preview.add(current)
                         invalidate()
                     }
                 }
@@ -237,24 +238,31 @@ class PdfPageView(context: Context) : View(context) {
 
     private fun commitPreview() {
         val annotationTool = when (tool) {
-            ReaderTool.PEN -> AnnotationTool.PEN
-            ReaderTool.HIGHLIGHTER -> AnnotationTool.HIGHLIGHTER
+            ReaderTool.PEN -> InkKind.PEN
+            ReaderTool.HIGHLIGHTER -> InkKind.HIGHLIGHTER
             else -> null
         }
         if (annotationTool != null && preview.isNotEmpty()) {
-            onAddStroke(Stroke(annotationTool, widthFor(annotationTool), preview.toList()))
+            onAddAnnotation(
+                InkAnnotation(
+                    id = UUID.randomUUID().toString(),
+                    kind = annotationTool,
+                    width = widthFor(annotationTool),
+                    points = preview.toList(),
+                ),
+            )
         }
         preview.clear()
         invalidate()
     }
 
-    private fun drawStroke(canvas: Canvas, stroke: Stroke, bounds: RectF) {
-        drawStroke(canvas, stroke.tool, stroke.width, stroke.points, bounds)
+    private fun drawInk(canvas: Canvas, annotation: InkAnnotation, bounds: RectF) {
+        drawInk(canvas, annotation.kind, annotation.width, annotation.points, bounds)
     }
 
-    private fun drawStroke(
+    private fun drawInk(
         canvas: Canvas,
-        annotationTool: AnnotationTool,
+        kind: InkKind,
         lineWidth: Float,
         points: List<NormalizedPoint>,
         bounds: RectF,
@@ -264,8 +272,8 @@ class PdfPageView(context: Context) : View(context) {
             moveTo(pointX(first, bounds), pointY(first, bounds))
             points.drop(1).forEach { point -> lineTo(pointX(point, bounds), pointY(point, bounds)) }
         }
-        strokePaint.color = if (annotationTool == AnnotationTool.PEN) Color.BLACK else Color.DKGRAY
-        strokePaint.alpha = if (annotationTool == AnnotationTool.PEN) 255 else 95
+        strokePaint.color = if (kind == InkKind.PEN) Color.BLACK else Color.DKGRAY
+        strokePaint.alpha = if (kind == InkKind.PEN) 255 else 95
         strokePaint.strokeWidth = lineWidth * min(bounds.width(), bounds.height())
         if (points.size == 1) {
             canvas.drawPoint(pointX(first, bounds), pointY(first, bounds), strokePaint)
@@ -345,7 +353,7 @@ class PdfPageView(context: Context) : View(context) {
             }
         }
 
-    private fun widthFor(tool: AnnotationTool): Float = if (tool == AnnotationTool.PEN) 0.004f else 0.02f
+    private fun widthFor(kind: InkKind): Float = if (kind == InkKind.PEN) 0.004f else 0.02f
 
     private fun pointX(point: NormalizedPoint, bounds: RectF): Float = bounds.left + point.x * bounds.width()
 

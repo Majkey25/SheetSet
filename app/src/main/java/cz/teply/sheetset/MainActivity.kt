@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
                             closeReader = viewModel::closeReader,
                             previousPage = viewModel::previousPage,
                             nextPage = viewModel::nextPage,
-                            saveStrokes = viewModel::saveStrokes,
+                            saveAnnotations = viewModel::saveAnnotations,
                             exportPdf = viewModel::exportPdf,
                             renameScore = viewModel::renameScore,
                             deleteScore = viewModel::deleteScore,

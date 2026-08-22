@@ -9,7 +9,7 @@ import androidx.lifecycle.viewModelScope
 import cz.teply.sheetset.data.LibraryRepository
 import cz.teply.sheetset.data.PdfImport
 import cz.teply.sheetset.data.Score
-import cz.teply.sheetset.pdf.Stroke
+import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.pdf.PdfExporter
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.SettingsStore
@@ -110,9 +110,9 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun saveStrokes(strokes: List<Stroke>) {
+    fun saveAnnotations(pageAnnotations: List<PageAnnotation>) {
         val reader = state.value.reader ?: return
-        val annotations = reader.annotations.withPage(reader.pageIndex, strokes)
+        val annotations = reader.annotations.withPage(reader.pageIndex, pageAnnotations)
         mutableState.update { it.copy(reader = reader.copy(annotations = annotations)) }
         viewModelScope.launch {
             annotationSaveMutex.withLock {

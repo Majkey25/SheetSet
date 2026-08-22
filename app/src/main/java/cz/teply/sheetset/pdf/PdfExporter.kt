@@ -31,9 +31,11 @@ object PdfExporter {
                                 try {
                                     val bounds = RectF(0f, 0f, page.width.toFloat(), page.height.toFloat())
                                     outputPage.canvas.drawBitmap(bitmap, null, bounds, null)
-                                    annotations.pages[index].orEmpty().forEach { stroke ->
-                                        drawStroke(outputPage.canvas, stroke, bounds)
-                                    }
+                                    annotations.pages[index].orEmpty()
+                                        .filterIsInstance<InkAnnotation>()
+                                        .forEach { annotation ->
+                                            drawInk(outputPage.canvas, annotation, bounds)
+                                        }
                                 } finally {
                                     document.finishPage(outputPage)
                                 }
@@ -68,23 +70,27 @@ object PdfExporter {
         }
     }
 
-    private fun drawStroke(canvas: android.graphics.Canvas, stroke: Stroke, bounds: RectF) {
+    private fun drawInk(
+        canvas: android.graphics.Canvas,
+        annotation: InkAnnotation,
+        bounds: RectF,
+    ) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
-            color = if (stroke.tool == AnnotationTool.PEN) Color.BLACK else Color.DKGRAY
-            alpha = if (stroke.tool == AnnotationTool.PEN) 255 else 95
-            strokeWidth = stroke.width * min(bounds.width(), bounds.height())
+            color = if (annotation.kind == InkKind.PEN) Color.BLACK else Color.DKGRAY
+            alpha = if (annotation.kind == InkKind.PEN) 255 else 95
+            strokeWidth = annotation.width * min(bounds.width(), bounds.height())
         }
-        val first = stroke.points.first()
+        val first = annotation.points.first()
         val path = Path().apply {
             moveTo(bounds.left + first.x * bounds.width(), bounds.top + first.y * bounds.height())
-            stroke.points.drop(1).forEach { point ->
+            annotation.points.drop(1).forEach { point ->
                 lineTo(bounds.left + point.x * bounds.width(), bounds.top + point.y * bounds.height())
             }
         }
-        if (stroke.points.size == 1) {
+        if (annotation.points.size == 1) {
             canvas.drawPoint(
                 bounds.left + first.x * bounds.width(),
                 bounds.top + first.y * bounds.height(),

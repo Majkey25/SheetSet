@@ -24,10 +24,14 @@ class PdfExporterTest {
         val annotations = DocumentAnnotations(
             mapOf(
                 0 to listOf(
-                    Stroke(
-                        AnnotationTool.PEN,
-                        0.01f,
-                        listOf(NormalizedPoint(0.2f, 0.2f), NormalizedPoint(0.8f, 0.8f)),
+                    InkAnnotation(
+                        id = "ink",
+                        kind = InkKind.PEN,
+                        width = 0.01f,
+                        points = listOf(
+                            NormalizedPoint(0.2f, 0.2f),
+                            NormalizedPoint(0.8f, 0.8f),
+                        ),
                     ),
                 ),
             ),

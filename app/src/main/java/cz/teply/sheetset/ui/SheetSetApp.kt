@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.dp
 import cz.teply.sheetset.LibraryUiState
 import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
-import cz.teply.sheetset.pdf.Stroke
+import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.settings.AppSettings
 import kotlinx.coroutines.launch
 
@@ -71,7 +71,7 @@ data class SheetSetActions(
     val closeReader: () -> Unit = {},
     val previousPage: () -> Unit = {},
     val nextPage: () -> Unit = {},
-    val saveStrokes: (List<Stroke>) -> Unit = {},
+    val saveAnnotations: (List<PageAnnotation>) -> Unit = {},
     val exportPdf: (Uri) -> Unit = {},
     val renameScore: (String, String) -> Unit = { _, _ -> },
     val deleteScore: (String) -> Unit = {},

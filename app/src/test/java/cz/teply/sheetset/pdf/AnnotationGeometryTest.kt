@@ -6,8 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnnotationGeometryTest {
-    private val stroke = Stroke(
-        tool = AnnotationTool.PEN,
+    private val stroke = InkAnnotation(
+        id = "stroke",
+        kind = InkKind.PEN,
         width = 0.004f,
         points = listOf(NormalizedPoint(0.25f, 0.25f), NormalizedPoint(0.75f, 0.75f)),
     )
@@ -27,8 +28,8 @@ class AnnotationGeometryTest {
             radius = 0.02f,
         )
 
-        assertTrue(erased.strokes.isEmpty())
-        assertEquals(listOf(stroke), erased.undo().strokes)
+        assertTrue(erased.annotations.isEmpty())
+        assertEquals(listOf(stroke), erased.undo().annotations)
     }
 
     @Test
