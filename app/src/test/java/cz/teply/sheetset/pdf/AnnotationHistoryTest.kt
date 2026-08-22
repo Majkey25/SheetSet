@@ -3,6 +3,7 @@ package cz.teply.sheetset.pdf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import cz.teply.sheetset.settings.AnnotationTextSize
 
 class AnnotationHistoryTest {
     private val first = InkAnnotation(
@@ -42,5 +43,23 @@ class AnnotationHistoryTest {
             annotations,
             AnnotationJson.decode(AnnotationJson.encode(annotations)),
         )
+    }
+
+    @Test
+    fun updateDeleteUndoAndRedoUseIds() {
+        val text = TextBoxAnnotation(
+            id = "text",
+            bounds = NormalizedRect(0.1f, 0.1f, 0.5f, 0.3f),
+            text = "Original",
+            size = AnnotationTextSize.MEDIUM,
+        )
+        val changed = AnnotationHistory().add(text).update(text.copy(text = "Changed"))
+        val deleted = changed.delete(text.id)
+
+        assertEquals(
+            "Changed",
+            (deleted.undo().annotations.single() as TextBoxAnnotation).text,
+        )
+        assertTrue(deleted.redo().annotations.isEmpty())
     }
 }

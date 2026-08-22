@@ -3,7 +3,6 @@ package cz.teply.sheetset.pdf
 import cz.teply.sheetset.settings.AnnotationTextSize
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.math.hypot
 
 const val MAX_ANNOTATIONS_PER_PAGE = 10_000
 const val MAX_POINTS_PER_INK = 4_096
@@ -145,6 +144,17 @@ data class AnnotationHistory(
         return replace(annotations + annotation)
     }
 
+    fun update(annotation: PageAnnotation): AnnotationHistory {
+        val index = annotations.indexOfFirst { it.id == annotation.id }
+        if (index < 0 || annotations[index] == annotation) return this
+        return replace(annotations.toMutableList().apply { this[index] = annotation })
+    }
+
+    fun delete(id: String): AnnotationHistory {
+        val remaining = annotations.filterNot { it.id == id }
+        return if (remaining.size == annotations.size) this else replace(remaining)
+    }
+
     fun undo(): AnnotationHistory {
         if (undoStates.isEmpty()) return this
         return AnnotationHistory(
@@ -165,9 +175,7 @@ data class AnnotationHistory(
 
     fun erase(point: NormalizedPoint, radius: Float): AnnotationHistory {
         require(radius > 0f) { "Eraser radius must be positive" }
-        val remaining = annotations.filterNot { annotation ->
-            annotation is InkAnnotation && annotation.isNear(point, radius)
-        }
+        val remaining = annotations.filterNot { annotation -> annotation.hitTest(point, radius) }
         return if (remaining.size == annotations.size) this else replace(remaining)
     }
 
@@ -177,37 +185,8 @@ data class AnnotationHistory(
     )
 }
 
-private fun InkAnnotation.isNear(point: NormalizedPoint, radius: Float): Boolean {
-    if (points.size == 1) return distance(points.single(), point) <= radius
-    return points.zipWithNext().any { (start, end) ->
-        distanceToSegment(point, start, end) <= radius
-    }
-}
-
 private fun requireValidId(id: String) {
     require(id.isNotBlank() && id.length <= MAX_ID_LENGTH) { "Invalid annotation ID" }
-}
-
-private fun distance(first: NormalizedPoint, second: NormalizedPoint): Float = hypot(
-    first.x - second.x,
-    first.y - second.y,
-)
-
-private fun distanceToSegment(
-    point: NormalizedPoint,
-    start: NormalizedPoint,
-    end: NormalizedPoint,
-): Float {
-    val dx = end.x - start.x
-    val dy = end.y - start.y
-    val lengthSquared = dx * dx + dy * dy
-    if (lengthSquared == 0f) return distance(point, start)
-    val projection = (((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
-        .coerceIn(0f, 1f)
-    return hypot(
-        point.x - (start.x + projection * dx),
-        point.y - (start.y + projection * dy),
-    )
 }
 
 object AnnotationJson {
