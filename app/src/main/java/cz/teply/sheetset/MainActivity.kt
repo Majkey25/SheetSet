@@ -48,6 +48,8 @@ class MainActivity : ComponentActivity() {
                             selectLanguage = { languageTag ->
                                 AppLanguages.select(this@MainActivity, languageTag)
                             },
+                            createBackup = viewModel::createBackup,
+                            restoreBackup = viewModel::restoreBackup,
                         ),
                         windowLayout = WindowLayout.fromWidth(maxWidth),
                     )

@@ -117,4 +117,8 @@
     <string name="color_purple">Violett</string>
     <string name="color_pink">Rosa</string>
     <string name="delete_annotation">Annotation löschen</string>
++    <string name="backup">Sicherung</string>
+    <string name="restore_backup">Sicherung wiederherstellen</string>
+    <string name="restore_backup_message">Die Wiederherstellung ersetzt aktuelle PDFs, Setlists, Annotationen und Einstellungen.</string>
+    <string name="restore">Wiederherstellen</string>
 </resources>

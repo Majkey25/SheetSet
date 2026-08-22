@@ -117,4 +117,8 @@
     <string name="color_purple">Purple</string>
     <string name="color_pink">Pink</string>
     <string name="delete_annotation">Delete annotation</string>
++    <string name="backup">Backup</string>
+    <string name="restore_backup">Restore backup</string>
+    <string name="restore_backup_message">Restoring replaces your current PDFs, setlists, annotations, and settings.</string>
+    <string name="restore">Restore</string>
 </resources>

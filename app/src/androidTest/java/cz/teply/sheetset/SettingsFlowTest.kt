@@ -39,7 +39,14 @@ class SettingsFlowTest {
         }
 
         composeRule.onNodeWithContentDescription("Menu").performClick()
-        listOf("Language", "Reader", "Annotation defaults", "About").forEach { label ->
+        listOf(
+            "Language",
+            "Reader",
+            "Annotation defaults",
+            "Backup",
+            "Restore backup",
+            "About",
+        ).forEach { label ->
             composeRule.onNodeWithText(label).assertIsDisplayed()
         }
 

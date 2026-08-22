@@ -82,6 +82,8 @@ data class SheetSetActions(
     val moveScore: (String, Int, Int) -> Unit = { _, _, _ -> },
     val updateSettings: (AppSettings) -> Unit = {},
     val selectLanguage: (String?) -> Unit = {},
+    val createBackup: (Uri) -> Unit = {},
+    val restoreBackup: (Uri) -> Unit = {},
 )
 
 @Composable
@@ -95,6 +97,7 @@ fun SheetSetApp(
     var createSetlist by rememberSaveable { mutableStateOf(false) }
     var librarySearching by rememberSaveable { mutableStateOf(false) }
     var importOptions by rememberSaveable { mutableStateOf(false) }
+    var pendingRestore by rememberSaveable { mutableStateOf<Uri?>(null) }
     var setlistName by rememberSaveable { mutableStateOf("") }
     val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -103,6 +106,12 @@ fun SheetSetApp(
         ActivityResultContracts.OpenMultipleDocuments(),
         actions.importPdfs,
     )
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> uri?.let(actions.createBackup) }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> pendingRestore = uri }
     val errorMessage = stringResource(R.string.action_failed)
     val snackbarHost = remember { SnackbarHostState() }
     val activeSetlist = state.catalog.setlists.firstOrNull { it.id == activeSetlistId }
@@ -140,6 +149,12 @@ fun SheetSetApp(
         },
         onSettings = actions.updateSettings,
         onLanguage = actions.selectLanguage,
+        onBackup = { backupLauncher.launch("SheetSet-Backup.zip") },
+        onRestore = {
+            restoreLauncher.launch(
+                arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"),
+            )
+        },
     ) {
         Scaffold(
             topBar = {
@@ -273,6 +288,29 @@ fun SheetSetApp(
             },
             dismissButton = {
                 TextButton(onClick = closeCreateDialog) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    pendingRestore?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingRestore = null },
+            title = { Text(stringResource(R.string.restore_backup)) },
+            text = { Text(stringResource(R.string.restore_backup_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingRestore = null
+                        actions.restoreBackup(uri)
+                    },
+                ) {
+                    Text(stringResource(R.string.restore))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestore = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             },

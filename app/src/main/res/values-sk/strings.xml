@@ -121,4 +121,8 @@
     <string name="color_purple">Fialová</string>
     <string name="color_pink">Ružová</string>
     <string name="delete_annotation">Odstrániť anotáciu</string>
++    <string name="backup">Záloha</string>
+    <string name="restore_backup">Obnoviť zálohu</string>
+    <string name="restore_backup_message">Obnova nahradí aktuálne PDF, setlisty, anotácie a nastavenia.</string>
+    <string name="restore">Obnoviť</string>
 </resources>

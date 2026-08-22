@@ -1,6 +1,7 @@
 package cz.teply.sheetset
 
 import android.app.Application
+import android.app.LocaleManager
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -12,6 +13,7 @@ import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.pdf.PdfExporter
 import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.SettingsStore
 import cz.teply.sheetset.settings.HighlightStrength
 import kotlinx.coroutines.CancellationException
@@ -145,6 +147,51 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                     } ?: throw FileNotFoundException(uri.toString())
                 }
                 mutableState.update { it.copy(loading = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.update { it.copy(loading = false, error = true) }
+            }
+        }
+    }
+
+    fun createBackup(uri: Uri) {
+        viewModelScope.launch {
+            mutableState.update { it.copy(loading = true, error = false) }
+            try {
+                val application = getApplication<Application>()
+                val locales = application.getSystemService(LocaleManager::class.java)
+                    .applicationLocales
+                val languageTag = if (locales.isEmpty) null else locales[0].language
+                application.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    repository.createBackup(output, state.value.settings, languageTag)
+                } ?: throw FileNotFoundException(uri.toString())
+                mutableState.update { it.copy(loading = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.update { it.copy(loading = false, error = true) }
+            }
+        }
+    }
+
+    fun restoreBackup(uri: Uri) {
+        viewModelScope.launch {
+            mutableState.update { it.copy(loading = true, error = false, reader = null) }
+            try {
+                val application = getApplication<Application>()
+                val metadata = application.contentResolver.openInputStream(uri)?.use { input ->
+                    repository.restoreBackup(input)
+                } ?: throw FileNotFoundException(uri.toString())
+                settingsStore.save(metadata.settings)
+                mutableState.update {
+                    it.copy(
+                        catalog = repository.load(),
+                        loading = false,
+                        settings = metadata.settings,
+                    )
+                }
+                AppLanguages.select(application, metadata.languageTag)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {

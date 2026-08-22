@@ -121,4 +121,8 @@
     <string name="color_purple">Fioletowy</string>
     <string name="color_pink">Różowy</string>
     <string name="delete_annotation">Usuń adnotację</string>
++    <string name="backup">Kopia zapasowa</string>
+    <string name="restore_backup">Przywróć kopię</string>
+    <string name="restore_backup_message">Przywracanie zastąpi bieżące pliki PDF, setlisty, adnotacje i ustawienia.</string>
+    <string name="restore">Przywróć</string>
 </resources>

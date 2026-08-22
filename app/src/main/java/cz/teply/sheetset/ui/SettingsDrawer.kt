@@ -69,6 +69,8 @@ fun SettingsDrawer(
     onDestination: (AppDestination) -> Unit,
     onSettings: (AppSettings) -> Unit,
     onLanguage: (String?) -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     var screen by remember { mutableStateOf(DrawerScreen.MENU) }
@@ -96,6 +98,8 @@ fun SettingsDrawer(
                             scope.launch { drawerState.close() }
                         },
                         onScreen = { screen = it },
+                        onBackup = onBackup,
+                        onRestore = onRestore,
                     )
                     DrawerScreen.LANGUAGE -> LanguageSettings(
                         onBack = { screen = DrawerScreen.MENU },
@@ -124,6 +128,8 @@ private fun DrawerMenu(
     destination: AppDestination,
     onDestination: (AppDestination) -> Unit,
     onScreen: (DrawerScreen) -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxHeight().statusBarsPadding().navigationBarsPadding()
@@ -156,6 +162,8 @@ private fun DrawerMenu(
         DrawerSection(R.string.annotation_defaults, R.drawable.ic_edit_24) {
             onScreen(DrawerScreen.ANNOTATIONS)
         }
+        DrawerSection(R.string.backup, R.drawable.ic_download_24, onClick = onBackup)
+        DrawerSection(R.string.restore_backup, R.drawable.ic_upload_file_24, onClick = onRestore)
         DrawerSection(R.string.about, R.drawable.ic_info_24) {
             onScreen(DrawerScreen.ABOUT)
         }
