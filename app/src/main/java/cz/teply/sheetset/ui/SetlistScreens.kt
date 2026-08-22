@@ -168,16 +168,14 @@ fun SetlistDetail(
     scores: List<Score>,
     actions: SheetSetActions,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    embedded: Boolean = false,
 ) {
     var addDialog by remember { mutableStateOf(false) }
     var editing by rememberSaveable(setlist.id) { mutableStateOf(false) }
     val scoreById = remember(scores) { scores.associateBy(Score::id) }
-    Scaffold(
-        topBar = {
-            SetlistHeader(setlist.name, onBack)
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+    val detail: @Composable (Modifier) -> Unit = { contentModifier ->
+        Column(contentModifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -218,6 +216,20 @@ fun SetlistDetail(
             }
         }
     }
+    if (embedded) {
+        Column(modifier.fillMaxSize()) {
+            SetlistHeader(setlist.name, onBack, statusBarPadding = false)
+            HorizontalDivider()
+            detail(Modifier.weight(1f))
+        }
+    } else {
+        Scaffold(
+            modifier = modifier,
+            topBar = { SetlistHeader(setlist.name, onBack) },
+        ) { padding ->
+            detail(Modifier.padding(padding))
+        }
+    }
     if (addDialog) {
         AddScoresDialog(
             scores = scores,
@@ -231,11 +243,17 @@ fun SetlistDetail(
 }
 
 @Composable
-private fun SetlistHeader(title: String, onBack: () -> Unit) {
+private fun SetlistHeader(
+    title: String,
+    onBack: () -> Unit,
+    statusBarPadding: Boolean = true,
+) {
     val back = stringResource(R.string.back)
     Surface(color = MaterialTheme.colorScheme.surface) {
         Row(
-            Modifier.fillMaxWidth().statusBarsPadding().height(68.dp).padding(horizontal = 8.dp),
+            Modifier.fillMaxWidth()
+                .then(if (statusBarPadding) Modifier.statusBarsPadding() else Modifier)
+                .height(68.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(

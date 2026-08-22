@@ -102,4 +102,5 @@
     <string name="license">Licencia</string>
     <string name="github_repository">GitHub repozitár</string>
     <string name="release_page">Vydania</string>
+    <string name="pdf_navigation">Navigácia PDF</string>
 </resources>

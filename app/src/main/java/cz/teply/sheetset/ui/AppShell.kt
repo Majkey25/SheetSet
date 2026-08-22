@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,6 +23,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -109,25 +112,47 @@ fun SheetHeader(
 
 @Composable
 fun SheetNavigation(
+    windowLayout: WindowLayout,
     destination: AppDestination,
+    modifier: Modifier = Modifier,
     onDestination: (AppDestination) -> Unit,
 ) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-        listOf(
-            Triple(AppDestination.PDF, R.string.tab_pdf, R.drawable.ic_pdf_24),
-            Triple(AppDestination.SETLISTS, R.string.tab_setlists, R.drawable.ic_setlist_24),
-        ).forEach { (item, label, icon) ->
-            NavigationBarItem(
-                modifier = Modifier.semantics {
-                    role = Role.Tab
-                },
-                selected = destination == item,
-                onClick = { onDestination(item) },
-                icon = {
-                    Icon(painterResource(icon), contentDescription = null)
-                },
-                label = { Text(stringResource(label)) },
-            )
+    val items = listOf(
+        Triple(AppDestination.PDF, R.string.tab_pdf, R.drawable.ic_pdf_24),
+        Triple(AppDestination.SETLISTS, R.string.tab_setlists, R.drawable.ic_setlist_24),
+    )
+    if (windowLayout == WindowLayout.COMPACT) {
+        NavigationBar(modifier = modifier, containerColor = MaterialTheme.colorScheme.surface) {
+            items.forEach { (item, label, icon) ->
+                NavigationBarItem(
+                    modifier = Modifier.semantics { role = Role.Tab },
+                    selected = destination == item,
+                    onClick = { onDestination(item) },
+                    icon = { Icon(painterResource(icon), contentDescription = null) },
+                    label = { Text(stringResource(label)) },
+                )
+            }
+        }
+    } else {
+        val navigationDescription = stringResource(R.string.pdf_navigation)
+        NavigationRail(
+            modifier = modifier.fillMaxHeight().semantics {
+                contentDescription = navigationDescription
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            Spacer(Modifier.weight(1f))
+            items.forEach { (item, label, icon) ->
+                NavigationRailItem(
+                    modifier = Modifier.semantics { role = Role.Tab },
+                    selected = destination == item,
+                    onClick = { onDestination(item) },
+                    icon = { Icon(painterResource(icon), contentDescription = null) },
+                    label = { Text(stringResource(label)) },
+                    alwaysShowLabel = true,
+                )
+            }
+            Spacer(Modifier.weight(1f))
         }
     }
 }

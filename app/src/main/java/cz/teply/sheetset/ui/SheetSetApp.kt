@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.AlertDialog
@@ -31,6 +34,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -81,7 +85,11 @@ data class SheetSetActions(
 )
 
 @Composable
-fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
+fun SheetSetApp(
+    state: LibraryUiState,
+    actions: SheetSetActions,
+    windowLayout: WindowLayout = WindowLayout.COMPACT,
+) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var activeSetlistId by rememberSaveable { mutableStateOf<String?>(null) }
     var createSetlist by rememberSaveable { mutableStateOf(false) }
@@ -112,7 +120,7 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
         return
     }
 
-    if (activeSetlist != null) {
+    if (activeSetlist != null && windowLayout != WindowLayout.EXPANDED) {
         SetlistDetail(
             setlist = activeSetlist,
             scores = state.catalog.scores,
@@ -151,36 +159,85 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
             },
             snackbarHost = { SnackbarHost(snackbarHost) },
             bottomBar = {
-                SheetNavigation(
-                    destination = if (selectedTab == 0) {
-                        AppDestination.PDF
-                    } else {
-                        AppDestination.SETLISTS
-                    },
-                ) { destination ->
-                    selectedTab = if (destination == AppDestination.PDF) 0 else 1
-                    if (destination != AppDestination.PDF) librarySearching = false
+                if (windowLayout == WindowLayout.COMPACT) {
+                    SheetNavigation(
+                        windowLayout = windowLayout,
+                        destination = if (selectedTab == 0) {
+                            AppDestination.PDF
+                        } else {
+                            AppDestination.SETLISTS
+                        },
+                    ) { destination ->
+                        selectedTab = if (destination == AppDestination.PDF) 0 else 1
+                        if (destination != AppDestination.PDF) librarySearching = false
+                    }
                 }
             },
         ) { padding ->
-            if (selectedTab == 0) {
-                LibraryScreen(
-                    scores = state.catalog.scores,
-                    onOpen = actions.openScore,
-                    onRename = actions.renameScore,
-                    onDelete = actions.deleteScore,
-                    searching = librarySearching,
-                    onSearchingChange = { librarySearching = it },
-                    modifier = Modifier.padding(padding),
-                )
-            } else {
-                SetlistsScreen(
-                    setlists = state.catalog.setlists,
-                    onOpen = { activeSetlistId = it.id },
-                    onRename = actions.renameSetlist,
-                    onDelete = actions.deleteSetlist,
-                    modifier = Modifier.padding(padding),
-                )
+            Row(Modifier.fillMaxSize().padding(padding)) {
+                if (windowLayout != WindowLayout.COMPACT) {
+                    SheetNavigation(
+                        windowLayout = windowLayout,
+                        destination = if (selectedTab == 0) {
+                            AppDestination.PDF
+                        } else {
+                            AppDestination.SETLISTS
+                        },
+                    ) { destination ->
+                        selectedTab = if (destination == AppDestination.PDF) 0 else 1
+                        if (destination != AppDestination.PDF) librarySearching = false
+                    }
+                }
+                if (selectedTab == 0) {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        LibraryScreen(
+                            scores = state.catalog.scores,
+                            onOpen = actions.openScore,
+                            onRename = actions.renameScore,
+                            onDelete = actions.deleteScore,
+                            searching = librarySearching,
+                            onSearchingChange = { librarySearching = it },
+                            modifier = Modifier.widthIn(max = 720.dp).fillMaxHeight(),
+                        )
+                    }
+                } else if (windowLayout == WindowLayout.EXPANDED) {
+                    SetlistsScreen(
+                        setlists = state.catalog.setlists,
+                        onOpen = { activeSetlistId = it.id },
+                        onRename = actions.renameSetlist,
+                        onDelete = actions.deleteSetlist,
+                        modifier = Modifier.width(360.dp).fillMaxHeight(),
+                    )
+                    VerticalDivider(Modifier.fillMaxHeight())
+                    if (activeSetlist != null) {
+                        SetlistDetail(
+                            setlist = activeSetlist,
+                            scores = state.catalog.scores,
+                            actions = actions,
+                            onBack = { activeSetlistId = null },
+                            modifier = Modifier.weight(1f),
+                            embedded = true,
+                        )
+                    } else {
+                        Box(Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        SetlistsScreen(
+                            setlists = state.catalog.setlists,
+                            onOpen = { activeSetlistId = it.id },
+                            onRename = actions.renameSetlist,
+                            onDelete = actions.deleteSetlist,
+                            modifier = Modifier.widthIn(max = 720.dp).fillMaxHeight(),
+                        )
+                    }
+                }
             }
         }
     }

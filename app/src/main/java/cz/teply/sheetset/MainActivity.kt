@@ -6,11 +6,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
+import cz.teply.sheetset.ui.WindowLayout
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<SheetSetViewModel>()
@@ -22,31 +24,34 @@ class MainActivity : ComponentActivity() {
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
             SheetSetTheme {
-                SheetSetApp(
-                    state,
-                    SheetSetActions(
-                        importPdfs = viewModel::importPdfs,
-                        createSetlist = viewModel::createSetlist,
-                        openScore = viewModel::openScore,
-                        openSetlistScore = viewModel::openSetlistScore,
-                        closeReader = viewModel::closeReader,
-                        previousPage = viewModel::previousPage,
-                        nextPage = viewModel::nextPage,
-                        saveStrokes = viewModel::saveStrokes,
-                        exportPdf = viewModel::exportPdf,
-                        renameScore = viewModel::renameScore,
-                        deleteScore = viewModel::deleteScore,
-                        renameSetlist = viewModel::renameSetlist,
-                        deleteSetlist = viewModel::deleteSetlist,
-                        addScores = viewModel::addScores,
-                        removeScore = viewModel::removeScore,
-                        moveScore = viewModel::moveScore,
-                        updateSettings = viewModel::updateSettings,
-                        selectLanguage = { languageTag ->
-                            AppLanguages.select(this@MainActivity, languageTag)
-                        },
-                    ),
-                )
+                BoxWithConstraints {
+                    SheetSetApp(
+                        state = state,
+                        actions = SheetSetActions(
+                            importPdfs = viewModel::importPdfs,
+                            createSetlist = viewModel::createSetlist,
+                            openScore = viewModel::openScore,
+                            openSetlistScore = viewModel::openSetlistScore,
+                            closeReader = viewModel::closeReader,
+                            previousPage = viewModel::previousPage,
+                            nextPage = viewModel::nextPage,
+                            saveStrokes = viewModel::saveStrokes,
+                            exportPdf = viewModel::exportPdf,
+                            renameScore = viewModel::renameScore,
+                            deleteScore = viewModel::deleteScore,
+                            renameSetlist = viewModel::renameSetlist,
+                            deleteSetlist = viewModel::deleteSetlist,
+                            addScores = viewModel::addScores,
+                            removeScore = viewModel::removeScore,
+                            moveScore = viewModel::moveScore,
+                            updateSettings = viewModel::updateSettings,
+                            selectLanguage = { languageTag ->
+                                AppLanguages.select(this@MainActivity, languageTag)
+                            },
+                        ),
+                        windowLayout = WindowLayout.fromWidth(maxWidth),
+                    )
+                }
             }
         }
     }
