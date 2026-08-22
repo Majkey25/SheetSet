@@ -1,6 +1,7 @@
 package cz.teply.sheetset
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
@@ -10,6 +11,8 @@ import cz.teply.sheetset.data.PdfImport
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.pdf.Stroke
 import cz.teply.sheetset.pdf.PdfExporter
+import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.SettingsStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,8 +27,13 @@ import java.io.FileNotFoundException
 
 class SheetSetViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = LibraryRepository(File(application.filesDir, "library"))
+    private val settingsStore = SettingsStore(
+        application.getSharedPreferences("sheetset-settings", Context.MODE_PRIVATE),
+    )
     private val annotationSaveMutex = Mutex()
-    private val mutableState = MutableStateFlow(LibraryUiState(loading = true))
+    private val mutableState = MutableStateFlow(
+        LibraryUiState(loading = true, settings = settingsStore.load()),
+    )
     val state = mutableState.asStateFlow()
 
     init {
@@ -60,6 +68,11 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
 
     fun moveScore(setlistId: String, fromIndex: Int, toIndex: Int) = launchAction {
         repository.moveScore(setlistId, fromIndex, toIndex)
+    }
+
+    fun updateSettings(settings: AppSettings) {
+        settingsStore.save(settings)
+        mutableState.update { it.copy(settings = settings) }
     }
 
     fun openScore(score: Score) {
@@ -139,7 +152,9 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             mutableState.update { it.copy(loading = true, error = false) }
             try {
                 action()
-                mutableState.value = LibraryUiState(catalog = repository.load())
+                mutableState.update {
+                    it.copy(catalog = repository.load(), loading = false, error = false)
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {

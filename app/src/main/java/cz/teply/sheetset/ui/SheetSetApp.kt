@@ -23,6 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -30,12 +31,14 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,6 +56,8 @@ import cz.teply.sheetset.LibraryUiState
 import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.pdf.Stroke
+import cz.teply.sheetset.settings.AppSettings
+import kotlinx.coroutines.launch
 
 data class SheetSetActions(
     val importPdfs: (List<Uri>) -> Unit = {},
@@ -71,6 +76,8 @@ data class SheetSetActions(
     val addScores: (String, List<String>) -> Unit = { _, _ -> },
     val removeScore: (String, Int) -> Unit = { _, _ -> },
     val moveScore: (String, Int, Int) -> Unit = { _, _, _ -> },
+    val updateSettings: (AppSettings) -> Unit = {},
+    val selectLanguage: (String?) -> Unit = {},
 )
 
 @Composable
@@ -80,9 +87,10 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
     var createSetlist by rememberSaveable { mutableStateOf(false) }
     var librarySearching by rememberSaveable { mutableStateOf(false) }
     var importOptions by rememberSaveable { mutableStateOf(false) }
-    var navigationMenu by rememberSaveable { mutableStateOf(false) }
     var setlistName by rememberSaveable { mutableStateOf("") }
     val context = LocalContext.current
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
         actions.importPdfs,
@@ -114,62 +122,67 @@ fun SheetSetApp(state: LibraryUiState, actions: SheetSetActions) {
         return
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                SheetHeader(
-                    actionLabel = if (selectedTab == 0) R.string.import_pdf else R.string.create,
-                    actionDescription = if (selectedTab == 0) R.string.import_pdf else R.string.create,
-                    actionIcon = if (selectedTab == 0) R.drawable.ic_upload_file_24 else R.drawable.ic_add_24,
-                    onMenu = { navigationMenu = true },
-                    onAction = {
-                        if (selectedTab == 0) importOptions = true
-                        else createSetlist = true
-                    },
-                )
-                if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
+    SettingsDrawer(
+        drawerState = drawerState,
+        destination = if (selectedTab == 0) AppDestination.PDF else AppDestination.SETLISTS,
+        settings = state.settings,
+        onDestination = { destination ->
+            selectedTab = if (destination == AppDestination.PDF) 0 else 1
+            if (destination != AppDestination.PDF) librarySearching = false
         },
-        snackbarHost = { SnackbarHost(snackbarHost) },
-        bottomBar = {
-            SheetNavigation(
-                destination = if (selectedTab == 0) AppDestination.PDF else AppDestination.SETLISTS,
-            ) { destination ->
-                selectedTab = if (destination == AppDestination.PDF) 0 else 1
-                if (destination != AppDestination.PDF) librarySearching = false
-            }
-        },
-    ) { padding ->
-        if (selectedTab == 0) {
-            LibraryScreen(
-                scores = state.catalog.scores,
-                onOpen = actions.openScore,
-                onRename = actions.renameScore,
-                onDelete = actions.deleteScore,
-                searching = librarySearching,
-                onSearchingChange = { librarySearching = it },
-                modifier = Modifier.padding(padding),
-            )
-        } else {
-            SetlistsScreen(
-                setlists = state.catalog.setlists,
-                onOpen = { activeSetlistId = it.id },
-                onRename = actions.renameSetlist,
-                onDelete = actions.deleteSetlist,
-                modifier = Modifier.padding(padding),
-            )
-        }
-    }
-
-    if (navigationMenu) {
-        NavigationMenuSheet(
-            destination = if (selectedTab == 0) AppDestination.PDF else AppDestination.SETLISTS,
-            onDismiss = { navigationMenu = false },
-            onDestination = { destination ->
-                selectedTab = if (destination == AppDestination.PDF) 0 else 1
-                if (destination != AppDestination.PDF) librarySearching = false
+        onSettings = actions.updateSettings,
+        onLanguage = actions.selectLanguage,
+    ) {
+        Scaffold(
+            topBar = {
+                Column {
+                    SheetHeader(
+                        actionLabel = if (selectedTab == 0) R.string.import_pdf else R.string.create,
+                        actionDescription = if (selectedTab == 0) R.string.import_pdf else R.string.create,
+                        actionIcon = if (selectedTab == 0) R.drawable.ic_upload_file_24 else R.drawable.ic_add_24,
+                        onMenu = { scope.launch { drawerState.open() } },
+                        onAction = {
+                            if (selectedTab == 0) importOptions = true
+                            else createSetlist = true
+                        },
+                    )
+                    if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
             },
-        )
+            snackbarHost = { SnackbarHost(snackbarHost) },
+            bottomBar = {
+                SheetNavigation(
+                    destination = if (selectedTab == 0) {
+                        AppDestination.PDF
+                    } else {
+                        AppDestination.SETLISTS
+                    },
+                ) { destination ->
+                    selectedTab = if (destination == AppDestination.PDF) 0 else 1
+                    if (destination != AppDestination.PDF) librarySearching = false
+                }
+            },
+        ) { padding ->
+            if (selectedTab == 0) {
+                LibraryScreen(
+                    scores = state.catalog.scores,
+                    onOpen = actions.openScore,
+                    onRename = actions.renameScore,
+                    onDelete = actions.deleteScore,
+                    searching = librarySearching,
+                    onSearchingChange = { librarySearching = it },
+                    modifier = Modifier.padding(padding),
+                )
+            } else {
+                SetlistsScreen(
+                    setlists = state.catalog.setlists,
+                    onOpen = { activeSetlistId = it.id },
+                    onRename = actions.renameSetlist,
+                    onDelete = actions.deleteSetlist,
+                    modifier = Modifier.padding(padding),
+                )
+            }
+        }
     }
 
     if (importOptions) {

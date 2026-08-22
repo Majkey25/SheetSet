@@ -41,6 +41,10 @@ class MainActivity : ComponentActivity() {
                         addScores = viewModel::addScores,
                         removeScore = viewModel::removeScore,
                         moveScore = viewModel::moveScore,
+                        updateSettings = viewModel::updateSettings,
+                        selectLanguage = { languageTag ->
+                            AppLanguages.select(this@MainActivity, languageTag)
+                        },
                     ),
                 )
             }

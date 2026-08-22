@@ -19,7 +19,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -130,37 +129,6 @@ fun SheetNavigation(
                 label = { Text(stringResource(label)) },
             )
         }
-    }
-}
-
-@Composable
-fun NavigationMenuSheet(
-    destination: AppDestination,
-    onDismiss: () -> Unit,
-    onDestination: (AppDestination) -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        listOf(
-            Triple(AppDestination.PDF, R.string.tab_pdf, R.drawable.ic_pdf_24),
-            Triple(AppDestination.SETLISTS, R.string.tab_setlists, R.drawable.ic_setlist_24),
-        ).forEach { (item, label, icon) ->
-            ListItem(
-                modifier = Modifier.clickable {
-                    onDestination(item)
-                    onDismiss()
-                },
-                headlineContent = { Text(stringResource(label)) },
-                leadingContent = { Icon(painterResource(icon), contentDescription = null) },
-                colors = ListItemDefaults.colors(
-                    containerColor = if (destination == item) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                ),
-            )
-        }
-        Spacer(Modifier.navigationBarsPadding())
     }
 }
 
