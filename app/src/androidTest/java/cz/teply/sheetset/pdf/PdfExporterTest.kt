@@ -7,6 +7,7 @@ import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.test.core.app.ApplicationProvider
+import cz.teply.sheetset.settings.AnnotationTextSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,7 +17,7 @@ import java.util.UUID
 
 class PdfExporterTest {
     @Test
-    fun exportAddsAnnotationAndPreservesOriginal() {
+    fun exportRendersEveryAnnotationTypeAndPreservesOriginal() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val source = createBlankPdf(context, pages = 2)
         val destination = File(context.cacheDir, "export-${UUID.randomUUID()}.pdf")
@@ -27,11 +28,63 @@ class PdfExporterTest {
                     InkAnnotation(
                         id = "ink",
                         kind = InkKind.PEN,
-                        width = 0.01f,
+                        width = 0.008f,
                         points = listOf(
-                            NormalizedPoint(0.2f, 0.2f),
-                            NormalizedPoint(0.8f, 0.8f),
+                            NormalizedPoint(0.05f, 0.08f),
+                            NormalizedPoint(0.35f, 0.18f),
                         ),
+                    ),
+                    MarkupAnnotation(
+                        id = "highlight",
+                        kind = MarkupKind.HIGHLIGHT,
+                        bounds = listOf(NormalizedRect(0.05f, 0.25f, 0.4f, 0.34f)),
+                        color = AnnotationColor.YELLOW,
+                    ),
+                    MarkupAnnotation(
+                        id = "underline",
+                        kind = MarkupKind.UNDERLINE,
+                        bounds = listOf(NormalizedRect(0.05f, 0.36f, 0.4f, 0.42f)),
+                        color = AnnotationColor.BLUE,
+                    ),
+                    MarkupAnnotation(
+                        id = "strike",
+                        kind = MarkupKind.STRIKE_THROUGH,
+                        bounds = listOf(NormalizedRect(0.05f, 0.44f, 0.4f, 0.5f)),
+                        color = AnnotationColor.RED,
+                    ),
+                    TextBoxAnnotation(
+                        id = "text",
+                        bounds = NormalizedRect(0.05f, 0.55f, 0.45f, 0.7f),
+                        text = "Allegro",
+                        size = AnnotationTextSize.MEDIUM,
+                    ),
+                    ShapeAnnotation(
+                        id = "line",
+                        kind = ShapeKind.LINE,
+                        start = NormalizedPoint(0.55f, 0.1f),
+                        end = NormalizedPoint(0.9f, 0.1f),
+                        width = 0.008f,
+                    ),
+                    ShapeAnnotation(
+                        id = "arrow",
+                        kind = ShapeKind.ARROW,
+                        start = NormalizedPoint(0.55f, 0.22f),
+                        end = NormalizedPoint(0.9f, 0.3f),
+                        width = 0.008f,
+                    ),
+                    ShapeAnnotation(
+                        id = "rectangle",
+                        kind = ShapeKind.RECTANGLE,
+                        start = NormalizedPoint(0.55f, 0.38f),
+                        end = NormalizedPoint(0.9f, 0.52f),
+                        width = 0.008f,
+                    ),
+                    ShapeAnnotation(
+                        id = "ellipse",
+                        kind = ShapeKind.ELLIPSE,
+                        start = NormalizedPoint(0.55f, 0.6f),
+                        end = NormalizedPoint(0.9f, 0.76f),
+                        width = 0.008f,
                     ),
                 ),
             ),
@@ -43,7 +96,11 @@ class PdfExporterTest {
 
         assertEquals(beforeHash, source.sha256())
         assertEquals(2, pageCount(destination))
-        assertTrue(darkPixels(destination) > darkPixels(source) + 100)
+        assertTrue(darkPixels(destination) > darkPixels(source) + 500)
+        assertTrue(darkPixelsIn(destination, 0, 0, 140, 90) > 50)
+        assertTrue(yellowPixelsIn(destination, 0, 85, 140, 145) > 50)
+        assertTrue(darkPixelsIn(destination, 0, 200, 150, 300) > 50)
+        assertTrue(darkPixelsIn(destination, 150, 0, 300, 320) > 200)
         source.delete()
         destination.delete()
     }
@@ -86,6 +143,52 @@ class PdfExporterTest {
                 }
             }
         }
+
+    private fun darkPixelsIn(
+        file: File,
+        left: Int,
+        top: Int,
+        right: Int,
+        bottom: Int,
+    ): Int = pixelsIn(file, left, top, right, bottom) { color ->
+        Color.red(color) < 128 && Color.green(color) < 128 && Color.blue(color) < 128
+    }
+
+    private fun yellowPixelsIn(
+        file: File,
+        left: Int,
+        top: Int,
+        right: Int,
+        bottom: Int,
+    ): Int = pixelsIn(file, left, top, right, bottom) { color ->
+        Color.red(color) > Color.blue(color) + 20 &&
+            Color.green(color) > Color.blue(color) + 10
+    }
+
+    private fun pixelsIn(
+        file: File,
+        left: Int,
+        top: Int,
+        right: Int,
+        bottom: Int,
+        matches: (Int) -> Boolean,
+    ): Int = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+        PdfRenderer(descriptor).use { renderer ->
+            renderer.openPage(0).use { page ->
+                val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                var count = 0
+                for (y in top.coerceAtLeast(0) until bottom.coerceAtMost(bitmap.height)) {
+                    for (x in left.coerceAtLeast(0) until right.coerceAtMost(bitmap.width)) {
+                        if (matches(bitmap.getPixel(x, y))) count++
+                    }
+                }
+                bitmap.recycle()
+                count
+            }
+        }
+    }
 
     private fun File.sha256(): String = MessageDigest.getInstance("SHA-256")
         .digest(readBytes())

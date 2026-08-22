@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -33,11 +32,6 @@ enum class ReaderTool {
 class PdfPageView(context: Context) : View(context) {
     private val executor = Executors.newSingleThreadExecutor()
     private val pagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
     private val scaleDetector = ScaleGestureDetector(
         context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -81,6 +75,11 @@ class PdfPageView(context: Context) : View(context) {
             field = value
             invalidate()
         }
+    var selectedAnnotationId: String? = null
+        set(value) {
+            field = value
+            invalidate()
+        }
     var onPreviousPage: () -> Unit = {}
     var onNextPage: () -> Unit = {}
     var onPageClick: () -> Unit = {}
@@ -106,14 +105,35 @@ class PdfPageView(context: Context) : View(context) {
         val page = bitmap ?: return
         val bounds = pageBounds(page)
         canvas.drawBitmap(page, null, bounds, pagePaint)
-        annotations.filterIsInstance<InkAnnotation>().forEach { drawInk(canvas, it, bounds) }
+        annotations.forEach { annotation ->
+            AnnotationRenderer.draw(
+                canvas = canvas,
+                annotation = annotation,
+                page = bounds,
+                selected = annotation.id == selectedAnnotationId,
+            )
+        }
         val previewTool = when (tool) {
             ReaderTool.PEN -> InkKind.PEN
             ReaderTool.HIGHLIGHTER -> InkKind.HIGHLIGHTER
             else -> null
         }
         if (previewTool != null && preview.isNotEmpty()) {
-            drawInk(canvas, previewTool, widthFor(previewTool), preview, bounds)
+            AnnotationRenderer.draw(
+                canvas,
+                InkAnnotation(
+                    id = "preview",
+                    kind = previewTool,
+                    width = widthFor(previewTool),
+                    points = preview,
+                    color = if (previewTool == InkKind.HIGHLIGHTER) {
+                        AnnotationColor.YELLOW
+                    } else {
+                        AnnotationColor.BLACK
+                    },
+                ),
+                bounds,
+            )
         }
     }
 
@@ -261,32 +281,6 @@ class PdfPageView(context: Context) : View(context) {
         invalidate()
     }
 
-    private fun drawInk(canvas: Canvas, annotation: InkAnnotation, bounds: RectF) {
-        drawInk(canvas, annotation.kind, annotation.width, annotation.points, bounds)
-    }
-
-    private fun drawInk(
-        canvas: Canvas,
-        kind: InkKind,
-        lineWidth: Float,
-        points: List<NormalizedPoint>,
-        bounds: RectF,
-    ) {
-        val first = points.first()
-        val path = Path().apply {
-            moveTo(pointX(first, bounds), pointY(first, bounds))
-            points.drop(1).forEach { point -> lineTo(pointX(point, bounds), pointY(point, bounds)) }
-        }
-        strokePaint.color = if (kind == InkKind.PEN) Color.BLACK else Color.DKGRAY
-        strokePaint.alpha = if (kind == InkKind.PEN) 255 else 95
-        strokePaint.strokeWidth = lineWidth * min(bounds.width(), bounds.height())
-        if (points.size == 1) {
-            canvas.drawPoint(pointX(first, bounds), pointY(first, bounds), strokePaint)
-        } else {
-            canvas.drawPath(path, strokePaint)
-        }
-    }
-
     private fun pageBounds(page: Bitmap): RectF {
         val fit = min(width.toFloat() / page.width, height.toFloat() / page.height)
         val drawWidth = page.width * fit * zoom
@@ -360,7 +354,4 @@ class PdfPageView(context: Context) : View(context) {
 
     private fun widthFor(kind: InkKind): Float = if (kind == InkKind.PEN) 0.004f else 0.02f
 
-    private fun pointX(point: NormalizedPoint, bounds: RectF): Float = bounds.left + point.x * bounds.width()
-
-    private fun pointY(point: NormalizedPoint, bounds: RectF): Float = bounds.top + point.y * bounds.height()
 }
