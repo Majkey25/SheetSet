@@ -56,6 +56,22 @@ class LibraryCatalogTest {
     }
 
     @Test
+    fun `reorder scores atomically preserves every occurrence`() {
+        val original = LibraryCatalog(
+            setlists = listOf(Setlist("set-1", "Show", listOf("a", "b", "a"))),
+        )
+
+        assertEquals(
+            listOf("a", "a", "b"),
+            original.reorderScores("set-1", listOf("a", "a", "b"))
+                .setlists.single().scoreIds,
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            original.reorderScores("set-1", listOf("a", "b", "b"))
+        }
+    }
+
+    @Test
     fun `score can be renamed and added to setlist`() {
         val score = Score("score-1", "Old", "score-1.pdf", 1, 1L)
         val catalog = LibraryCatalog(

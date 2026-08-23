@@ -1,6 +1,8 @@
 package cz.teply.sheetset.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,10 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -29,24 +33,63 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+private data class SetlistScoreEntry(val key: String, val scoreId: String)
+private val SetlistRowHeight = 68.dp
+
+internal fun targetIndexForDrag(
+    origin: Int,
+    distance: Float,
+    rowHeight: Float,
+    lastIndex: Int,
+): Int {
+    require(origin in 0..lastIndex) { "Invalid drag origin" }
+    require(rowHeight > 0f) { "Row height must be positive" }
+    return (origin + (distance / rowHeight).roundToInt()).coerceIn(0, lastIndex)
+}
+
+private fun List<String>.toSetlistEntries(): List<SetlistScoreEntry> = mapIndexed { index, id ->
+    SetlistScoreEntry(key = "$id-$index", scoreId = id)
+}
+
+private fun <T> List<T>.moved(fromIndex: Int, toIndex: Int): List<T> =
+    toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
 
 @Composable
 fun SetlistsScreen(
@@ -167,6 +210,7 @@ fun SetlistDetail(
     setlist: Setlist,
     scores: List<Score>,
     actions: SheetSetActions,
+    busy: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     embedded: Boolean = false,
@@ -174,6 +218,128 @@ fun SetlistDetail(
     var addDialog by remember { mutableStateOf(false) }
     var editing by rememberSaveable(setlist.id) { mutableStateOf(false) }
     val scoreById = remember(scores) { scores.associateBy(Score::id) }
+    val displayedScores = remember(setlist.id) {
+        mutableStateListOf<SetlistScoreEntry>().apply {
+            addAll(setlist.scoreIds.toSetlistEntries())
+        }
+    }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val maxAutoScroll = with(LocalDensity.current) { 28.dp.toPx() }
+    val rowHeight = with(LocalDensity.current) { SetlistRowHeight.toPx() }
+    var draggedIndex by remember { mutableIntStateOf(-1) }
+    var dragOrigin by remember { mutableIntStateOf(-1) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dragPointerY by remember { mutableFloatStateOf(0f) }
+    var dragSource by remember { mutableStateOf<List<SetlistScoreEntry>>(emptyList()) }
+    var draggedKey by remember { mutableStateOf<String?>(null) }
+    var awaitingPersistence by remember { mutableStateOf(false) }
+    var autoScrollJob by remember { mutableStateOf<Job?>(null) }
+    var autoScrollDelta by remember { mutableFloatStateOf(0f) }
+    val interactionEnabled = !busy && !awaitingPersistence
+
+    LaunchedEffect(setlist.scoreIds, busy) {
+        if (!busy && dragOrigin < 0) {
+            displayedScores.clear()
+            displayedScores.addAll(setlist.scoreIds.toSetlistEntries())
+            awaitingPersistence = false
+        }
+    }
+
+    fun requestReorder(fromIndex: Int, toIndex: Int) {
+        if (!interactionEnabled || fromIndex == toIndex) return
+        val reordered = displayedScores.toList().moved(fromIndex, toIndex)
+        displayedScores.clear()
+        displayedScores.addAll(reordered)
+        awaitingPersistence = true
+        actions.reorderScores(setlist.id, reordered.map(SetlistScoreEntry::scoreId))
+    }
+
+    fun updateDragPreview() {
+        val from = dragOrigin.takeIf { it >= 0 } ?: return
+        val target = targetIndexForDrag(
+            origin = from,
+            distance = dragOffset,
+            rowHeight = rowHeight,
+            lastIndex = dragSource.lastIndex,
+        )
+        if (target == draggedIndex) return
+        draggedIndex = target
+        displayedScores.clear()
+        displayedScores.addAll(dragSource.moved(from, target))
+    }
+
+    fun stopAutoScroll() {
+        autoScrollJob?.cancel()
+        autoScrollJob = null
+        autoScrollDelta = 0f
+    }
+
+    fun startAutoScroll(delta: Float, origin: Int) {
+        if (delta == 0f) {
+            stopAutoScroll()
+            return
+        }
+        autoScrollDelta = delta
+        if (autoScrollJob?.isActive == true) return
+        autoScrollJob = scope.launch {
+            while (isActive && dragOrigin == origin && autoScrollDelta != 0f) {
+                val scrolled = listState.scrollBy(autoScrollDelta)
+                if (scrolled == 0f || dragOrigin != origin) break
+                dragOffset += scrolled
+                updateDragPreview()
+                delay(16)
+            }
+            autoScrollJob = null
+            autoScrollDelta = 0f
+        }
+    }
+
+    fun finishDrag(commit: Boolean) {
+        stopAutoScroll()
+        val from = dragOrigin
+        val to = draggedIndex
+        if (commit && from in setlist.scoreIds.indices && to in setlist.scoreIds.indices) {
+            if (from != to) {
+                awaitingPersistence = true
+                actions.reorderScores(
+                    setlist.id,
+                    displayedScores.map(SetlistScoreEntry::scoreId),
+                )
+            } else {
+                displayedScores.clear()
+                displayedScores.addAll(setlist.scoreIds.toSetlistEntries())
+            }
+        } else {
+            displayedScores.clear()
+            displayedScores.addAll(setlist.scoreIds.toSetlistEntries())
+        }
+        draggedIndex = -1
+        dragOrigin = -1
+        dragOffset = 0f
+        dragPointerY = 0f
+        dragSource = emptyList()
+        draggedKey = null
+    }
+
+    fun dragBy(amount: Float) {
+        val currentIndex = dragOrigin.takeIf { it >= 0 } ?: return
+        dragOffset += amount
+        dragPointerY += amount
+        updateDragPreview()
+        val layout = listState.layoutInfo
+        val top = dragPointerY - rowHeight / 2f
+        val bottom = dragPointerY + rowHeight / 2f
+        val overflow = when {
+            top < layout.viewportStartOffset -> top - layout.viewportStartOffset
+            bottom > layout.viewportEndOffset -> bottom - layout.viewportEndOffset
+            else -> 0f
+        }
+        startAutoScroll(
+            overflow.coerceIn(-maxAutoScroll, maxAutoScroll),
+            currentIndex,
+        )
+    }
     val detail: @Composable (Modifier) -> Unit = { contentModifier ->
         Column(contentModifier.fillMaxSize()) {
             Row(
@@ -181,13 +347,17 @@ fun SetlistDetail(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Button(
+                    enabled = interactionEnabled,
                     shape = MaterialTheme.shapes.small,
                     onClick = { addDialog = true },
                 ) {
                     Text(stringResource(R.string.add_pdfs))
                 }
                 if (setlist.scoreIds.isNotEmpty()) {
-                    TextButton(onClick = { editing = !editing }) {
+                    TextButton(
+                        enabled = interactionEnabled,
+                        onClick = { editing = !editing },
+                    ) {
                         Text(stringResource(if (editing) R.string.done else R.string.edit_order))
                     }
                 }
@@ -201,14 +371,44 @@ fun SetlistDetail(
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = PaddingValues(horizontal = 20.dp),
                 ) {
                     itemsIndexed(
-                        setlist.scoreIds,
-                        key = { index, id -> "$id-$index" },
-                    ) { index, id ->
-                        scoreById[id]?.let { score ->
-                            SetlistScoreRow(setlist, score, index, editing, actions)
+                        displayedScores,
+                        key = { _, entry -> entry.key },
+                    ) { index, entry ->
+                        scoreById[entry.scoreId]?.let { score ->
+                            SetlistScoreRow(
+                                setlist = setlist,
+                                score = score,
+                                dragKey = entry.key,
+                                index = index,
+                                editing = editing,
+                                enabled = interactionEnabled,
+                                dragging = entry.key == draggedKey,
+                                dragOffset = if (entry.key == draggedKey) {
+                                    dragOffset - (draggedIndex - dragOrigin) * rowHeight
+                                } else {
+                                    0f
+                                },
+                                actions = actions,
+                                onDragStart = {
+                                    dragSource = displayedScores.toList()
+                                    draggedKey = entry.key
+                                    draggedIndex = index
+                                    dragOrigin = index
+                                    dragOffset = 0f
+                                    dragPointerY = listState.layoutInfo.visibleItemsInfo
+                                        .firstOrNull { it.key == entry.key }
+                                        ?.let { it.offset + it.size / 2f }
+                                        ?: 0f
+                                },
+                                onDrag = ::dragBy,
+                                onDragEnd = { finishDrag(commit = true) },
+                                onDragCancel = { finishDrag(commit = false) },
+                                onMove = { target -> requestReorder(index, target) },
+                            )
                             HorizontalDivider()
                         }
                     }
@@ -278,15 +478,29 @@ private fun SetlistHeader(
 private fun SetlistScoreRow(
     setlist: Setlist,
     score: Score,
+    dragKey: String,
     index: Int,
     editing: Boolean,
+    enabled: Boolean,
+    dragging: Boolean,
+    dragOffset: Float,
     actions: SheetSetActions,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+    onMove: (Int) -> Unit,
 ) {
     val up = stringResource(R.string.move_up)
     val down = stringResource(R.string.move_down)
     val remove = stringResource(R.string.remove)
+    val reorder = stringResource(R.string.reorder)
     Row(
-        Modifier.fillMaxWidth().clickable(enabled = !editing) {
+        Modifier.fillMaxWidth().height(SetlistRowHeight)
+            .zIndex(if (dragging) 1f else 0f).graphicsLayer {
+            translationY = if (dragging) dragOffset else 0f
+            shadowElevation = if (dragging) 8.dp.toPx() else 0f
+        }.clickable(enabled = !editing && enabled) {
             actions.openSetlistScore(setlist.id, index)
         }.padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -296,32 +510,53 @@ private fun SetlistScoreRow(
             modifier = Modifier.width(40.dp),
             fontWeight = FontWeight.Bold,
         )
-        Text(score.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        Text(
+            score.title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (editing) {
-            if (index > 0) {
-                IconButton(
-                    modifier = Modifier.semantics { contentDescription = up },
-                    onClick = { actions.moveScore(setlist.id, index, index - 1) },
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_arrow_up_24),
-                        contentDescription = null,
-                    )
+            val accessibilityActions = buildList {
+                if (enabled && index > 0) add(CustomAccessibilityAction(up) {
+                    onMove(index - 1)
+                    true
+                })
+                if (enabled && index < setlist.scoreIds.lastIndex) {
+                    add(CustomAccessibilityAction(down) {
+                        onMove(index + 1)
+                        true
+                    })
                 }
             }
-            if (index < setlist.scoreIds.lastIndex) {
-                IconButton(
-                    modifier = Modifier.semantics { contentDescription = down },
-                    onClick = { actions.moveScore(setlist.id, index, index + 1) },
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_arrow_down_24),
-                        contentDescription = null,
-                    )
-                }
+            Box(
+                Modifier.size(48.dp).semantics {
+                    contentDescription = reorder
+                    role = Role.Button
+                    customActions = accessibilityActions
+                }.pointerInput(dragKey, enabled) {
+                    if (enabled) {
+                        detectDragGestures(
+                            onDragStart = { onDragStart() },
+                            onDragEnd = onDragEnd,
+                            onDragCancel = onDragCancel,
+                        ) { change, amount ->
+                            change.consume()
+                            onDrag(amount.y)
+                        }
+                    }
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_drag_handle_24),
+                    contentDescription = null,
+                )
             }
             IconButton(
                 modifier = Modifier.semantics { contentDescription = remove },
+                enabled = enabled,
                 onClick = { actions.removeScore(setlist.id, index) },
             ) {
                 Icon(

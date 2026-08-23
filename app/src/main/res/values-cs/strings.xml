@@ -37,6 +37,7 @@
     <string name="remove">Odebrat</string>
     <string name="move_up">Posunout nahoru</string>
     <string name="move_down">Posunout dolů</string>
+    <string name="reorder">Změnit pořadí</string>
     <string name="back">Zpět</string>
     <string name="no_scores_in_setlist">V tomto setlistu nejsou žádná PDF</string>
     <string name="choose_pdfs">Vyberte PDF z knihovny.</string>
@@ -48,6 +49,12 @@
     <string name="pen">Pero</string>
     <string name="highlighter">Zvýrazňovač</string>
     <string name="eraser">Guma</string>
+    <string name="draw_tools">Kreslení</string>
+    <string name="add_tools">Vkládání</string>
+    <string name="straight_line">Rovná čára</string>
+    <string name="stroke_width">Tloušťka tahu</string>
+    <string name="decrease_stroke_width">Zmenšit tloušťku tahu</string>
+    <string name="increase_stroke_width">Zvětšit tloušťku tahu</string>
     <string name="undo">Vrátit</string>
     <string name="redo">Znovu</string>
     <string name="done">Hotovo</string>

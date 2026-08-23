@@ -69,8 +69,8 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         repository.removeScoreFromSetlist(setlistId, index)
     }
 
-    fun moveScore(setlistId: String, fromIndex: Int, toIndex: Int) = launchAction {
-        repository.moveScore(setlistId, fromIndex, toIndex)
+    fun reorderScores(setlistId: String, scoreIds: List<String>) = launchAction {
+        repository.reorderScores(setlistId, scoreIds)
     }
 
     fun updateSettings(settings: AppSettings) {

@@ -10,7 +10,7 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 
 <p align="center">
   <img src="site/assets/home.png" alt="SheetSet phone library with Menu and Import PDF actions" width="260">
-  <img src="site/assets/reader.png" alt="SheetSet phone PDF editor with pen, yellow highlight, selected rectangle, and scrollable tools" width="260">
+  <img src="site/assets/reader.png" alt="SheetSet phone PDF editor with a two-row tool dock, direct colors, pen, and highlighter" width="260">
   <img src="site/assets/tablet.png" alt="SheetSet tablet library with a left navigation rail" width="420">
 </p>
 
@@ -18,11 +18,11 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 
 - Imports one or more PDFs through the Android file picker.
 - Stores private offline copies and validates each file before adding it.
-- Creates unlimited ordered setlists without duplicating PDFs.
+- Creates unlimited setlists with direct drag ordering and no duplicated PDFs.
 - Reads a setlist continuously across score boundaries.
 - Supports colored pen, highlight, underline, strike-through, text boxes, lines, arrows, rectangles, and ellipses.
 - Selects, moves, resizes, deletes, erases, undoes, and redoes annotations.
-- Uses a horizontally scrollable phone palette, tablet tool rail, page fit, taps, swipes, pinch zoom, and two-axis panning.
+- Uses the same two-row bottom editor on phones and tablets, with fixed page/history controls and scrollable tool and color sections.
 - Preserves the imported original and exports a new annotated PDF.
 - Backs up and safely restores PDFs, setlists, annotations, settings, and language in a validated ZIP.
 - Uses English, Czech, Slovak, German, Polish, or the Android device language.
@@ -59,7 +59,7 @@ The app declares no permissions. Imported files stay in app-private storage. Exp
 
 - Android only.
 - PDF text and vector objects are not edited. Annotations are a separate layer drawn by touch.
-- Highlight, underline, and strike-through use manual drag bounds. Scanned PDFs have no OCR.
+- Underline and strike-through use manual drag bounds. Scanned PDFs have no OCR.
 - Export rasterizes source pages at up to 144 dpi with a 12 MP memory cap.
 - Backup restore accepts archives up to 1 GiB. There is no cloud sync.
 - Scanning is delegated to the separate ScanIt app; SheetSet has no built-in camera scanner.

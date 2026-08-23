@@ -128,4 +128,17 @@ class AnnotationGeometryTest {
         )
         assertTrue(stroke.resizeHandles().isEmpty())
     }
+
+    @Test
+    fun straightStrokeKeepsOnlyEndpoints() {
+        val points = listOf(
+            NormalizedPoint(0.1f, 0.2f),
+            NormalizedPoint(0.4f, 0.7f),
+            NormalizedPoint(0.9f, 0.3f),
+        )
+
+        assertEquals(listOf(points.first(), points.last()), strokePoints(points, true))
+        assertEquals(points, strokePoints(points, false))
+        assertEquals(points.take(1), strokePoints(points.take(1), true))
+    }
 }

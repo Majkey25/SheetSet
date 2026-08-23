@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0-alpha.2] - 2026-08-23
+
+### Added
+
+- Drag handles for direct setlist reordering, including edge scrolling and screen-reader move actions.
+- Freehand highlighter strokes and a straight-line mode for pen and highlighter tools.
+- Direct color swatches and in-editor stroke-width controls.
+
+### Changed
+
+- Replaced the crowded annotation strip and tablet side rail with a two-row bottom dock inspired by musician-first score readers.
+- Split annotation tools into focused Draw and Add groups while keeping page navigation, undo, redo, and Done fixed.
+
+### Fixed
+
+- Long setlist drags now move across multiple rows and persist the final position.
+- Freehand stroke commits keep an immutable snapshot of their points.
+
 ## [0.3.0-alpha.1] - 2026-08-22
 
 ### Added

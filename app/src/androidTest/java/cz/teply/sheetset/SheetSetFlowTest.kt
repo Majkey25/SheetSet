@@ -262,7 +262,9 @@ class SheetSetFlowTest {
         composeRule.onNodeWithText("Show").performClick()
         composeRule.onAllNodesWithContentDescription("Remove").assertCountEquals(0)
         composeRule.onNodeWithText("Edit order").performClick()
-        composeRule.onNodeWithContentDescription("Move down").assertIsDisplayed()
+        composeRule.onAllNodesWithContentDescription("Reorder").assertCountEquals(2)
+        composeRule.onAllNodesWithContentDescription("Move up").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("Move down").assertCountEquals(0)
         composeRule.onAllNodesWithContentDescription("Remove").assertCountEquals(2)
     }
 
@@ -322,9 +324,18 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Annotate").performClick()
 
         listOf(
+            "Draw",
+            "Add tools",
+            "Straight line",
+            "Black",
+            "Red",
+            "Orange",
+            "Yellow",
+            "Green",
+            "Blue",
+            "Purple",
+            "Pink",
             "Select",
-            "Pen",
-            "Highlighter",
             "Underline",
             "Strike-through",
             "Text box",
@@ -332,8 +343,6 @@ class SheetSetFlowTest {
             "Arrow",
             "Rectangle",
             "Ellipse",
-            "Eraser",
-            "Color",
             "Undo",
             "Redo",
             "Done",
@@ -343,7 +352,15 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Select").assertIsSelected()
         composeRule.onNodeWithContentDescription("Rectangle").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Rectangle").assertIsSelected()
-        composeRule.onNodeWithContentDescription("Pen").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Draw").performClick()
+        listOf("Pen", "Highlighter", "Eraser").forEach { label ->
+            composeRule.onNodeWithContentDescription(label).assertIsDisplayed()
+        }
+        composeRule.onNodeWithContentDescription("Pen").performClick()
+        composeRule.onNodeWithContentDescription("Pen").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Straight line").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Straight line").performClick()
+        composeRule.onNodeWithContentDescription("Straight line").assertIsSelected()
     }
 
     @Test

@@ -79,7 +79,7 @@ data class SheetSetActions(
     val deleteSetlist: (String) -> Unit = {},
     val addScores: (String, List<String>) -> Unit = { _, _ -> },
     val removeScore: (String, Int) -> Unit = { _, _ -> },
-    val moveScore: (String, Int, Int) -> Unit = { _, _, _ -> },
+    val reorderScores: (String, List<String>) -> Unit = { _, _ -> },
     val updateSettings: (AppSettings) -> Unit = {},
     val selectLanguage: (String?) -> Unit = {},
     val createBackup: (Uri) -> Unit = {},
@@ -134,6 +134,7 @@ fun SheetSetApp(
             setlist = activeSetlist,
             scores = state.catalog.scores,
             actions = actions,
+            busy = state.loading,
             onBack = { activeSetlistId = null },
         )
         return
@@ -232,6 +233,7 @@ fun SheetSetApp(
                             setlist = activeSetlist,
                             scores = state.catalog.scores,
                             actions = actions,
+                            busy = state.loading,
                             onBack = { activeSetlistId = null },
                             modifier = Modifier.weight(1f),
                             embedded = true,

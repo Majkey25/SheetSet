@@ -106,8 +106,8 @@ class LibraryRepository(private val root: File) {
         updateCatalog { it.removeScoreFromSetlist(setlistId, index) }
     }
 
-    suspend fun moveScore(setlistId: String, fromIndex: Int, toIndex: Int) {
-        updateCatalog { it.moveScore(setlistId, fromIndex, toIndex) }
+    suspend fun reorderScores(setlistId: String, scoreIds: List<String>) {
+        updateCatalog { it.reorderScores(setlistId, scoreIds) }
     }
 
     suspend fun deleteScore(scoreId: String) {

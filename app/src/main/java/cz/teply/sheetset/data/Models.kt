@@ -84,6 +84,18 @@ data class LibraryCatalog(
             if (current.id == setlistId) current.copy(scoreIds = reordered) else current
         })
     }
+
+    fun reorderScores(setlistId: String, scoreIds: List<String>): LibraryCatalog {
+        val setlist = setlists.firstOrNull { it.id == setlistId } ?: return this
+        require(
+            setlist.scoreIds.groupingBy { it }.eachCount() ==
+                scoreIds.groupingBy { it }.eachCount(),
+        ) { "Reordered scores must preserve every occurrence" }
+        if (setlist.scoreIds == scoreIds) return this
+        return copy(setlists = setlists.map { current ->
+            if (current.id == setlistId) current.copy(scoreIds = scoreIds.toList()) else current
+        })
+    }
 }
 
 object CatalogJson {

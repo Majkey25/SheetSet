@@ -45,7 +45,12 @@ object AnnotationRenderer {
             annotation.color.argb(),
             annotation.width * min(page.width(), page.height()),
             if (annotation.kind == InkKind.HIGHLIGHTER) highlighterAlpha else 255,
-        )
+        ).apply {
+            if (annotation.kind == InkKind.HIGHLIGHTER) {
+                strokeCap = Paint.Cap.SQUARE
+                strokeJoin = Paint.Join.BEVEL
+            }
+        }
         val first = annotation.points.first()
         if (annotation.points.size == 1) {
             canvas.drawPoint(first.x(page), first.y(page), paint)

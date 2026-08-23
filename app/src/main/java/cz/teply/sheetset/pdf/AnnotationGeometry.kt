@@ -119,6 +119,15 @@ fun PageAnnotation.resized(handle: AnnotationHandle, point: NormalizedPoint): Pa
 fun manualMarkup(start: NormalizedPoint, end: NormalizedPoint): List<NormalizedRect> =
     listOf(minimumRect(start, end))
 
+fun strokePoints(
+    points: List<NormalizedPoint>,
+    straightLine: Boolean,
+): List<NormalizedPoint> = if (straightLine && points.size > 1) {
+    listOf(points.first(), points.last())
+} else {
+    points
+}
+
 private data class Bounds(
     val left: Float,
     val top: Float,

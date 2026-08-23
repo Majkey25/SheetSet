@@ -88,7 +88,9 @@ class PdfPageView(context: Context) : View(context) {
         }
     var annotationColor = AnnotationColor.BLACK
     var penWidth = 0.004f
+    var highlighterWidth = 0.016f
     var shapeWidth = 0.004f
+    var straightLine = false
     var textSize = AnnotationTextSize.MEDIUM
     var highlighterAlpha = 105
     var pageFit = PageFit.PAGE
@@ -289,7 +291,7 @@ class PdfPageView(context: Context) : View(context) {
                 gestureOriginal = hit
                 gesturePreview = hit
             }
-            ReaderTool.PEN -> previewPoints.add(point)
+            ReaderTool.PEN, ReaderTool.HIGHLIGHTER -> previewPoints.add(point)
             ReaderTool.ERASER -> eraseAt(point)
             else -> Unit
         }
@@ -305,7 +307,7 @@ class PdfPageView(context: Context) : View(context) {
                 gesturePreview = resizeHandle?.let { original.resized(it, point) }
                     ?: original.translated(point.x - start.x, point.y - start.y)
             }
-            ReaderTool.PEN -> {
+            ReaderTool.PEN, ReaderTool.HIGHLIGHTER -> {
                 val previous = previewPoints.lastOrNull()
                 if (previous == null || distance(previous, point) > 0.001f) {
                     if (previewPoints.size < MAX_POINTS_PER_INK) previewPoints.add(point)
@@ -328,18 +330,8 @@ class PdfPageView(context: Context) : View(context) {
                     onUpdateAnnotation(updated)
                 }
             }
-            ReaderTool.PEN -> if (previewPoints.isNotEmpty()) {
-                add(
-                    InkAnnotation(
-                        id = UUID.randomUUID().toString(),
-                        kind = InkKind.PEN,
-                        width = penWidth,
-                        points = previewPoints.toList(),
-                        color = annotationColor,
-                    ),
-                )
-            }
-            ReaderTool.HIGHLIGHTER -> requestMarkup(MarkupKind.HIGHLIGHT, start, end)
+            ReaderTool.PEN -> addInk(InkKind.PEN, penWidth)
+            ReaderTool.HIGHLIGHTER -> addInk(InkKind.HIGHLIGHTER, highlighterWidth)
             ReaderTool.UNDERLINE -> requestMarkup(MarkupKind.UNDERLINE, start, end)
             ReaderTool.STRIKE_THROUGH -> requestMarkup(MarkupKind.STRIKE_THROUGH, start, end)
             ReaderTool.TEXT_BOX -> if (start != null && end != null) {
@@ -360,6 +352,19 @@ class PdfPageView(context: Context) : View(context) {
         end: NormalizedPoint?,
     ) {
         if (start != null && end != null) onRequestMarkup(kind, start, end)
+    }
+
+    private fun addInk(kind: InkKind, width: Float) {
+        if (previewPoints.isEmpty()) return
+        add(
+            InkAnnotation(
+                id = UUID.randomUUID().toString(),
+                kind = kind,
+                width = width,
+                points = strokePoints(previewPoints.toList(), straightLine),
+                color = annotationColor,
+            ),
+        )
     }
 
     private fun addShape(
@@ -398,23 +403,8 @@ class PdfPageView(context: Context) : View(context) {
         val start = dragStart ?: return null
         val end = dragCurrent ?: return null
         return when (tool) {
-            ReaderTool.PEN -> if (previewPoints.isEmpty()) {
-                null
-            } else {
-                InkAnnotation(
-                    id = "preview",
-                    kind = InkKind.PEN,
-                    width = penWidth,
-                    points = previewPoints,
-                    color = annotationColor,
-                )
-            }
-            ReaderTool.HIGHLIGHTER -> MarkupAnnotation(
-                id = "preview",
-                kind = MarkupKind.HIGHLIGHT,
-                bounds = manualMarkup(start, end),
-                color = annotationColor,
-            )
+            ReaderTool.PEN -> previewInk(InkKind.PEN, penWidth)
+            ReaderTool.HIGHLIGHTER -> previewInk(InkKind.HIGHLIGHTER, highlighterWidth)
             ReaderTool.UNDERLINE -> MarkupAnnotation(
                 id = "preview",
                 kind = MarkupKind.UNDERLINE,
@@ -455,6 +445,19 @@ class PdfPageView(context: Context) : View(context) {
             else -> null
         }
     }
+
+    private fun previewInk(kind: InkKind, width: Float): InkAnnotation? =
+        if (previewPoints.isEmpty()) {
+            null
+        } else {
+            InkAnnotation(
+                id = "preview",
+                kind = kind,
+                width = width,
+                points = strokePoints(previewPoints, straightLine),
+                color = annotationColor,
+            )
+        }
 
     private fun resetGesture() {
         previewPoints.clear()

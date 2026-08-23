@@ -37,6 +37,7 @@
     <string name="remove">Remove</string>
     <string name="move_up">Move up</string>
     <string name="move_down">Move down</string>
+    <string name="reorder">Reorder</string>
     <string name="back">Back</string>
     <string name="no_scores_in_setlist">No PDFs in this setlist</string>
     <string name="choose_pdfs">Choose PDFs from your library.</string>
@@ -48,6 +49,12 @@
     <string name="pen">Pen</string>
     <string name="highlighter">Highlighter</string>
     <string name="eraser">Eraser</string>
+    <string name="draw_tools">Draw</string>
+    <string name="add_tools">Add tools</string>
+    <string name="straight_line">Straight line</string>
+    <string name="stroke_width">Stroke width</string>
+    <string name="decrease_stroke_width">Decrease stroke width</string>
+    <string name="increase_stroke_width">Increase stroke width</string>
     <string name="undo">Undo</string>
     <string name="redo">Redo</string>
     <string name="done">Done</string>

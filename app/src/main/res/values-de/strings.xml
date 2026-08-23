@@ -37,6 +37,7 @@
     <string name="remove">Entfernen</string>
     <string name="move_up">Nach oben</string>
     <string name="move_down">Nach unten</string>
+    <string name="reorder">Neu anordnen</string>
     <string name="back">Zurück</string>
     <string name="no_scores_in_setlist">Keine PDFs in dieser Setlist</string>
     <string name="choose_pdfs">Wähle PDFs aus deiner Bibliothek.</string>
@@ -48,6 +49,12 @@
     <string name="pen">Stift</string>
     <string name="highlighter">Textmarker</string>
     <string name="eraser">Radierer</string>
+    <string name="draw_tools">Zeichnen</string>
+    <string name="add_tools">Einfügen</string>
+    <string name="straight_line">Gerade Linie</string>
+    <string name="stroke_width">Strichstärke</string>
+    <string name="decrease_stroke_width">Strichstärke verringern</string>
+    <string name="increase_stroke_width">Strichstärke erhöhen</string>
     <string name="undo">Rückgängig</string>
     <string name="redo">Wiederholen</string>
     <string name="done">Fertig</string>

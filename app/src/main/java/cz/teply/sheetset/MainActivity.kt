@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
                             deleteSetlist = viewModel::deleteSetlist,
                             addScores = viewModel::addScores,
                             removeScore = viewModel::removeScore,
-                            moveScore = viewModel::moveScore,
+                            reorderScores = viewModel::reorderScores,
                             updateSettings = viewModel::updateSettings,
                             selectLanguage = { languageTag ->
                                 AppLanguages.select(this@MainActivity, languageTag)

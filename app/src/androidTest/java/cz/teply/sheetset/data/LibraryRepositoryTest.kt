@@ -135,6 +135,29 @@ class LibraryRepositoryTest {
         assertTrue(!File(root, "scores/${score.fileName}").exists())
     }
 
+    @Test
+    fun reorderedSetlistPersistsWithDuplicateScores() = runBlocking {
+        val source = createPdf("song.pdf", pages = 1)
+        val repository = LibraryRepository(root)
+        val first = repository.importPdf(
+            PdfImport("First.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val second = repository.importPdf(
+            PdfImport("Second.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val setlist = repository.createSetlist("Show")
+        listOf(first.id, second.id, first.id).forEach { scoreId ->
+            repository.addScoreToSetlist(setlist.id, scoreId)
+        }
+
+        repository.reorderScores(setlist.id, listOf(first.id, first.id, second.id))
+
+        assertEquals(
+            listOf(first.id, first.id, second.id),
+            LibraryRepository(root).load().setlists.single().scoreIds,
+        )
+    }
+
     private fun createPdf(name: String, pages: Int): File {
         root.mkdirs()
         val file = File(root, "${UUID.randomUUID()}-$name")
