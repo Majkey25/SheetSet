@@ -62,6 +62,7 @@ import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.ReaderLayout
 import kotlinx.coroutines.launch
 
 data class SheetSetActions(
@@ -70,8 +71,8 @@ data class SheetSetActions(
     val openScore: (Score) -> Unit = {},
     val openSetlistScore: (String, Int) -> Unit = { _, _ -> },
     val closeReader: () -> Unit = {},
-    val previousPage: () -> Unit = {},
-    val nextPage: () -> Unit = {},
+    val previousPage: (ReaderLayout) -> Unit = {},
+    val nextPage: (ReaderLayout) -> Unit = {},
     val saveAnnotations: (List<PageAnnotation>) -> Unit = {},
     val exportPdf: (Uri) -> Unit = {},
     val renameScore: (String, String) -> Unit = { _, _ -> },

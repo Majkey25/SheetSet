@@ -12,6 +12,7 @@ data class ReaderUiState(
     val scoreIds: List<String>,
     val scoreIndex: Int,
     val pageIndex: Int,
+    val pagePart: Int = 0,
     val annotations: DocumentAnnotations,
 )
 

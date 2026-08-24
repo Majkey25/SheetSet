@@ -17,6 +17,10 @@ import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.SettingsStore
 import cz.teply.sheetset.settings.HighlightStrength
+import cz.teply.sheetset.settings.ReaderLayout
+import cz.teply.sheetset.ui.ReaderPosition
+import cz.teply.sheetset.ui.nextPosition
+import cz.teply.sheetset.ui.previousPosition
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +40,7 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         application.getSharedPreferences("sheetset-settings", Context.MODE_PRIVATE),
     )
     private val annotationSaveMutex = Mutex()
+    private val readerPositionMutex = Mutex()
     private val mutableState = MutableStateFlow(
         LibraryUiState(loading = true, settings = settingsStore.load()),
     )
@@ -81,38 +86,89 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun openScore(score: Score) {
-        openReader(listOf(score.id), scoreIndex = 0, pageIndex = 0)
+        openReader(
+            listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = score.lastPageIndex,
+            pagePart = score.lastPagePart,
+        )
+    }
+
+    fun openScoreAt(score: Score, pageIndex: Int) {
+        openReader(listOf(score.id), scoreIndex = 0, pageIndex = pageIndex, pagePart = 0)
     }
 
     fun openSetlistScore(setlistId: String, scoreIndex: Int) {
         val ids = state.value.catalog.setlists.firstOrNull { it.id == setlistId }?.scoreIds ?: return
-        openReader(ids, scoreIndex, pageIndex = 0)
+        openReader(ids, scoreIndex, pageIndex = 0, pagePart = 0)
     }
 
     fun closeReader() {
         mutableState.update { it.copy(reader = null) }
     }
 
-    fun nextPage() {
-        val reader = state.value.reader ?: return
-        if (reader.pageIndex < reader.score.pageCount - 1) {
-            mutableState.update { it.copy(reader = reader.copy(pageIndex = reader.pageIndex + 1)) }
-        } else if (reader.scoreIndex < reader.scoreIds.lastIndex) {
-            openReader(reader.scoreIds, reader.scoreIndex + 1, pageIndex = 0)
-        }
+    fun nextPage(layout: ReaderLayout) {
+        movePage(layout, forward = true)
     }
 
-    fun previousPage() {
+    fun previousPage(layout: ReaderLayout) {
+        movePage(layout, forward = false)
+    }
+
+    private fun movePage(layout: ReaderLayout, forward: Boolean) {
         val reader = state.value.reader ?: return
-        if (reader.pageIndex > 0) {
-            mutableState.update { it.copy(reader = reader.copy(pageIndex = reader.pageIndex - 1)) }
-        } else if (reader.scoreIndex > 0) {
-            val previousIndex = reader.scoreIndex - 1
-            val previous = state.value.catalog.scores.firstOrNull {
-                it.id == reader.scoreIds[previousIndex]
-            } ?: return
-            openReader(reader.scoreIds, previousIndex, previous.pageCount - 1)
+        val catalog = state.value.catalog
+        val scores = catalog.scores.associateBy(Score::id)
+        val pageCounts = reader.scoreIds.map { id -> scores[id]?.pageCount ?: return }
+        val current = ReaderPosition(reader.scoreIndex, reader.pageIndex, reader.pagePart)
+        val target = if (forward) {
+            nextPosition(current, pageCounts, layout)
+        } else {
+            previousPosition(current, pageCounts, layout)
+        } ?: return
+        if (target.scoreIndex == reader.scoreIndex) {
+            val viewedAt = System.currentTimeMillis()
+            val updatedCatalog = catalog.saveReaderPosition(
+                reader.score.id,
+                target.pageIndex,
+                target.pagePart,
+                viewedAt,
+            )
+            val updatedScore = updatedCatalog.scores.first { it.id == reader.score.id }
+            mutableState.update {
+                it.copy(
+                    catalog = updatedCatalog,
+                    reader = reader.copy(
+                        score = updatedScore,
+                        pageIndex = target.pageIndex,
+                        pagePart = target.pagePart,
+                    ),
+                )
+            }
+            viewModelScope.launch {
+                readerPositionMutex.withLock {
+                    try {
+                        repository.saveReaderPosition(
+                            reader.score.id,
+                            target.pageIndex,
+                            target.pagePart,
+                            viewedAt,
+                        )
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        mutableState.update { it.copy(error = true) }
+                    }
+                }
+            }
+            return
         }
+        openReader(
+            reader.scoreIds,
+            target.scoreIndex,
+            target.pageIndex,
+            target.pagePart,
+        )
     }
 
     fun saveAnnotations(pageAnnotations: List<PageAnnotation>) {
@@ -261,7 +317,12 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun openReader(scoreIds: List<String>, scoreIndex: Int, pageIndex: Int) {
+    private fun openReader(
+        scoreIds: List<String>,
+        scoreIndex: Int,
+        pageIndex: Int,
+        pagePart: Int,
+    ) {
         val scoreId = scoreIds.getOrNull(scoreIndex) ?: return
         viewModelScope.launch {
             mutableState.update { it.copy(loading = true, error = false) }
@@ -272,15 +333,25 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                 val annotations = annotationSaveMutex.withLock {
                     repository.loadAnnotations(score.id)
                 }
+                repository.saveReaderPosition(
+                    score.id,
+                    page = pageIndex,
+                    part = pagePart,
+                    viewedAt = System.currentTimeMillis(),
+                )
+                val catalog = repository.load()
+                val savedScore = catalog.scores.first { it.id == score.id }
                 mutableState.update {
                     it.copy(
+                        catalog = catalog,
                         loading = false,
                         reader = ReaderUiState(
-                            score = score,
+                            score = savedScore,
                             file = file,
                             scoreIds = scoreIds,
                             scoreIndex = scoreIndex,
                             pageIndex = pageIndex,
+                            pagePart = pagePart,
                             annotations = annotations,
                         ),
                     )

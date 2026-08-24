@@ -71,6 +71,7 @@ import cz.teply.sheetset.pdf.manualMarkup
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.ReaderDefaultTool
+import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.settings.ToolSize
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -147,8 +148,8 @@ fun ReaderScreen(
                 view.pageFit = settings.pageFit
                 view.pageTurnTaps = settings.pageTurnTaps
                 view.pageTurnSwipes = settings.pageTurnSwipes
-                view.onPreviousPage = actions.previousPage
-                view.onNextPage = actions.nextPage
+                view.onPreviousPage = { actions.previousPage(ReaderLayout.SINGLE) }
+                view.onNextPage = { actions.nextPage(ReaderLayout.SINGLE) }
                 view.onPageClick = {
                     if (tool == ReaderTool.VIEW) {
                         controlsVisible = !controlsVisible
@@ -334,7 +335,7 @@ private fun ReaderNavigationBar(
                 stringResource(R.string.previous),
                 R.drawable.ic_chevron_left_24,
                 enabled = previousEnabled,
-                onClick = actions.previousPage,
+                onClick = { actions.previousPage(ReaderLayout.SINGLE) },
             )
             Text(
                 stringResource(
@@ -349,7 +350,7 @@ private fun ReaderNavigationBar(
                 stringResource(R.string.next),
                 R.drawable.ic_chevron_right_24,
                 enabled = nextEnabled,
-                onClick = actions.nextPage,
+                onClick = { actions.nextPage(ReaderLayout.SINGLE) },
             )
             ReaderControl(
                 stringResource(R.string.annotate),
@@ -430,8 +431,8 @@ private fun AnnotationPalette(
                 color = color,
                 straightLine = straightLine,
                 horizontalPadding = horizontalPadding,
-                onPrevious = actions.previousPage,
-                onNext = actions.nextPage,
+                onPrevious = { actions.previousPage(ReaderLayout.SINGLE) },
+                onNext = { actions.nextPage(ReaderLayout.SINGLE) },
                 onWidth = { actions.updateSettings(settings.copy(penWidth = it)) },
                 onStraightLine = onStraightLine,
                 onColor = onColor,
