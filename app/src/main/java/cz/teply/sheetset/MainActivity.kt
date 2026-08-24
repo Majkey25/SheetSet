@@ -75,9 +75,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && viewModel.state.value.reader != null) {
-            when (pedalDirection(event.keyCode, event.repeatCount)) {
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (viewModel.state.value.reader != null) {
+            when (pedalDirection(keyCode, event.repeatCount)) {
                 PageDirection.PREVIOUS -> {
                     viewModel.previousPage(activeReaderLayout())
                     return true
@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity() {
                 null -> Unit
             }
         }
-        return super.dispatchKeyEvent(event)
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun activeReaderLayout() = effectiveReaderLayout(
