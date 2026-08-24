@@ -1,5 +1,6 @@
 package cz.teply.sheetset.ui
 
+import android.view.KeyEvent
 import cz.teply.sheetset.settings.ReaderLayout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -80,5 +81,25 @@ class ReaderNavigationTest {
             ReaderPosition(2, 0),
             nextPosition(ReaderPosition(1, 1), counts, ReaderLayout.SINGLE),
         )
+    }
+
+    @Test
+    fun `pedal keys use strict page direction allowlist`() {
+        listOf(
+            KeyEvent.KEYCODE_PAGE_UP,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_SPACE,
+        ).forEach { key -> assertEquals(PageDirection.PREVIOUS, pedalDirection(key, 0)) }
+        listOf(
+            KeyEvent.KEYCODE_PAGE_DOWN,
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_NUMPAD_ENTER,
+        ).forEach { key -> assertEquals(PageDirection.NEXT, pedalDirection(key, 0)) }
+        assertNull(pedalDirection(KeyEvent.KEYCODE_VOLUME_UP, 0))
+        assertNull(pedalDirection(KeyEvent.KEYCODE_MEDIA_PLAY, 0))
+        assertNull(pedalDirection(KeyEvent.KEYCODE_PAGE_DOWN, 1))
     }
 }

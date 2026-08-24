@@ -1,12 +1,33 @@
 package cz.teply.sheetset.ui
 
+import android.view.KeyEvent
 import cz.teply.sheetset.settings.ReaderLayout
+
+enum class PageDirection { PREVIOUS, NEXT }
 
 data class ReaderPosition(
     val scoreIndex: Int,
     val pageIndex: Int,
     val pagePart: Int = 0,
 )
+
+fun pedalDirection(keyCode: Int, repeatCount: Int): PageDirection? {
+    if (repeatCount != 0) return null
+    return when (keyCode) {
+        KeyEvent.KEYCODE_PAGE_UP,
+        KeyEvent.KEYCODE_DPAD_LEFT,
+        KeyEvent.KEYCODE_DPAD_UP,
+        KeyEvent.KEYCODE_SPACE,
+        -> PageDirection.PREVIOUS
+        KeyEvent.KEYCODE_PAGE_DOWN,
+        KeyEvent.KEYCODE_DPAD_RIGHT,
+        KeyEvent.KEYCODE_DPAD_DOWN,
+        KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_NUMPAD_ENTER,
+        -> PageDirection.NEXT
+        else -> null
+    }
+}
 
 fun nextPosition(
     current: ReaderPosition,
