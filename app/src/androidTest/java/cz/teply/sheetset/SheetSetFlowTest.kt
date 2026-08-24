@@ -28,6 +28,9 @@ import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
+import cz.teply.sheetset.ui.AutoScrollState
+import cz.teply.sheetset.ui.PerformanceToolsSheet
+import cz.teply.sheetset.ui.WindowLayout
 import org.junit.Rule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -440,6 +443,44 @@ class SheetSetFlowTest {
         composeRule.onNodeWithText("Save").performClick()
 
         composeRule.runOnIdle { assertEquals("Verse", title) }
+    }
+
+    @Test
+    fun automaticScrollingCanStartPauseAndStop() {
+        var autoScrollState by mutableStateOf(AutoScrollState.STOPPED)
+        val score = Score("score-1", "Song", "score-1.pdf", 4, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                PerformanceToolsSheet(
+                    reader = reader,
+                    settings = AppSettings(),
+                    windowLayout = WindowLayout.COMPACT,
+                    autoScrollState = autoScrollState,
+                    onSettings = {},
+                    onAutoScrollState = { autoScrollState = it },
+                    onJump = {},
+                    onAddBookmark = {},
+                    onRenameBookmark = { _, _ -> },
+                    onDeleteBookmark = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Automatic scrolling").assertIsDisplayed()
+        composeRule.onNodeWithText("Start").performClick()
+        composeRule.onNodeWithText("Pause").performClick()
+        composeRule.onNodeWithText("Resume").assertIsDisplayed()
+        composeRule.onNodeWithText("Stop").performClick()
+        composeRule.onNodeWithText("Start").assertIsDisplayed()
     }
 
     @Test

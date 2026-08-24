@@ -146,4 +146,12 @@
     <string name="page_bottom">bottom</string>
     <string name="half_page_position">%1$d %2$s / %3$d</string>
     <string name="spread_position">%1$d–%2$d / %3$d</string>
+    <string name="automatic_scrolling">Automatic scrolling</string>
+    <string name="start">Start</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="stop">Stop</string>
+    <string name="scroll_speed">Scroll speed</string>
+    <string name="slow">Slow</string>
+    <string name="fast">Fast</string>
 </resources>

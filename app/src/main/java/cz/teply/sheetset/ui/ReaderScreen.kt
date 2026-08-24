@@ -41,11 +41,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -73,6 +75,8 @@ import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.ReaderDefaultTool
 import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.settings.ToolSize
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import java.util.UUID
 import kotlinx.coroutines.delay
 
@@ -94,14 +98,17 @@ fun ReaderScreen(
     var textBounds by remember { mutableStateOf<cz.teply.sheetset.pdf.NormalizedRect?>(null) }
     var textDraft by remember { mutableStateOf("") }
     var performanceTools by remember { mutableStateOf(false) }
+    var autoScrollState by remember(reader.score.id) { mutableStateOf(AutoScrollState.STOPPED) }
+    var activePageView by remember { mutableStateOf<PdfPageView?>(null) }
     var history by remember(reader.score.id, reader.pageIndex) {
         mutableStateOf(AnnotationHistory(reader.annotations.pages[reader.pageIndex].orEmpty()))
     }
     val platformView = LocalView.current
+    val density = LocalDensity.current.density
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri -> uri?.let(actions.exportPdf) }
-    val effectiveLayout = if (tool != ReaderTool.VIEW) {
+    val effectiveLayout = if (tool != ReaderTool.VIEW || autoScrollState != AutoScrollState.STOPPED) {
         ReaderLayout.SINGLE
     } else {
         effectiveReaderLayout(settings.readerLayout, windowLayout != WindowLayout.COMPACT)
@@ -112,6 +119,9 @@ fun ReaderScreen(
         platformView.keepScreenOn = settings.keepScreenAwake
         onDispose { platformView.keepScreenOn = previous }
     }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        autoScrollState = AutoScrollState.STOPPED
+    }
     LaunchedEffect(reader.score.id, reader.pageIndex) {
         selectedAnnotationId = null
     }
@@ -119,6 +129,29 @@ fun ReaderScreen(
         if (autoHideRequest > 0 && settings.autoHideControls) {
             delay(1_500)
             if (tool == ReaderTool.VIEW && controlsVisible) controlsVisible = false
+        }
+    }
+    LaunchedEffect(
+        autoScrollState,
+        activePageView,
+        reader.score.id,
+        reader.pageIndex,
+        settings.autoScrollSpeed,
+    ) {
+        val view = activePageView ?: return@LaunchedEffect
+        if (autoScrollState != AutoScrollState.RUNNING) return@LaunchedEffect
+        var previousFrame = withFrameNanos { it }
+        while (autoScrollState == AutoScrollState.RUNNING) {
+            val frame = withFrameNanos { it }
+            val elapsedMillis = ((frame - previousFrame) / 1_000_000L).coerceAtLeast(0)
+            previousFrame = frame
+            if (view.scrollByPixels(autoScrollPixels(settings.autoScrollSpeed, elapsedMillis, density))) {
+                val hasNext = reader.pageIndex < reader.score.pageCount - 1 ||
+                    reader.scoreIndex < reader.scoreIds.lastIndex
+                if (hasNext) actions.nextPage(ReaderLayout.SINGLE)
+                else autoScrollState = AutoScrollState.STOPPED
+                break
+            }
         }
     }
 
@@ -145,7 +178,7 @@ fun ReaderScreen(
         } else {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
-                factory = { context -> PdfPageView(context) },
+                factory = { context -> PdfPageView(context).also { activePageView = it } },
                 update = { view ->
                 view.contentDescription = view.context.getString(
                     R.string.pdf_page,
@@ -162,7 +195,10 @@ fun ReaderScreen(
                 view.straightLine = straightLine
                 view.textSize = settings.textSize
                 view.highlighterAlpha = settings.highlighterStrength.alpha()
-                view.pageFit = if (effectiveLayout == ReaderLayout.HALF) {
+                view.pageFit = if (
+                    effectiveLayout == ReaderLayout.HALF ||
+                    autoScrollState != AutoScrollState.STOPPED
+                ) {
                     cz.teply.sheetset.settings.PageFit.WIDTH
                 } else {
                     settings.pageFit
@@ -170,8 +206,14 @@ fun ReaderScreen(
                 view.setHalfPagePart(if (effectiveLayout == ReaderLayout.HALF) reader.pagePart else 0)
                 view.pageTurnTaps = settings.pageTurnTaps
                 view.pageTurnSwipes = settings.pageTurnSwipes
-                view.onPreviousPage = { actions.previousPage(effectiveLayout) }
-                view.onNextPage = { actions.nextPage(effectiveLayout) }
+                view.onPreviousPage = {
+                    autoScrollState = AutoScrollState.STOPPED
+                    actions.previousPage(effectiveLayout)
+                }
+                view.onNextPage = {
+                    autoScrollState = AutoScrollState.STOPPED
+                    actions.nextPage(effectiveLayout)
+                }
                 view.onPageClick = {
                     if (tool == ReaderTool.VIEW) {
                         controlsVisible = !controlsVisible
@@ -199,6 +241,7 @@ fun ReaderScreen(
                         ),
                     )
                 }
+                view.onRenderError = { autoScrollState = AutoScrollState.STOPPED }
                 view.showPage(reader.file, reader.pageIndex)
                 },
             )
@@ -229,10 +272,23 @@ fun ReaderScreen(
             if (tool == ReaderTool.VIEW) {
                 ReaderNavigationBar(
                     reader = reader,
-                    actions = actions,
                     layout = effectiveLayout,
-                    onPerformanceTools = { performanceTools = true },
+                    onPrevious = {
+                        autoScrollState = AutoScrollState.STOPPED
+                        actions.previousPage(effectiveLayout)
+                    },
+                    onNext = {
+                        autoScrollState = AutoScrollState.STOPPED
+                        actions.nextPage(effectiveLayout)
+                    },
+                    onPerformanceTools = {
+                        if (autoScrollState == AutoScrollState.RUNNING) {
+                            autoScrollState = AutoScrollState.PAUSED
+                        }
+                        performanceTools = true
+                    },
                 ) {
+                    autoScrollState = AutoScrollState.STOPPED
                     val initialTool = settings.defaultTool.editorTool()
                     tool = initialTool
                     if (initialTool == ReaderTool.HIGHLIGHTER && color == AnnotationColor.BLACK) {
@@ -288,7 +344,9 @@ fun ReaderScreen(
             reader = reader,
             settings = settings,
             windowLayout = windowLayout,
+            autoScrollState = autoScrollState,
             onSettings = actions.updateSettings,
+            onAutoScrollState = { autoScrollState = it },
             onJump = actions.jumpToPage,
             onAddBookmark = actions.addBookmark,
             onRenameBookmark = actions.renameBookmark,
@@ -431,8 +489,9 @@ private fun ReaderTopBar(title: String, onClose: () -> Unit, onExport: () -> Uni
 @Composable
 private fun ReaderNavigationBar(
     reader: ReaderUiState,
-    actions: SheetSetActions,
     layout: ReaderLayout,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     onPerformanceTools: () -> Unit,
     onAnnotate: () -> Unit,
 ) {
@@ -452,7 +511,7 @@ private fun ReaderNavigationBar(
                 stringResource(R.string.previous),
                 R.drawable.ic_chevron_left_24,
                 enabled = previousEnabled,
-                onClick = { actions.previousPage(layout) },
+                onClick = onPrevious,
             )
             Text(
                 readerPositionText(reader, layout),
@@ -463,7 +522,7 @@ private fun ReaderNavigationBar(
                 stringResource(R.string.next),
                 R.drawable.ic_chevron_right_24,
                 enabled = nextEnabled,
-                onClick = { actions.nextPage(layout) },
+                onClick = onNext,
             )
             ReaderControl(
                 stringResource(R.string.performance_tools),

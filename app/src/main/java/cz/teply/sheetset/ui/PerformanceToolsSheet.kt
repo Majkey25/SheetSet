@@ -33,6 +33,7 @@ import cz.teply.sheetset.R
 import cz.teply.sheetset.ReaderUiState
 import cz.teply.sheetset.data.Bookmark
 import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.AutoScrollSpeed
 import cz.teply.sheetset.settings.ReaderLayout
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,7 +42,9 @@ fun PerformanceToolsSheet(
     reader: ReaderUiState,
     settings: AppSettings,
     windowLayout: WindowLayout,
+    autoScrollState: AutoScrollState,
     onSettings: (AppSettings) -> Unit,
+    onAutoScrollState: (AutoScrollState) -> Unit,
     onJump: (Int) -> Unit,
     onAddBookmark: (String) -> Unit,
     onRenameBookmark: (String, String) -> Unit,
@@ -71,6 +74,42 @@ fun PerformanceToolsSheet(
                 LayoutRow(R.string.two_pages, settings.readerLayout == ReaderLayout.TWO_PAGE) {
                     onSettings(settings.copy(readerLayout = ReaderLayout.TWO_PAGE))
                 }
+            }
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            SectionTitle(R.string.automatic_scrolling)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                when (autoScrollState) {
+                    AutoScrollState.STOPPED -> TextButton(
+                        onClick = {
+                            onAutoScrollState(AutoScrollState.RUNNING)
+                            onDismiss()
+                        },
+                    ) { Text(stringResource(R.string.start)) }
+                    AutoScrollState.RUNNING -> TextButton(
+                        onClick = { onAutoScrollState(AutoScrollState.PAUSED) },
+                    ) { Text(stringResource(R.string.pause)) }
+                    AutoScrollState.PAUSED -> TextButton(
+                        onClick = {
+                            onAutoScrollState(AutoScrollState.RUNNING)
+                            onDismiss()
+                        },
+                    ) { Text(stringResource(R.string.resume)) }
+                }
+                if (autoScrollState != AutoScrollState.STOPPED) {
+                    TextButton(onClick = { onAutoScrollState(AutoScrollState.STOPPED) }) {
+                        Text(stringResource(R.string.stop))
+                    }
+                }
+            }
+            SectionTitle(R.string.scroll_speed)
+            LayoutRow(R.string.slow, settings.autoScrollSpeed == AutoScrollSpeed.SLOW) {
+                onSettings(settings.copy(autoScrollSpeed = AutoScrollSpeed.SLOW))
+            }
+            LayoutRow(R.string.medium, settings.autoScrollSpeed == AutoScrollSpeed.MEDIUM) {
+                onSettings(settings.copy(autoScrollSpeed = AutoScrollSpeed.MEDIUM))
+            }
+            LayoutRow(R.string.fast, settings.autoScrollSpeed == AutoScrollSpeed.FAST) {
+                onSettings(settings.copy(autoScrollSpeed = AutoScrollSpeed.FAST))
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle(R.string.bookmarks)

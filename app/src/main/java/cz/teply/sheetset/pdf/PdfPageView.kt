@@ -56,6 +56,7 @@ class PdfPageView(context: Context) : View(context) {
 
     private var source: File? = null
     private var pageIndex = -1
+    private var renderedPageIndex = -1
     private var bitmap: Bitmap? = null
     private var generation = 0
     private var zoom = 1f
@@ -138,6 +139,7 @@ class PdfPageView(context: Context) : View(context) {
     }
 
     fun scrollByPixels(pixels: Float): Boolean {
+        if (renderedPageIndex != pageIndex) return false
         val page = bitmap ?: return false
         val result = scrollPan(panY, maxPanY(page), pixels)
         panY = result.panY
@@ -200,6 +202,7 @@ class PdfPageView(context: Context) : View(context) {
         executor.shutdownNow()
         bitmap?.recycle()
         bitmap = null
+        renderedPageIndex = -1
         super.onDetachedFromWindow()
     }
 
@@ -543,6 +546,7 @@ class PdfPageView(context: Context) : View(context) {
                     if (request == generation) {
                         bitmap?.recycle()
                         bitmap = rendered
+                        renderedPageIndex = requestedPage
                         zoom = 1f
                         panX = 0f
                         panY = halfPagePan(maxPanY(rendered), halfPagePart)
