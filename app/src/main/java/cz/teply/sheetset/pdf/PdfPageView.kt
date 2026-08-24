@@ -61,6 +61,7 @@ class PdfPageView(context: Context) : View(context) {
     private var zoom = 1f
     private var panX = 0f
     private var panY = 0f
+    private var halfPagePart = 0
     private var downX = 0f
     private var downY = 0f
     private var lastX = 0f
@@ -96,7 +97,7 @@ class PdfPageView(context: Context) : View(context) {
     var pageFit = PageFit.PAGE
         set(value) {
             field = value
-            clampPan()
+            applyHalfPagePart()
             invalidate()
         }
     var pageTurnTaps = true
@@ -127,6 +128,21 @@ class PdfPageView(context: Context) : View(context) {
         source = file
         pageIndex = index
         renderPage()
+    }
+
+    fun setHalfPagePart(part: Int) {
+        require(part in 0..1) { "Invalid half-page part" }
+        halfPagePart = part
+        applyHalfPagePart()
+        invalidate()
+    }
+
+    fun scrollByPixels(pixels: Float): Boolean {
+        val page = bitmap ?: return false
+        val result = scrollPan(panY, maxPanY(page), pixels)
+        panY = result.panY
+        invalidate()
+        return result.reachedEnd
     }
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
@@ -503,6 +519,12 @@ class PdfPageView(context: Context) : View(context) {
         panY = panY.coerceIn(-maxPanY(page), maxPanY(page))
     }
 
+    private fun applyHalfPagePart() {
+        val page = bitmap ?: return
+        panX = 0f
+        panY = halfPagePan(maxPanY(page), halfPagePart)
+    }
+
     private fun maxPanX(page: Bitmap): Float =
         max(0f, (page.width * baseScale(page) * zoom - width) / 2f)
 
@@ -523,7 +545,7 @@ class PdfPageView(context: Context) : View(context) {
                         bitmap = rendered
                         zoom = 1f
                         panX = 0f
-                        panY = 0f
+                        panY = halfPagePan(maxPanY(rendered), halfPagePart)
                         invalidate()
                     } else {
                         rendered.recycle()
