@@ -154,7 +154,6 @@
     <string name="scroll_speed">Scroll speed</string>
     <string name="slow">Slow</string>
     <string name="fast">Fast</string>
-    <string name="sort">Sort</string>
     <string name="sort_state">Sort: %1$s</string>
     <string name="sort_title">Title</string>
     <string name="sort_imported">Imported</string>

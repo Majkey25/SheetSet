@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0-alpha.1] - 2026-08-24
+
+### Added
+
+- ScorePDF backup import that preserves every score record, PDF, setlist order, and duplicate occurrence without deleting the current library.
+- Direct backup sharing through Android's share sheet and an optional Buy Me a Coffee link in About.
+- Per-score bookmarks, bookmark search and direct jumps, saved reading position, and last-viewed sorting.
+- Single, Half, and tablet Two-page reader layouts with layout-aware touch and pedal navigation.
+- Page turning with common Bluetooth pedal and keyboard keys plus automatic fit-width scrolling at three speeds.
+- Score and setlist labels, label search, and title/date sorting.
+
+### Changed
+
+- Catalog and native backup formats now write version 2 while retaining validated version 1 migration.
+- The reader keeps one navigation row and puts layouts, automatic scrolling, and bookmarks in one performance-tools sheet.
+
+### Fixed
+
+- Android Back closes the active reader, detail, settings page, or drawer before reaching the root screen; root Back no longer exits SheetSet.
+- Automatic scrolling waits for the new PDF page to finish rendering before continuing.
+
 ## [0.3.0-alpha.2] - 2026-08-23
 
 ### Added

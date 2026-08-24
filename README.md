@@ -20,11 +20,15 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 - Stores private offline copies and validates each file before adding it.
 - Creates unlimited setlists with direct drag ordering and no duplicated PDFs.
 - Reads a setlist continuously across score boundaries.
+- Resumes the last page, stores searchable bookmarks, and jumps directly to bookmarked passages.
+- Offers Single, Half, and tablet Two-page layouts, Bluetooth pedal/keyboard page turns, and automatic scrolling.
+- Organizes scores and setlists with labels, label search, and title/date sorting.
 - Supports colored pen, highlight, underline, strike-through, text boxes, lines, arrows, rectangles, and ellipses.
 - Selects, moves, resizes, deletes, erases, undoes, and redoes annotations.
 - Uses the same two-row bottom editor on phones and tablets, with fixed page/history controls and scrollable tool and color sections.
 - Preserves the imported original and exports a new annotated PDF.
 - Backs up and safely restores PDFs, setlists, annotations, settings, and language in a validated ZIP.
+- Imports ScorePDF backup ZIPs as a non-destructive merge and shares SheetSet backups through Android.
 - Uses English, Czech, Slovak, German, Polish, or the Android device language.
 - Offers Scan with ScanIt from the import sheet and opens its Google Play listing.
 
@@ -63,9 +67,10 @@ The app declares no permissions. Imported files stay in app-private storage. Exp
 - Export rasterizes source pages at up to 144 dpi with a 12 MP memory cap.
 - Backup restore accepts archives up to 1 GiB. There is no cloud sync.
 - Scanning is delegated to the separate ScanIt app; SheetSet has no built-in camera scanner.
-- No metronome or Bluetooth pedal settings yet.
+- Common page-turn pedals work as keyboards; custom MIDI mappings, audio tools, and a metronome are not included.
 
 See the [adaptive editor specification](docs/superpowers/specs/2026-08-20-sheetset-editor-settings-adaptive-design.md) and [PDF editor plan](docs/superpowers/plans/2026-08-20-sheetset-pdf-editor.md).
+The [v0.4 performance specification](docs/superpowers/specs/2026-08-24-sheetset-performance-essentials-design.md) documents bookmarks, layouts, pedals, auto-scroll, labels, migration, and release acceptance.
 
 ## Contributing
 
