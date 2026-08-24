@@ -9,6 +9,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cz.teply.sheetset.data.LibraryRepository
+import cz.teply.sheetset.data.Bookmark
 import cz.teply.sheetset.data.PdfImport
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.pdf.PageAnnotation
@@ -33,6 +34,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.util.UUID
 
 class SheetSetViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = LibraryRepository(File(application.filesDir, "library"))
@@ -98,6 +100,32 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         openReader(listOf(score.id), scoreIndex = 0, pageIndex = pageIndex, pagePart = 0)
     }
 
+    fun jumpToPage(pageIndex: Int) {
+        val reader = state.value.reader ?: return
+        if (pageIndex !in 0 until reader.score.pageCount) return
+        applyReaderPosition(reader, ReaderPosition(reader.scoreIndex, pageIndex, 0))
+    }
+
+    fun addBookmark(title: String) {
+        val reader = state.value.reader ?: return
+        launchAction {
+            repository.addBookmark(
+                reader.score.id,
+                Bookmark(UUID.randomUUID().toString(), title, reader.pageIndex),
+            )
+        }
+    }
+
+    fun renameBookmark(bookmarkId: String, title: String) {
+        val scoreId = state.value.reader?.score?.id ?: return
+        launchAction { repository.renameBookmark(scoreId, bookmarkId, title) }
+    }
+
+    fun deleteBookmark(bookmarkId: String) {
+        val scoreId = state.value.reader?.score?.id ?: return
+        launchAction { repository.deleteBookmark(scoreId, bookmarkId) }
+    }
+
     fun openSetlistScore(setlistId: String, scoreIndex: Int) {
         val ids = state.value.catalog.setlists.firstOrNull { it.id == setlistId }?.scoreIds ?: return
         openReader(ids, scoreIndex, pageIndex = 0, pagePart = 0)
@@ -126,9 +154,13 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         } else {
             previousPosition(current, pageCounts, layout)
         } ?: return
+        applyReaderPosition(reader, target)
+    }
+
+    private fun applyReaderPosition(reader: ReaderUiState, target: ReaderPosition) {
         if (target.scoreIndex == reader.scoreIndex) {
             val viewedAt = System.currentTimeMillis()
-            val updatedCatalog = catalog.saveReaderPosition(
+            val updatedCatalog = state.value.catalog.saveReaderPosition(
                 reader.score.id,
                 target.pageIndex,
                 target.pagePart,
@@ -306,8 +338,18 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             mutableState.update { it.copy(loading = true, error = false) }
             try {
                 action()
+                val catalog = repository.load()
                 mutableState.update {
-                    it.copy(catalog = repository.load(), loading = false, error = false)
+                    val reader = it.reader?.let { current ->
+                        catalog.scores.firstOrNull { score -> score.id == current.score.id }
+                            ?.let { score -> current.copy(score = score) }
+                    }
+                    it.copy(
+                        catalog = catalog,
+                        reader = reader,
+                        loading = false,
+                        error = false,
+                    )
                 }
             } catch (error: CancellationException) {
                 throw error

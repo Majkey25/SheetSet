@@ -18,6 +18,7 @@ import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
 import cz.teply.sheetset.ui.WindowLayout
 import cz.teply.sheetset.ui.PageDirection
+import cz.teply.sheetset.ui.effectiveReaderLayout
 import cz.teply.sheetset.ui.pedalDirection
 
 class MainActivity : ComponentActivity() {
@@ -41,6 +42,10 @@ class MainActivity : ComponentActivity() {
                             closeReader = viewModel::closeReader,
                             previousPage = viewModel::previousPage,
                             nextPage = viewModel::nextPage,
+                            jumpToPage = viewModel::jumpToPage,
+                            addBookmark = viewModel::addBookmark,
+                            renameBookmark = viewModel::renameBookmark,
+                            deleteBookmark = viewModel::deleteBookmark,
                             saveAnnotations = viewModel::saveAnnotations,
                             exportPdf = viewModel::exportPdf,
                             renameScore = viewModel::renameScore,
@@ -71,11 +76,11 @@ class MainActivity : ComponentActivity() {
         if (event.action == KeyEvent.ACTION_DOWN && viewModel.state.value.reader != null) {
             when (pedalDirection(event.keyCode, event.repeatCount)) {
                 PageDirection.PREVIOUS -> {
-                    viewModel.previousPage(viewModel.state.value.settings.readerLayout)
+                    viewModel.previousPage(activeReaderLayout())
                     return true
                 }
                 PageDirection.NEXT -> {
-                    viewModel.nextPage(viewModel.state.value.settings.readerLayout)
+                    viewModel.nextPage(activeReaderLayout())
                     return true
                 }
                 null -> Unit
@@ -83,6 +88,11 @@ class MainActivity : ComponentActivity() {
         }
         return super.dispatchKeyEvent(event)
     }
+
+    private fun activeReaderLayout() = effectiveReaderLayout(
+        viewModel.state.value.settings.readerLayout,
+        resources.configuration.screenWidthDp >= 600,
+    )
 
     private fun openBackupShareSheet(uri: Uri) {
         val share = Intent(Intent.ACTION_SEND)

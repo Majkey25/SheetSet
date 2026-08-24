@@ -132,4 +132,18 @@
     <string name="restore">Restore</string>
     <string name="support_app">Support this app → Buy Me a Coffee</string>
     <string name="support_app_notice">Thank you for supporting this app. This opens Buy Me a Coffee.</string>
+    <string name="performance_tools">Performance tools</string>
+    <string name="page_layout">Page layout</string>
+    <string name="single_page">Single page</string>
+    <string name="half_page">Half page</string>
+    <string name="two_pages">Two pages</string>
+    <string name="bookmarks">Bookmarks</string>
+    <string name="add_bookmark">Add bookmark</string>
+    <string name="bookmark_title">Bookmark title</string>
+    <string name="bookmark_page">Page %1$d</string>
+    <string name="no_bookmarks">No bookmarks yet</string>
+    <string name="page_top">top</string>
+    <string name="page_bottom">bottom</string>
+    <string name="half_page_position">%1$d %2$s / %3$d</string>
+    <string name="spread_position">%1$d–%2$d / %3$d</string>
 </resources>

@@ -93,6 +93,7 @@ fun ReaderScreen(
     var straightLine by remember(reader.score.id) { mutableStateOf(false) }
     var textBounds by remember { mutableStateOf<cz.teply.sheetset.pdf.NormalizedRect?>(null) }
     var textDraft by remember { mutableStateOf("") }
+    var performanceTools by remember { mutableStateOf(false) }
     var history by remember(reader.score.id, reader.pageIndex) {
         mutableStateOf(AnnotationHistory(reader.annotations.pages[reader.pageIndex].orEmpty()))
     }
@@ -100,6 +101,11 @@ fun ReaderScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri -> uri?.let(actions.exportPdf) }
+    val effectiveLayout = if (tool != ReaderTool.VIEW) {
+        ReaderLayout.SINGLE
+    } else {
+        effectiveReaderLayout(settings.readerLayout, windowLayout != WindowLayout.COMPACT)
+    }
 
     DisposableEffect(platformView, settings.keepScreenAwake) {
         val previous = platformView.keepScreenOn
@@ -126,10 +132,21 @@ fun ReaderScreen(
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { context -> PdfPageView(context) },
-            update = { view ->
+        if (effectiveLayout == ReaderLayout.TWO_PAGE) {
+            TwoPageReader(
+                reader = reader,
+                settings = settings,
+                actions = actions,
+                onToggleControls = {
+                    controlsVisible = !controlsVisible
+                    if (controlsVisible && settings.autoHideControls) autoHideRequest++
+                },
+            )
+        } else {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context -> PdfPageView(context) },
+                update = { view ->
                 view.contentDescription = view.context.getString(
                     R.string.pdf_page,
                     reader.pageIndex + 1,
@@ -145,11 +162,16 @@ fun ReaderScreen(
                 view.straightLine = straightLine
                 view.textSize = settings.textSize
                 view.highlighterAlpha = settings.highlighterStrength.alpha()
-                view.pageFit = settings.pageFit
+                view.pageFit = if (effectiveLayout == ReaderLayout.HALF) {
+                    cz.teply.sheetset.settings.PageFit.WIDTH
+                } else {
+                    settings.pageFit
+                }
+                view.setHalfPagePart(if (effectiveLayout == ReaderLayout.HALF) reader.pagePart else 0)
                 view.pageTurnTaps = settings.pageTurnTaps
                 view.pageTurnSwipes = settings.pageTurnSwipes
-                view.onPreviousPage = { actions.previousPage(ReaderLayout.SINGLE) }
-                view.onNextPage = { actions.nextPage(ReaderLayout.SINGLE) }
+                view.onPreviousPage = { actions.previousPage(effectiveLayout) }
+                view.onNextPage = { actions.nextPage(effectiveLayout) }
                 view.onPageClick = {
                     if (tool == ReaderTool.VIEW) {
                         controlsVisible = !controlsVisible
@@ -178,8 +200,9 @@ fun ReaderScreen(
                     )
                 }
                 view.showPage(reader.file, reader.pageIndex)
-            },
-        )
+                },
+            )
+        }
         AnimatedVisibility(
             visible = controlsVisible,
             modifier = Modifier.align(Alignment.TopCenter),
@@ -204,7 +227,12 @@ fun ReaderScreen(
             exit = fadeOut(tween(140)),
         ) {
             if (tool == ReaderTool.VIEW) {
-                ReaderNavigationBar(reader, actions) {
+                ReaderNavigationBar(
+                    reader = reader,
+                    actions = actions,
+                    layout = effectiveLayout,
+                    onPerformanceTools = { performanceTools = true },
+                ) {
                     val initialTool = settings.defaultTool.editorTool()
                     tool = initialTool
                     if (initialTool == ReaderTool.HIGHLIGHTER && color == AnnotationColor.BLACK) {
@@ -255,6 +283,20 @@ fun ReaderScreen(
         }
     }
 
+    if (performanceTools) {
+        PerformanceToolsSheet(
+            reader = reader,
+            settings = settings,
+            windowLayout = windowLayout,
+            onSettings = actions.updateSettings,
+            onJump = actions.jumpToPage,
+            onAddBookmark = actions.addBookmark,
+            onRenameBookmark = actions.renameBookmark,
+            onDeleteBookmark = actions.deleteBookmark,
+            onDismiss = { performanceTools = false },
+        )
+    }
+
     textBounds?.let { bounds ->
         AlertDialog(
             onDismissRequest = { textBounds = null },
@@ -298,6 +340,75 @@ fun ReaderScreen(
 }
 
 @Composable
+private fun TwoPageReader(
+    reader: ReaderUiState,
+    settings: AppSettings,
+    actions: SheetSetActions,
+    onToggleControls: () -> Unit,
+) {
+    val pages = spreadPages(
+        ReaderPosition(reader.scoreIndex, reader.pageIndex, reader.pagePart),
+        reader.score.pageCount,
+    )
+    Row(Modifier.fillMaxSize()) {
+        pages.forEach { pageIndex ->
+            val pageLabel = stringResource(R.string.bookmark_page, pageIndex + 1)
+            AndroidView(
+                modifier = Modifier.weight(1f).fillMaxSize()
+                    .semantics { contentDescription = pageLabel },
+                factory = { context -> PdfPageView(context) },
+                update = { view ->
+                    view.tool = ReaderTool.VIEW
+                    view.annotations = reader.annotations.pages[pageIndex].orEmpty()
+                    view.selectedAnnotationId = null
+                    view.highlighterAlpha = settings.highlighterStrength.alpha()
+                    view.pageFit = cz.teply.sheetset.settings.PageFit.PAGE
+                    view.setHalfPagePart(0)
+                    view.pageTurnTaps = settings.pageTurnTaps
+                    view.pageTurnSwipes = settings.pageTurnSwipes
+                    view.onPreviousPage = { actions.previousPage(ReaderLayout.TWO_PAGE) }
+                    view.onNextPage = { actions.nextPage(ReaderLayout.TWO_PAGE) }
+                    view.onPageClick = onToggleControls
+                    view.showPage(reader.file, pageIndex)
+                },
+            )
+        }
+        if (pages.size == 1) Box(Modifier.weight(1f).fillMaxSize())
+    }
+}
+
+@Composable
+private fun readerPositionText(reader: ReaderUiState, layout: ReaderLayout): String = when (layout) {
+    ReaderLayout.SINGLE -> stringResource(
+        R.string.page_position,
+        reader.pageIndex + 1,
+        reader.score.pageCount,
+    )
+    ReaderLayout.HALF -> stringResource(
+        R.string.half_page_position,
+        reader.pageIndex + 1,
+        stringResource(if (reader.pagePart == 0) R.string.page_top else R.string.page_bottom),
+        reader.score.pageCount,
+    )
+    ReaderLayout.TWO_PAGE -> {
+        val pages = spreadPages(
+            ReaderPosition(reader.scoreIndex, reader.pageIndex, reader.pagePart),
+            reader.score.pageCount,
+        )
+        if (pages.size == 1) {
+            stringResource(R.string.page_position, pages.single() + 1, reader.score.pageCount)
+        } else {
+            stringResource(
+                R.string.spread_position,
+                pages.first() + 1,
+                pages.last() + 1,
+                reader.score.pageCount,
+            )
+        }
+    }
+}
+
+@Composable
 private fun ReaderTopBar(title: String, onClose: () -> Unit, onExport: () -> Unit) {
     Surface(color = Color.Black.copy(alpha = 0.9f), contentColor = Color.White) {
         Row(
@@ -321,11 +432,17 @@ private fun ReaderTopBar(title: String, onClose: () -> Unit, onExport: () -> Uni
 private fun ReaderNavigationBar(
     reader: ReaderUiState,
     actions: SheetSetActions,
+    layout: ReaderLayout,
+    onPerformanceTools: () -> Unit,
     onAnnotate: () -> Unit,
 ) {
-    val previousEnabled = reader.pageIndex > 0 || reader.scoreIndex > 0
-    val nextEnabled = reader.pageIndex < reader.score.pageCount - 1 ||
-        reader.scoreIndex < reader.scoreIds.lastIndex
+    val previousEnabled = reader.scoreIndex > 0 || reader.pageIndex > 0 ||
+        (layout == ReaderLayout.HALF && reader.pagePart == 1)
+    val nextEnabled = reader.scoreIndex < reader.scoreIds.lastIndex || when (layout) {
+        ReaderLayout.SINGLE -> reader.pageIndex < reader.score.pageCount - 1
+        ReaderLayout.HALF -> reader.pagePart == 0 || reader.pageIndex < reader.score.pageCount - 1
+        ReaderLayout.TWO_PAGE -> reader.pageIndex - reader.pageIndex % 2 + 2 < reader.score.pageCount
+    }
     Surface(color = Color.Black.copy(alpha = 0.9f), contentColor = Color.White) {
         Row(
             Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp),
@@ -335,14 +452,10 @@ private fun ReaderNavigationBar(
                 stringResource(R.string.previous),
                 R.drawable.ic_chevron_left_24,
                 enabled = previousEnabled,
-                onClick = { actions.previousPage(ReaderLayout.SINGLE) },
+                onClick = { actions.previousPage(layout) },
             )
             Text(
-                stringResource(
-                    R.string.page_position,
-                    reader.pageIndex + 1,
-                    reader.score.pageCount,
-                ),
+                readerPositionText(reader, layout),
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
             )
@@ -350,7 +463,12 @@ private fun ReaderNavigationBar(
                 stringResource(R.string.next),
                 R.drawable.ic_chevron_right_24,
                 enabled = nextEnabled,
-                onClick = { actions.nextPage(ReaderLayout.SINGLE) },
+                onClick = { actions.nextPage(layout) },
+            )
+            ReaderControl(
+                stringResource(R.string.performance_tools),
+                R.drawable.ic_view_module_24,
+                onClick = onPerformanceTools,
             )
             ReaderControl(
                 stringResource(R.string.annotate),

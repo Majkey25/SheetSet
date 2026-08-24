@@ -11,6 +11,9 @@ data class ReaderPosition(
     val pagePart: Int = 0,
 )
 
+fun effectiveReaderLayout(layout: ReaderLayout, supportsTwoPage: Boolean): ReaderLayout =
+    if (layout == ReaderLayout.TWO_PAGE && !supportsTwoPage) ReaderLayout.SINGLE else layout
+
 fun pedalDirection(keyCode: Int, repeatCount: Int): PageDirection? {
     if (repeatCount != 0) return null
     return when (keyCode) {

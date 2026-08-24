@@ -23,10 +23,13 @@ import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
 import cz.teply.sheetset.pdf.DocumentAnnotations
+import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
 import org.junit.Rule
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -362,6 +365,81 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Straight line").assertIsNotSelected()
         composeRule.onNodeWithContentDescription("Straight line").performClick()
         composeRule.onNodeWithContentDescription("Straight line").assertIsSelected()
+    }
+
+    @Test
+    fun performanceToolsChangeLayoutAndJumpToBookmark() {
+        var settings by mutableStateOf(AppSettings())
+        var jumpedTo = -1
+        val score = Score(
+            "score-1",
+            "Song",
+            "score-1.pdf",
+            4,
+            1L,
+            bookmarks = listOf(cz.teply.sheetset.data.Bookmark("chorus", "Chorus", 2)),
+        )
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                        settings = settings,
+                    ),
+                    SheetSetActions(
+                        updateSettings = { settings = it },
+                        jumpToPage = { jumpedTo = it },
+                    ),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Performance tools").performClick()
+        composeRule.onNodeWithText("Single page").assertIsDisplayed()
+        composeRule.onNodeWithText("Half page").performClick()
+        composeRule.runOnIdle { assertEquals(ReaderLayout.HALF, settings.readerLayout) }
+        composeRule.onNodeWithText("Bookmarks").assertIsDisplayed()
+        composeRule.onNodeWithText("Chorus").performClick()
+        composeRule.runOnIdle { assertEquals(2, jumpedTo) }
+        composeRule.onAllNodesWithText("Two pages").assertCountEquals(0)
+    }
+
+    @Test
+    fun bookmarkCanBeAddedFromCurrentPage() {
+        var title = ""
+        val score = Score("score-1", "Song", "score-1.pdf", 4, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 1,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(catalog = LibraryCatalog(scores = listOf(score)), reader = reader),
+                    SheetSetActions(addBookmark = { title = it }),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Performance tools").performClick()
+        composeRule.onNodeWithText("Add bookmark").performClick()
+        composeRule.onNodeWithText("Bookmark title").performTextInput("Verse")
+        composeRule.onNodeWithText("Save").performClick()
+
+        composeRule.runOnIdle { assertEquals("Verse", title) }
     }
 
     @Test

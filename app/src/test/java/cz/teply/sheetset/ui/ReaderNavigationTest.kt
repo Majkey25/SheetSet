@@ -102,4 +102,20 @@ class ReaderNavigationTest {
         assertNull(pedalDirection(KeyEvent.KEYCODE_MEDIA_PLAY, 0))
         assertNull(pedalDirection(KeyEvent.KEYCODE_PAGE_DOWN, 1))
     }
+
+    @Test
+    fun `two page layout falls back only on compact windows`() {
+        assertEquals(
+            ReaderLayout.SINGLE,
+            effectiveReaderLayout(ReaderLayout.TWO_PAGE, supportsTwoPage = false),
+        )
+        assertEquals(
+            ReaderLayout.TWO_PAGE,
+            effectiveReaderLayout(ReaderLayout.TWO_PAGE, supportsTwoPage = true),
+        )
+        assertEquals(
+            ReaderLayout.HALF,
+            effectiveReaderLayout(ReaderLayout.HALF, supportsTwoPage = false),
+        )
+    }
 }
