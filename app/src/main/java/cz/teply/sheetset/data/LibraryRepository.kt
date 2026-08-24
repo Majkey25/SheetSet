@@ -17,6 +17,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
+import java.util.zip.ZipFile
 
 const val MAX_PDF_BYTES = 250L * 1024L * 1024L
 
@@ -77,8 +78,26 @@ class LibraryRepository(private val root: File) {
         }
     }
 
-    suspend fun restoreBackup(source: InputStream): BackupMetadata = withContext(Dispatchers.IO) {
-        mutex.withLock { restoreLibraryBackup(root, source) }
+    suspend fun restoreBackup(source: InputStream): BackupMetadata? = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val archive = stageBackup(source)
+            try {
+                if (isSheetSetBackup(archive)) {
+                    restoreLibraryBackup(root, archive.inputStream())
+                } else {
+                    val prepared = prepareScorePdfImport(root, loadCatalog(), archive)
+                    try {
+                        writeCatalog(prepared.catalog)
+                    } catch (error: Exception) {
+                        prepared.createdFiles.forEach(File::delete)
+                        throw error
+                    }
+                    null
+                }
+            } finally {
+                archive.delete()
+            }
+        }
     }
 
     suspend fun createSetlist(name: String): Setlist {
@@ -174,6 +193,38 @@ class LibraryRepository(private val root: File) {
 
     private fun writeCatalog(catalog: LibraryCatalog) {
         writeAtomic(catalogFile, CatalogJson.encode(catalog))
+    }
+
+    private fun stageBackup(source: InputStream): File {
+        val parent = root.parentFile ?: throw BackupException("Library has no parent directory")
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw BackupException("Could not create backup directory")
+        }
+        val archive = File.createTempFile("sheetset-backup-", ".zip", parent)
+        try {
+            FileOutputStream(archive).use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var copied = 0L
+                while (true) {
+                    val read = source.read(buffer)
+                    if (read < 0) break
+                    copied += read
+                    if (copied > MAX_BACKUP_BYTES) throw BackupException("Backup is too large")
+                    output.write(buffer, 0, read)
+                }
+                output.fd.sync()
+            }
+            return archive
+        } catch (error: Exception) {
+            archive.delete()
+            throw error
+        }
+    }
+
+    private fun isSheetSetBackup(archive: File): Boolean = try {
+        ZipFile(archive).use { zip -> zip.getEntry("manifest.json") != null }
+    } catch (error: Exception) {
+        throw BackupException("Backup is not a valid ZIP archive", error)
     }
 
     private suspend fun updateCatalog(

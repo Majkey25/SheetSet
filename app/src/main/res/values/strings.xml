@@ -124,8 +124,12 @@
     <string name="color_purple">Purple</string>
     <string name="color_pink">Pink</string>
     <string name="delete_annotation">Delete annotation</string>
-+    <string name="backup">Backup</string>
+    <string name="backup">Backup</string>
+    <string name="share_backup">Share backup</string>
+    <string name="share_backup_chooser">Share SheetSet backup</string>
     <string name="restore_backup">Restore backup</string>
-    <string name="restore_backup_message">Restoring replaces your current PDFs, setlists, annotations, and settings.</string>
+    <string name="restore_backup_message">A SheetSet backup replaces current PDFs, setlists, annotations, and settings. A ScorePDF backup is added without deleting the current library.</string>
     <string name="restore">Restore</string>
+    <string name="support_app">Support this app → Buy Me a Coffee</string>
+    <string name="support_app_notice">Thank you for supporting this app. This opens Buy Me a Coffee.</string>
 </resources>

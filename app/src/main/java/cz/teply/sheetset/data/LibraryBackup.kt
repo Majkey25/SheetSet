@@ -23,8 +23,8 @@ import java.util.zip.ZipOutputStream
 private const val BACKUP_FORMAT = "sheetset-backup"
 private const val BACKUP_VERSION = 1
 // ponytail: 1 GiB bounds untrusted ZIPs; raise after testing larger real libraries.
-private const val MAX_BACKUP_BYTES = 1L * 1024L * 1024L * 1024L
-private const val MAX_BACKUP_ENTRIES = 20_000
+internal const val MAX_BACKUP_BYTES = 1L * 1024L * 1024L * 1024L
+internal const val MAX_BACKUP_ENTRIES = 20_000
 private const val MAX_JSON_BYTES = 16L * 1024L * 1024L
 
 class BackupException(message: String, cause: Throwable? = null) : Exception(message, cause)

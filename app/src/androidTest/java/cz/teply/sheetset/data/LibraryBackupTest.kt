@@ -70,7 +70,9 @@ class LibraryBackupTest {
             source.createBackup(archive, settings, "cs")
 
             val restored = LibraryRepository(restoreRoot)
-            val metadata = restored.restoreBackup(ByteArrayInputStream(archive.toByteArray()))
+            val metadata = requireNotNull(
+                restored.restoreBackup(ByteArrayInputStream(archive.toByteArray())),
+            )
 
             assertEquals(source.load(), restored.load())
             assertEquals(annotations, restored.loadAnnotations(score.id))

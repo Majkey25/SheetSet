@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.test.espresso.Espresso
 import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
@@ -391,6 +392,35 @@ class SheetSetFlowTest {
         listOf("×", "⇩", "‹", "›", "✎", "▰", "⌫", "↶", "↷", "✓").forEach { glyph ->
             composeRule.onAllNodesWithText(glyph).assertCountEquals(0)
         }
+    }
+
+    @Test
+    fun systemBackClosesReader() {
+        var closed = false
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val reader = ReaderUiState(
+            score = score,
+            file = File("missing.pdf"),
+            scoreIds = listOf(score.id),
+            scoreIndex = 0,
+            pageIndex = 0,
+            annotations = DocumentAnnotations(),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(
+                        catalog = LibraryCatalog(scores = listOf(score)),
+                        reader = reader,
+                    ),
+                    SheetSetActions(closeReader = { closed = true }),
+                )
+            }
+        }
+
+        Espresso.pressBack()
+
+        composeRule.runOnIdle { assertTrue(closed) }
     }
 
     @Test

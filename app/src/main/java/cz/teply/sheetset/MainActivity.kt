@@ -1,5 +1,8 @@
 package cz.teply.sheetset
 
+import android.content.ClipData
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -49,6 +52,9 @@ class MainActivity : ComponentActivity() {
                                 AppLanguages.select(this@MainActivity, languageTag)
                             },
                             createBackup = viewModel::createBackup,
+                            shareBackup = {
+                                viewModel.createSharedBackup(::openBackupShareSheet)
+                            },
                             restoreBackup = viewModel::restoreBackup,
                         ),
                         windowLayout = WindowLayout.fromWidth(maxWidth),
@@ -56,5 +62,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun openBackupShareSheet(uri: Uri) {
+        val share = Intent(Intent.ACTION_SEND)
+            .setType("application/zip")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        share.clipData = ClipData.newUri(contentResolver, "SheetSet backup", uri)
+        startActivity(Intent.createChooser(share, getString(R.string.share_backup_chooser)))
     }
 }

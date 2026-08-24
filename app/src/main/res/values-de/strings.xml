@@ -124,8 +124,12 @@
     <string name="color_purple">Violett</string>
     <string name="color_pink">Rosa</string>
     <string name="delete_annotation">Annotation löschen</string>
-+    <string name="backup">Sicherung</string>
+    <string name="backup">Sicherung</string>
+    <string name="share_backup">Sicherung teilen</string>
+    <string name="share_backup_chooser">SheetSet-Sicherung teilen</string>
     <string name="restore_backup">Sicherung wiederherstellen</string>
-    <string name="restore_backup_message">Die Wiederherstellung ersetzt aktuelle PDFs, Setlists, Annotationen und Einstellungen.</string>
+    <string name="restore_backup_message">Eine SheetSet-Sicherung ersetzt aktuelle PDFs, Setlists, Annotationen und Einstellungen. Eine ScorePDF-Sicherung wird hinzugefügt, ohne die aktuelle Bibliothek zu löschen.</string>
     <string name="restore">Wiederherstellen</string>
+    <string name="support_app">Diese App unterstützen → Buy Me a Coffee</string>
+    <string name="support_app_notice">Danke für deine Unterstützung dieser App. Buy Me a Coffee wird geöffnet.</string>
 </resources>

@@ -5,6 +5,7 @@ import android.app.LocaleManager
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cz.teply.sheetset.data.LibraryRepository
@@ -27,6 +28,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.FileOutputStream
 
 class SheetSetViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = LibraryRepository(File(application.filesDir, "library"))
@@ -175,23 +177,66 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun createSharedBackup(onReady: (Uri) -> Unit) {
+        viewModelScope.launch {
+            mutableState.update { it.copy(loading = true, error = false) }
+            val application = getApplication<Application>()
+            val directory = File(application.cacheDir, "shared-backups")
+            val temporary = File(directory, ".SheetSet-Backup.tmp")
+            try {
+                if (!directory.exists() && !directory.mkdirs()) {
+                    throw IllegalStateException("Could not create share directory")
+                }
+                temporary.delete()
+                val locales = application.getSystemService(LocaleManager::class.java)
+                    .applicationLocales
+                val languageTag = if (locales.isEmpty) null else locales[0].language
+                FileOutputStream(temporary).use { output ->
+                    repository.createBackup(output, state.value.settings, languageTag)
+                }
+                val destination = File(directory, "SheetSet-Backup.zip")
+                if (destination.exists() && !destination.delete()) {
+                    throw IllegalStateException("Could not replace shared backup")
+                }
+                if (!temporary.renameTo(destination)) {
+                    throw IllegalStateException("Could not prepare shared backup")
+                }
+                val uri = FileProvider.getUriForFile(
+                    application,
+                    "${application.packageName}.files",
+                    destination,
+                )
+                mutableState.update { it.copy(loading = false) }
+                onReady(uri)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.update { it.copy(loading = false, error = true) }
+            } finally {
+                temporary.delete()
+            }
+        }
+    }
+
     fun restoreBackup(uri: Uri) {
         viewModelScope.launch {
             mutableState.update { it.copy(loading = true, error = false, reader = null) }
             try {
                 val application = getApplication<Application>()
-                val metadata = application.contentResolver.openInputStream(uri)?.use { input ->
-                    repository.restoreBackup(input)
-                } ?: throw FileNotFoundException(uri.toString())
-                settingsStore.save(metadata.settings)
+                val input = application.contentResolver.openInputStream(uri)
+                    ?: throw FileNotFoundException(uri.toString())
+                val metadata = input.use { backup -> repository.restoreBackup(backup) }
                 mutableState.update {
                     it.copy(
                         catalog = repository.load(),
                         loading = false,
-                        settings = metadata.settings,
+                        settings = metadata?.settings ?: it.settings,
                     )
                 }
-                AppLanguages.select(application, metadata.languageTag)
+                metadata?.let {
+                    settingsStore.save(it.settings)
+                    AppLanguages.select(application, it.languageTag)
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {

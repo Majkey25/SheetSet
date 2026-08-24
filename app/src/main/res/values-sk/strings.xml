@@ -128,8 +128,12 @@
     <string name="color_purple">Fialová</string>
     <string name="color_pink">Ružová</string>
     <string name="delete_annotation">Odstrániť anotáciu</string>
-+    <string name="backup">Záloha</string>
+    <string name="backup">Záloha</string>
+    <string name="share_backup">Zdieľať zálohu</string>
+    <string name="share_backup_chooser">Zdieľať zálohu SheetSet</string>
     <string name="restore_backup">Obnoviť zálohu</string>
-    <string name="restore_backup_message">Obnova nahradí aktuálne PDF, setlisty, anotácie a nastavenia.</string>
+    <string name="restore_backup_message">Záloha SheetSet nahradí aktuálne PDF, setlisty, anotácie a nastavenia. Záloha ScorePDF sa pridá bez vymazania aktuálnej knižnice.</string>
     <string name="restore">Obnoviť</string>
+    <string name="support_app">Podporiť túto aplikáciu → Buy Me a Coffee</string>
+    <string name="support_app_notice">Ďakujeme za podporu tejto aplikácie. Otvára sa Buy Me a Coffee.</string>
 </resources>

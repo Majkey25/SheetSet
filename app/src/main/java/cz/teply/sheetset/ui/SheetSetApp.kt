@@ -3,6 +3,7 @@ package cz.teply.sheetset.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -83,6 +84,7 @@ data class SheetSetActions(
     val updateSettings: (AppSettings) -> Unit = {},
     val selectLanguage: (String?) -> Unit = {},
     val createBackup: (Uri) -> Unit = {},
+    val shareBackup: () -> Unit = {},
     val restoreBackup: (Uri) -> Unit = {},
 )
 
@@ -124,6 +126,14 @@ fun SheetSetApp(
         if (state.error) snackbarHost.showSnackbar(errorMessage)
     }
 
+    BackHandler {
+        when {
+            drawerState.isOpen -> scope.launch { drawerState.close() }
+            state.reader != null -> actions.closeReader()
+            activeSetlistId != null -> activeSetlistId = null
+        }
+    }
+
     state.reader?.let { reader ->
         ReaderScreen(reader, state.settings, windowLayout, actions)
         return
@@ -151,6 +161,7 @@ fun SheetSetApp(
         onSettings = actions.updateSettings,
         onLanguage = actions.selectLanguage,
         onBackup = { backupLauncher.launch("SheetSet-Backup.zip") },
+        onShareBackup = actions.shareBackup,
         onRestore = {
             restoreLauncher.launch(
                 arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"),

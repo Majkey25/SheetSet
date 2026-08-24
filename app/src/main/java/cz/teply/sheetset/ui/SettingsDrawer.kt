@@ -5,8 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,15 +17,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,7 +50,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -70,6 +79,7 @@ fun SettingsDrawer(
     onSettings: (AppSettings) -> Unit,
     onLanguage: (String?) -> Unit,
     onBackup: () -> Unit,
+    onShareBackup: () -> Unit,
     onRestore: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -99,6 +109,7 @@ fun SettingsDrawer(
                         },
                         onScreen = { screen = it },
                         onBackup = onBackup,
+                        onShareBackup = onShareBackup,
                         onRestore = onRestore,
                     )
                     DrawerScreen.LANGUAGE -> LanguageSettings(
@@ -121,6 +132,11 @@ fun SettingsDrawer(
         },
         content = content,
     )
+    BackHandler(
+        enabled = drawerState.currentValue == DrawerValue.Open && screen != DrawerScreen.MENU,
+    ) {
+        screen = DrawerScreen.MENU
+    }
 }
 
 @Composable
@@ -129,6 +145,7 @@ private fun DrawerMenu(
     onDestination: (AppDestination) -> Unit,
     onScreen: (DrawerScreen) -> Unit,
     onBackup: () -> Unit,
+    onShareBackup: () -> Unit,
     onRestore: () -> Unit,
 ) {
     Column(
@@ -163,6 +180,7 @@ private fun DrawerMenu(
             onScreen(DrawerScreen.ANNOTATIONS)
         }
         DrawerSection(R.string.backup, R.drawable.ic_download_24, onClick = onBackup)
+        DrawerSection(R.string.share_backup, R.drawable.ic_share_24, onClick = onShareBackup)
         DrawerSection(R.string.restore_backup, R.drawable.ic_upload_file_24, onClick = onRestore)
         DrawerSection(R.string.about, R.drawable.ic_info_24) {
             onScreen(DrawerScreen.ABOUT)
@@ -285,6 +303,8 @@ private fun AnnotationSettings(
 @Composable
 private fun AboutSettings(onBack: () -> Unit) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val supportNotice = stringResource(R.string.support_app_notice)
     val version = remember(context) {
         context.packageManager.getPackageInfo(
             context.packageName,
@@ -301,6 +321,27 @@ private fun AboutSettings(onBack: () -> Unit) {
         LinkRow(R.string.license, "$REPOSITORY_URL/blob/main/LICENSE", context)
         LinkRow(R.string.github_repository, REPOSITORY_URL, context)
         LinkRow(R.string.release_page, "$REPOSITORY_URL/releases", context)
+        Button(
+            onClick = {
+                Toast.makeText(context, supportNotice, Toast.LENGTH_SHORT).show()
+                runCatching { uriHandler.openUri(SUPPORT_URL) }
+            },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                .fillMaxWidth().heightIn(min = 56.dp),
+            border = BorderStroke(1.dp, Color(0xFF111111)),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFFDD00),
+                contentColor = Color(0xFF111111),
+            ),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_coffee),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(stringResource(R.string.support_app))
+        }
     }
 }
 
@@ -380,3 +421,4 @@ private fun openUrl(context: Context, url: String) {
 }
 
 private const val REPOSITORY_URL = "https://github.com/Majkey25/SheetSet"
+private const val SUPPORT_URL = "https://www.buymeacoffee.com/majkey"

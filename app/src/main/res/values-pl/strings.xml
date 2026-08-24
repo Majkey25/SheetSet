@@ -128,8 +128,12 @@
     <string name="color_purple">Fioletowy</string>
     <string name="color_pink">Różowy</string>
     <string name="delete_annotation">Usuń adnotację</string>
-+    <string name="backup">Kopia zapasowa</string>
+    <string name="backup">Kopia zapasowa</string>
+    <string name="share_backup">Udostępnij kopię</string>
+    <string name="share_backup_chooser">Udostępnij kopię SheetSet</string>
     <string name="restore_backup">Przywróć kopię</string>
-    <string name="restore_backup_message">Przywracanie zastąpi bieżące pliki PDF, setlisty, adnotacje i ustawienia.</string>
+    <string name="restore_backup_message">Kopia SheetSet zastąpi bieżące pliki PDF, setlisty, adnotacje i ustawienia. Kopia ScorePDF zostanie dodana bez usuwania bieżącej biblioteki.</string>
     <string name="restore">Przywróć</string>
+    <string name="support_app">Wesprzyj tę aplikację → Buy Me a Coffee</string>
+    <string name="support_app_notice">Dziękujemy za wsparcie tej aplikacji. Otwiera się Buy Me a Coffee.</string>
 </resources>
