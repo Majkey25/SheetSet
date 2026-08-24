@@ -16,7 +16,6 @@ class SettingsStore(private val preferences: SharedPreferences) {
             highlighterStrength = preferences.enum("highlighter_strength", defaults.highlighterStrength),
             textSize = preferences.enum("text_size", defaults.textSize),
             readerLayout = preferences.enum("reader_layout", defaults.readerLayout),
-            autoScrollSpeed = preferences.enum("auto_scroll_speed", defaults.autoScrollSpeed),
         )
     }
 
@@ -32,7 +31,6 @@ class SettingsStore(private val preferences: SharedPreferences) {
             .putString("highlighter_strength", settings.highlighterStrength.name)
             .putString("text_size", settings.textSize.name)
             .putString("reader_layout", settings.readerLayout.name)
-            .putString("auto_scroll_speed", settings.autoScrollSpeed.name)
             .apply()
     }
 }

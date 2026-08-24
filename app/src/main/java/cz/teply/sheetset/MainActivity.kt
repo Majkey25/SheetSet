@@ -4,10 +4,10 @@ import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -17,7 +17,7 @@ import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
 import cz.teply.sheetset.ui.WindowLayout
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val viewModel by viewModels<SheetSetViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -49,8 +49,7 @@
     <string name="pen">Stift</string>
     <string name="highlighter">Textmarker</string>
     <string name="eraser">Radierer</string>
-    <string name="draw_tools">Zeichnen</string>
-    <string name="add_tools">Einfügen</string>
+    <string name="more_tools">Weitere Werkzeuge</string>
     <string name="straight_line">Gerade Linie</string>
     <string name="stroke_width">Strichstärke</string>
     <string name="decrease_stroke_width">Strichstärke verringern</string>
@@ -73,7 +72,7 @@
 +    <string name="language">Sprache</string>
     <string name="reader_settings">Reader</string>
     <string name="annotation_defaults">Annotationsvorgaben</string>
-    <string name="about">Über die App</string>
+    <string name="about">App-Details</string>
     <string name="device_language">Gerätesprache</string>
     <string name="language_english">English</string>
     <string name="language_czech">Čeština</string>
@@ -100,8 +99,9 @@
     <string name="light">Leicht</string>
     <string name="strong">Stark</string>
     <string name="app_version">Version</string>
-    <string name="android_requirement">Erfordert Android 13 oder neuer</string>
+    <string name="android_requirement">Erfordert Android 10 oder neuer</string>
     <string name="privacy_offline">Offline. Kein Konto und keine Datenerfassung.</string>
+    <string name="privacy_policy">Datenschutzerklärung</string>
     <string name="license">Lizenz</string>
     <string name="github_repository">GitHub-Repository</string>
     <string name="release_page">Releases</string>
@@ -146,14 +146,6 @@
     <string name="page_bottom">unten</string>
     <string name="half_page_position">%1$d %2$s / %3$d</string>
     <string name="spread_position">%1$d–%2$d / %3$d</string>
-    <string name="automatic_scrolling">Automatisches Scrollen</string>
-    <string name="start">Starten</string>
-    <string name="pause">Pausieren</string>
-    <string name="resume">Fortsetzen</string>
-    <string name="stop">Stoppen</string>
-    <string name="scroll_speed">Scrollgeschwindigkeit</string>
-    <string name="slow">Langsam</string>
-    <string name="fast">Schnell</string>
     <string name="sort_state">Sortierung: %1$s</string>
     <string name="sort_title">Titel</string>
     <string name="sort_imported">Importiert</string>

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Replaced the expanded color strip and Draw/Add mode switchers with one color control, direct core tools, and a compact More tools dialog.
+- Added Single, Half, and Two-page defaults to the main Reader settings page.
+- Lowered the minimum version to Android 10 and moved per-app language handling to the AndroidX compatibility path.
+
+### Removed
+
+- Removed automatic scrolling and its speed setting to keep reader controls focused on manual and pedal page turns.
+
 ## [0.4.0-alpha.1] - 2026-08-24
 
 ### Added

@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +43,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,7 +53,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -81,8 +80,6 @@ import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.ReaderDefaultTool
 import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.settings.ToolSize
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import java.util.UUID
 import kotlinx.coroutines.delay
 
@@ -104,18 +101,15 @@ fun ReaderScreen(
     var textBounds by remember { mutableStateOf<cz.teply.sheetset.pdf.NormalizedRect?>(null) }
     var textDraft by remember { mutableStateOf("") }
     var performanceTools by remember { mutableStateOf(false) }
-    var autoScrollState by remember(reader.score.id) { mutableStateOf(AutoScrollState.STOPPED) }
-    var activePageView by remember { mutableStateOf<PdfPageView?>(null) }
     var history by remember(reader.score.id, reader.pageIndex) {
         mutableStateOf(AnnotationHistory(reader.annotations.pages[reader.pageIndex].orEmpty()))
     }
     val platformView = LocalView.current
-    val density = LocalDensity.current.density
     val readerFocusRequester = remember { FocusRequester() }
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri -> uri?.let(actions.exportPdf) }
-    val effectiveLayout = if (tool != ReaderTool.VIEW || autoScrollState != AutoScrollState.STOPPED) {
+    val effectiveLayout = if (tool != ReaderTool.VIEW) {
         ReaderLayout.SINGLE
     } else {
         effectiveReaderLayout(settings.readerLayout, windowLayout != WindowLayout.COMPACT)
@@ -125,9 +119,6 @@ fun ReaderScreen(
         val previous = platformView.keepScreenOn
         platformView.keepScreenOn = settings.keepScreenAwake
         onDispose { platformView.keepScreenOn = previous }
-    }
-    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
-        autoScrollState = AutoScrollState.STOPPED
     }
     LaunchedEffect(reader.score.id, reader.pageIndex) {
         selectedAnnotationId = null
@@ -139,29 +130,6 @@ fun ReaderScreen(
         if (autoHideRequest > 0 && settings.autoHideControls) {
             delay(1_500)
             if (tool == ReaderTool.VIEW && controlsVisible) controlsVisible = false
-        }
-    }
-    LaunchedEffect(
-        autoScrollState,
-        activePageView,
-        reader.score.id,
-        reader.pageIndex,
-        settings.autoScrollSpeed,
-    ) {
-        val view = activePageView ?: return@LaunchedEffect
-        if (autoScrollState != AutoScrollState.RUNNING) return@LaunchedEffect
-        var previousFrame = withFrameNanos { it }
-        while (autoScrollState == AutoScrollState.RUNNING) {
-            val frame = withFrameNanos { it }
-            val elapsedMillis = ((frame - previousFrame) / 1_000_000L).coerceAtLeast(0)
-            previousFrame = frame
-            if (view.scrollByPixels(autoScrollPixels(settings.autoScrollSpeed, elapsedMillis, density))) {
-                val hasNext = reader.pageIndex < reader.score.pageCount - 1 ||
-                    reader.scoreIndex < reader.scoreIds.lastIndex
-                if (hasNext) actions.nextPage(ReaderLayout.SINGLE)
-                else autoScrollState = AutoScrollState.STOPPED
-                break
-            }
         }
     }
 
@@ -182,12 +150,10 @@ fun ReaderScreen(
             } else {
                 when (pedalDirection(event.nativeKeyEvent.keyCode, event.nativeKeyEvent.repeatCount)) {
                     PageDirection.PREVIOUS -> {
-                        autoScrollState = AutoScrollState.STOPPED
                         actions.previousPage(effectiveLayout)
                         true
                     }
                     PageDirection.NEXT -> {
-                        autoScrollState = AutoScrollState.STOPPED
                         actions.nextPage(effectiveLayout)
                         true
                     }
@@ -209,7 +175,7 @@ fun ReaderScreen(
         } else {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
-                factory = { context -> PdfPageView(context).also { activePageView = it } },
+                factory = ::PdfPageView,
                 update = { view ->
                 view.contentDescription = view.context.getString(
                     R.string.pdf_page,
@@ -226,10 +192,7 @@ fun ReaderScreen(
                 view.straightLine = straightLine
                 view.textSize = settings.textSize
                 view.highlighterAlpha = settings.highlighterStrength.alpha()
-                view.pageFit = if (
-                    effectiveLayout == ReaderLayout.HALF ||
-                    autoScrollState != AutoScrollState.STOPPED
-                ) {
+                view.pageFit = if (effectiveLayout == ReaderLayout.HALF) {
                     cz.teply.sheetset.settings.PageFit.WIDTH
                 } else {
                     settings.pageFit
@@ -238,11 +201,9 @@ fun ReaderScreen(
                 view.pageTurnTaps = settings.pageTurnTaps
                 view.pageTurnSwipes = settings.pageTurnSwipes
                 view.onPreviousPage = {
-                    autoScrollState = AutoScrollState.STOPPED
                     actions.previousPage(effectiveLayout)
                 }
                 view.onNextPage = {
-                    autoScrollState = AutoScrollState.STOPPED
                     actions.nextPage(effectiveLayout)
                 }
                 view.onPageClick = {
@@ -272,7 +233,6 @@ fun ReaderScreen(
                         ),
                     )
                 }
-                view.onRenderError = { autoScrollState = AutoScrollState.STOPPED }
                 view.showPage(reader.file, reader.pageIndex)
                 },
             )
@@ -304,22 +264,12 @@ fun ReaderScreen(
                 ReaderNavigationBar(
                     reader = reader,
                     layout = effectiveLayout,
-                    onPrevious = {
-                        autoScrollState = AutoScrollState.STOPPED
-                        actions.previousPage(effectiveLayout)
-                    },
-                    onNext = {
-                        autoScrollState = AutoScrollState.STOPPED
-                        actions.nextPage(effectiveLayout)
-                    },
+                    onPrevious = { actions.previousPage(effectiveLayout) },
+                    onNext = { actions.nextPage(effectiveLayout) },
                     onPerformanceTools = {
-                        if (autoScrollState == AutoScrollState.RUNNING) {
-                            autoScrollState = AutoScrollState.PAUSED
-                        }
                         performanceTools = true
                     },
                 ) {
-                    autoScrollState = AutoScrollState.STOPPED
                     val initialTool = settings.defaultTool.editorTool()
                     tool = initialTool
                     if (initialTool == ReaderTool.HIGHLIGHTER && color == AnnotationColor.BLACK) {
@@ -375,9 +325,7 @@ fun ReaderScreen(
             reader = reader,
             settings = settings,
             windowLayout = windowLayout,
-            autoScrollState = autoScrollState,
             onSettings = actions.updateSettings,
-            onAutoScrollState = { autoScrollState = it },
             onJump = actions.jumpToPage,
             onAddBookmark = actions.addBookmark,
             onRenameBookmark = actions.renameBookmark,
@@ -575,16 +523,19 @@ private data class ToolDefinition(
     @param:DrawableRes val icon: Int,
 )
 
-private enum class EditorGroup { DRAW, ADD }
-
 private val drawTools = listOf(
     ToolDefinition(ReaderTool.PEN, R.string.pen, R.drawable.ic_edit_24),
     ToolDefinition(ReaderTool.HIGHLIGHTER, R.string.highlighter, R.drawable.ic_highlighter_24),
     ToolDefinition(ReaderTool.ERASER, R.string.eraser, R.drawable.ic_eraser_24),
 )
 
-private val addTools = listOf(
-    ToolDefinition(ReaderTool.SELECT, R.string.select, R.drawable.ic_select_24),
+private val primaryTools = drawTools + ToolDefinition(
+    ReaderTool.SELECT,
+    R.string.select,
+    R.drawable.ic_select_24,
+)
+
+private val moreTools = listOf(
     ToolDefinition(ReaderTool.UNDERLINE, R.string.underline, R.drawable.ic_underline_24),
     ToolDefinition(ReaderTool.STRIKE_THROUGH, R.string.strike_through, R.drawable.ic_strikethrough_24),
     ToolDefinition(ReaderTool.TEXT_BOX, R.string.text_box, R.drawable.ic_text_fields_24),
@@ -592,12 +543,6 @@ private val addTools = listOf(
     ToolDefinition(ReaderTool.ARROW, R.string.arrow, R.drawable.ic_arrow_forward_24),
     ToolDefinition(ReaderTool.RECTANGLE, R.string.rectangle, R.drawable.ic_rectangle_24),
     ToolDefinition(ReaderTool.ELLIPSE, R.string.ellipse, R.drawable.ic_ellipse_24),
-)
-
-private val drawToolKinds = setOf(
-    ReaderTool.PEN,
-    ReaderTool.HIGHLIGHTER,
-    ReaderTool.ERASER,
 )
 
 private val annotationColors = listOf(
@@ -629,6 +574,8 @@ private fun AnnotationPalette(
     onRedo: () -> Unit,
     onDone: () -> Unit,
 ) {
+    var colorPickerOpen by remember { mutableStateOf(false) }
+    var moreToolsOpen by remember { mutableStateOf(false) }
     Surface(color = Color.Black.copy(alpha = 0.92f), contentColor = Color.White) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
             val horizontalPadding = if (expandedLayout) 48.dp else 0.dp
@@ -643,7 +590,7 @@ private fun AnnotationPalette(
                 onNext = { actions.nextPage(ReaderLayout.SINGLE) },
                 onWidth = { actions.updateSettings(settings.copy(penWidth = it)) },
                 onStraightLine = onStraightLine,
-                onColor = onColor,
+                onColor = { colorPickerOpen = true },
             )
             HorizontalDivider(color = Color.White.copy(alpha = 0.14f))
             AnnotationToolsRow(
@@ -655,8 +602,29 @@ private fun AnnotationPalette(
                 onUndo = onUndo,
                 onRedo = onRedo,
                 onDone = onDone,
+                onMoreTools = { moreToolsOpen = true },
             )
         }
+    }
+    if (colorPickerOpen) {
+        ColorPickerDialog(
+            selected = color,
+            onColor = {
+                onColor(it)
+                colorPickerOpen = false
+            },
+            onDismiss = { colorPickerOpen = false },
+        )
+    }
+    if (moreToolsOpen) {
+        MoreToolsDialog(
+            selected = tool,
+            onTool = {
+                onTool(it)
+                moreToolsOpen = false
+            },
+            onDismiss = { moreToolsOpen = false },
+        )
     }
 }
 
@@ -672,7 +640,7 @@ private fun AnnotationSettingsRow(
     onNext: () -> Unit,
     onWidth: (ToolSize) -> Unit,
     onStraightLine: () -> Unit,
-    onColor: (AnnotationColor) -> Unit,
+    onColor: () -> Unit,
 ) {
     val previousEnabled = reader.pageIndex > 0 || reader.scoreIndex > 0
     val nextEnabled = reader.pageIndex < reader.score.pageCount - 1 ||
@@ -720,14 +688,11 @@ private fun AnnotationSettingsRow(
                 enabled = tool == ReaderTool.PEN || tool == ReaderTool.HIGHLIGHTER,
                 onClick = onStraightLine,
             )
-            annotationColors.forEach { (option, label) ->
-                AnnotationColorControl(
-                    color = option,
-                    label = stringResource(label),
-                    selected = color == option,
-                    onClick = { onColor(option) },
-                )
-            }
+            CurrentColorControl(
+                color = color,
+                colorName = stringResource(annotationColors.first { it.first == color }.second),
+                onClick = onColor,
+            )
         }
         ReaderControl(
             stringResource(R.string.next),
@@ -748,42 +713,38 @@ private fun AnnotationToolsRow(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDone: () -> Unit,
+    onMoreTools: () -> Unit,
 ) {
-    val group = tool.editorGroup()
     Row(
         Modifier.fillMaxWidth().padding(horizontal = horizontalPadding).height(56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ReaderControl(
-            stringResource(R.string.draw_tools),
-            R.drawable.ic_edit_24,
-            selected = group == EditorGroup.DRAW,
-        ) { onTool(ReaderTool.PEN) }
-        ReaderControl(
-            stringResource(R.string.add_tools),
-            R.drawable.ic_rectangle_24,
-            selected = group == EditorGroup.ADD,
-        ) { onTool(ReaderTool.SELECT) }
         Row(
             Modifier.weight(1f).padding(start = 4.dp).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val tools = if (group == EditorGroup.DRAW) drawTools else addTools
-            tools.forEach { definition ->
+            primaryTools.forEach { definition ->
                 ReaderControl(
                     label = stringResource(definition.label),
                     icon = definition.icon,
                     selected = tool == definition.tool,
                 ) { onTool(definition.tool) }
             }
-            if (selectedAnnotationId != null) {
-                ReaderControl(
-                    stringResource(R.string.delete_annotation),
-                    R.drawable.ic_delete_24,
-                    onClick = onDelete,
-                )
-            }
+        }
+        if (selectedAnnotationId == null) {
+            ReaderControl(
+                stringResource(R.string.more_tools),
+                R.drawable.ic_more_vert_24,
+                selected = moreTools.any { it.tool == tool },
+                onClick = onMoreTools,
+            )
+        } else {
+            ReaderControl(
+                stringResource(R.string.delete_annotation),
+                R.drawable.ic_delete_24,
+                onClick = onDelete,
+            )
         }
         ReaderControl(stringResource(R.string.undo), R.drawable.ic_undo_24, onClick = onUndo)
         ReaderControl(stringResource(R.string.redo), R.drawable.ic_redo_24, onClick = onRedo)
@@ -792,28 +753,123 @@ private fun AnnotationToolsRow(
 }
 
 @Composable
-private fun AnnotationColorControl(
+private fun CurrentColorControl(
     color: AnnotationColor,
-    label: String,
-    selected: Boolean,
+    colorName: String,
     onClick: () -> Unit,
 ) {
+    val label = stringResource(R.string.color)
     IconButton(
         modifier = Modifier.size(48.dp).semantics {
             contentDescription = label
-            this.selected = selected
+            stateDescription = colorName
         },
         onClick = onClick,
     ) {
         Canvas(Modifier.size(28.dp)) {
             drawCircle(color.composeColor(), radius = 10.dp.toPx())
             drawCircle(
-                Color.White.copy(alpha = if (selected) 1f else 0.45f),
-                radius = if (selected) 13.dp.toPx() else 11.dp.toPx(),
-                style = Stroke(width = if (selected) 2.dp.toPx() else 1.dp.toPx()),
+                Color.White,
+                radius = 13.dp.toPx(),
+                style = Stroke(width = 2.dp.toPx()),
             )
         }
     }
+}
+
+@Composable
+private fun ColorPickerDialog(
+    selected: AnnotationColor,
+    onColor: (AnnotationColor) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.color)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                annotationColors.chunked(4).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        row.forEach { (color, label) ->
+                            ColorOption(
+                                color = color,
+                                label = stringResource(label),
+                                selected = selected == color,
+                                onClick = { onColor(color) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun ColorOption(
+    color: AnnotationColor,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val selectedOutline = MaterialTheme.colorScheme.onSurface
+    IconButton(
+        modifier = Modifier.size(56.dp).semantics {
+            contentDescription = label
+            this.selected = selected
+        },
+        onClick = onClick,
+    ) {
+        Canvas(Modifier.size(36.dp)) {
+            drawCircle(color.composeColor(), radius = 13.dp.toPx())
+            drawCircle(
+                if (selected) selectedOutline else Color.Gray,
+                radius = if (selected) 17.dp.toPx() else 15.dp.toPx(),
+                style = Stroke(width = if (selected) 3.dp.toPx() else 1.dp.toPx()),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoreToolsDialog(
+    selected: ReaderTool,
+    onTool: (ReaderTool) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.more_tools)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                moreTools.forEach { definition ->
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            this.selected = selected == definition.tool
+                        },
+                        onClick = { onTool(definition.tool) },
+                    ) {
+                        Icon(
+                            painter = painterResource(definition.icon),
+                            contentDescription = stringResource(definition.label),
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Text(
+                            stringResource(definition.label),
+                            modifier = Modifier.weight(1f).padding(start = 16.dp),
+                            textAlign = TextAlign.Start,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 private fun AnnotationColor.composeColor(): Color = when (this) {
@@ -866,9 +922,6 @@ private fun ReaderDefaultTool.editorTool(): ReaderTool = when (this) {
     ReaderDefaultTool.PEN -> ReaderTool.PEN
     ReaderDefaultTool.HIGHLIGHTER -> ReaderTool.HIGHLIGHTER
 }
-
-private fun ReaderTool.editorGroup(): EditorGroup =
-    if (this in drawToolKinds) EditorGroup.DRAW else EditorGroup.ADD
 
 private fun ToolSize.previous(): ToolSize = ToolSize.entries[(ordinal - 1).coerceAtLeast(0)]
 

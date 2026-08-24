@@ -9,7 +9,6 @@ import cz.teply.sheetset.pdf.InkAnnotation
 import cz.teply.sheetset.pdf.InkKind
 import cz.teply.sheetset.pdf.NormalizedPoint
 import cz.teply.sheetset.settings.AppSettings
-import cz.teply.sheetset.settings.AutoScrollSpeed
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderLayout
 import kotlinx.coroutines.runBlocking
@@ -73,7 +72,6 @@ class LibraryBackupTest {
                 pageFit = PageFit.WIDTH,
                 pageTurnTaps = false,
                 readerLayout = ReaderLayout.HALF,
-                autoScrollSpeed = AutoScrollSpeed.FAST,
             )
             val archive = ByteArrayOutputStream()
             source.createBackup(archive, settings, "cs")
@@ -127,7 +125,7 @@ class LibraryBackupTest {
             val archive = ByteArrayOutputStream()
             source.createBackup(
                 archive,
-                AppSettings(readerLayout = ReaderLayout.HALF, autoScrollSpeed = AutoScrollSpeed.FAST),
+                AppSettings(readerLayout = ReaderLayout.HALF),
                 null,
             )
 
@@ -136,7 +134,6 @@ class LibraryBackupTest {
             )
 
             assertEquals(ReaderLayout.SINGLE, requireNotNull(restored).settings.readerLayout)
-            assertEquals(AutoScrollSpeed.MEDIUM, restored.settings.autoScrollSpeed)
             pdf.delete()
         }
     }
@@ -152,8 +149,6 @@ class LibraryBackupTest {
                         manifest.put("version", 1)
                         manifest.getJSONObject("settings")
                             .remove("readerLayout")
-                        manifest.getJSONObject("settings")
-                            .remove("autoScrollSpeed")
                         zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
                     } else {
                         input.copyTo(zip)

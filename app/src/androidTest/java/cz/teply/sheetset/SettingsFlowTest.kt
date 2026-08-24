@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.espresso.Espresso
 import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
@@ -51,7 +52,7 @@ class SettingsFlowTest {
             "Backup",
             "Share backup",
             "Restore backup",
-            "About",
+            "App details",
         ).forEach { label ->
             composeRule.onNodeWithText(label).assertIsDisplayed()
         }
@@ -59,6 +60,9 @@ class SettingsFlowTest {
         composeRule.onNodeWithText("Reader").performClick()
         composeRule.onNodeWithText("Keep screen awake").performClick()
         composeRule.runOnIdle { assertFalse(settings.keepScreenAwake) }
+        composeRule.onNodeWithText("Page layout").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Half page").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(ReaderLayout.HALF, settings.readerLayout) }
 
         composeRule.onNodeWithContentDescription("Back").performClick()
         composeRule.onNodeWithText("Language").performClick()
@@ -70,8 +74,9 @@ class SettingsFlowTest {
         composeRule.onNodeWithText("Pen width").assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("Back").performClick()
-        composeRule.onNodeWithText("About").performClick()
+        composeRule.onNodeWithText("App details").performClick()
         composeRule.onNodeWithText("Version").assertIsDisplayed()
+        composeRule.onNodeWithText("Privacy policy").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Support this app → Buy Me a Coffee")
             .performScrollTo()
             .assertIsDisplayed()

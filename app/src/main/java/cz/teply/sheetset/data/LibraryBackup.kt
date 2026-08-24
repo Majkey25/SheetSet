@@ -4,7 +4,6 @@ import cz.teply.sheetset.pdf.AnnotationJson
 import cz.teply.sheetset.settings.AnnotationTextSize
 import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.AppSettings
-import cz.teply.sheetset.settings.AutoScrollSpeed
 import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderDefaultTool
@@ -241,7 +240,6 @@ private fun AppSettings.toJson(): JSONObject = JSONObject()
     .put("highlighterStrength", highlighterStrength.name)
     .put("textSize", textSize.name)
     .put("readerLayout", readerLayout.name)
-    .put("autoScrollSpeed", autoScrollSpeed.name)
 
 private fun JSONObject.toSettings(version: Int): AppSettings = try {
     val defaults = AppSettings()
@@ -259,11 +257,6 @@ private fun JSONObject.toSettings(version: Int): AppSettings = try {
             ReaderLayout.valueOf(getString("readerLayout"))
         } else {
             defaults.readerLayout
-        },
-        autoScrollSpeed = if (version >= 2) {
-            AutoScrollSpeed.valueOf(getString("autoScrollSpeed"))
-        } else {
-            defaults.autoScrollSpeed
         },
     )
 } catch (error: Exception) {
