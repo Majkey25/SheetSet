@@ -49,8 +49,7 @@
     <string name="pen">Pero</string>
     <string name="highlighter">Zvýrazňovač</string>
     <string name="eraser">Guma</string>
-    <string name="draw_tools">Kreslení</string>
-    <string name="add_tools">Vkládání</string>
+    <string name="more_tools">Další nástroje</string>
     <string name="straight_line">Rovná čára</string>
     <string name="stroke_width">Tloušťka tahu</string>
     <string name="decrease_stroke_width">Zmenšit tloušťku tahu</string>
@@ -77,7 +76,7 @@
 +    <string name="language">Jazyk</string>
     <string name="reader_settings">Čtečka</string>
     <string name="annotation_defaults">Výchozí anotace</string>
-    <string name="about">O aplikaci</string>
+    <string name="about">Podrobnosti aplikace</string>
     <string name="device_language">Jazyk zařízení</string>
     <string name="language_english">English</string>
     <string name="language_czech">Čeština</string>
@@ -104,8 +103,9 @@
     <string name="light">Nízké</string>
     <string name="strong">Vysoké</string>
     <string name="app_version">Verze</string>
-    <string name="android_requirement">Vyžaduje Android 13 nebo novější</string>
+    <string name="android_requirement">Vyžaduje Android 10 nebo novější</string>
     <string name="privacy_offline">Offline. Bez účtu a sběru dat.</string>
+    <string name="privacy_policy">Zásady ochrany soukromí</string>
     <string name="license">Licence</string>
     <string name="github_repository">GitHub repozitář</string>
     <string name="release_page">Vydání</string>
@@ -150,14 +150,6 @@
     <string name="page_bottom">dolní</string>
     <string name="half_page_position">%1$d %2$s / %3$d</string>
     <string name="spread_position">%1$d–%2$d / %3$d</string>
-    <string name="automatic_scrolling">Automatické posouvání</string>
-    <string name="start">Spustit</string>
-    <string name="pause">Pozastavit</string>
-    <string name="resume">Pokračovat</string>
-    <string name="stop">Zastavit</string>
-    <string name="scroll_speed">Rychlost posouvání</string>
-    <string name="slow">Pomalu</string>
-    <string name="fast">Rychle</string>
     <string name="sort_state">Řazení: %1$s</string>
     <string name="sort_title">Název</string>
     <string name="sort_imported">Importováno</string>

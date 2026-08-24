@@ -31,7 +31,6 @@ import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
-import cz.teply.sheetset.ui.AutoScrollState
 import cz.teply.sheetset.ui.PerformanceToolsSheet
 import cz.teply.sheetset.ui.WindowLayout
 import org.junit.Rule
@@ -411,9 +410,20 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Annotate").performClick()
 
         listOf(
-            "Draw",
-            "Add tools",
+            "Pen",
+            "Highlighter",
+            "Eraser",
+            "Select",
+            "More tools",
             "Straight line",
+            "Color",
+            "Undo",
+            "Redo",
+            "Done",
+        ).forEach { label ->
+            composeRule.onAllNodesWithContentDescription(label).assertCountEquals(1)
+        }
+        listOf(
             "Black",
             "Red",
             "Orange",
@@ -422,7 +432,29 @@ class SheetSetFlowTest {
             "Blue",
             "Purple",
             "Pink",
-            "Select",
+        ).forEach { label ->
+            composeRule.onAllNodesWithContentDescription(label).assertCountEquals(0)
+        }
+
+        composeRule.onNodeWithContentDescription("Color").performClick()
+        listOf(
+            "Black",
+            "Red",
+            "Orange",
+            "Yellow",
+            "Green",
+            "Blue",
+            "Purple",
+            "Pink",
+        ).forEach { label ->
+            composeRule.onAllNodesWithContentDescription(label).assertCountEquals(1)
+        }
+        composeRule.onNodeWithContentDescription("Red").performClick()
+        composeRule.onAllNodesWithContentDescription("Red").assertCountEquals(0)
+
+        composeRule.onNodeWithContentDescription("Select").assertIsSelected()
+        composeRule.onNodeWithContentDescription("More tools").performClick()
+        listOf(
             "Underline",
             "Strike-through",
             "Text box",
@@ -430,19 +462,11 @@ class SheetSetFlowTest {
             "Arrow",
             "Rectangle",
             "Ellipse",
-            "Undo",
-            "Redo",
-            "Done",
         ).forEach { label ->
             composeRule.onAllNodesWithContentDescription(label).assertCountEquals(1)
         }
-        composeRule.onNodeWithContentDescription("Select").assertIsSelected()
-        composeRule.onNodeWithContentDescription("Rectangle").performScrollTo().performClick()
-        composeRule.onNodeWithContentDescription("Rectangle").assertIsSelected()
-        composeRule.onNodeWithContentDescription("Draw").performClick()
-        listOf("Pen", "Highlighter", "Eraser").forEach { label ->
-            composeRule.onNodeWithContentDescription(label).assertIsDisplayed()
-        }
+        composeRule.onNodeWithContentDescription("Rectangle").performClick()
+        composeRule.onNodeWithContentDescription("More tools").assertIsSelected()
         composeRule.onNodeWithContentDescription("Pen").performClick()
         composeRule.onNodeWithContentDescription("Pen").assertIsSelected()
         composeRule.onNodeWithContentDescription("Straight line").assertIsNotSelected()
@@ -527,8 +551,7 @@ class SheetSetFlowTest {
     }
 
     @Test
-    fun automaticScrollingCanStartPauseAndStop() {
-        var autoScrollState by mutableStateOf(AutoScrollState.STOPPED)
+    fun performanceToolsDoNotExposeAutomaticScrolling() {
         val score = Score("score-1", "Song", "score-1.pdf", 4, 1L)
         val reader = ReaderUiState(
             score = score,
@@ -544,9 +567,7 @@ class SheetSetFlowTest {
                     reader = reader,
                     settings = AppSettings(),
                     windowLayout = WindowLayout.COMPACT,
-                    autoScrollState = autoScrollState,
                     onSettings = {},
-                    onAutoScrollState = { autoScrollState = it },
                     onJump = {},
                     onAddBookmark = {},
                     onRenameBookmark = { _, _ -> },
@@ -556,12 +577,8 @@ class SheetSetFlowTest {
             }
         }
 
-        composeRule.onNodeWithText("Automatic scrolling").assertIsDisplayed()
-        composeRule.onNodeWithText("Start").performClick()
-        composeRule.onNodeWithText("Pause").performClick()
-        composeRule.onNodeWithText("Resume").assertIsDisplayed()
-        composeRule.onNodeWithText("Stop").performClick()
-        composeRule.onNodeWithText("Start").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Automatic scrolling").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Scroll speed").assertCountEquals(0)
     }
 
     @Test

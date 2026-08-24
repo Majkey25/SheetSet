@@ -1,7 +1,6 @@
 package cz.teply.sheetset
 
 import android.app.Application
-import android.app.LocaleManager
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -258,9 +257,7 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             mutableState.update { it.copy(loading = true, error = false) }
             try {
                 val application = getApplication<Application>()
-                val locales = application.getSystemService(LocaleManager::class.java)
-                    .applicationLocales
-                val languageTag = if (locales.isEmpty) null else locales[0].language
+                val languageTag = currentLanguageTag()
                 application.contentResolver.openOutputStream(uri, "w")?.use { output ->
                     repository.createBackup(output, state.value.settings, languageTag)
                 } ?: throw FileNotFoundException(uri.toString())
@@ -284,9 +281,7 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                     throw IllegalStateException("Could not create share directory")
                 }
                 temporary.delete()
-                val locales = application.getSystemService(LocaleManager::class.java)
-                    .applicationLocales
-                val languageTag = if (locales.isEmpty) null else locales[0].language
+                val languageTag = currentLanguageTag()
                 FileOutputStream(temporary).use { output ->
                     repository.createBackup(output, state.value.settings, languageTag)
                 }
@@ -439,6 +434,9 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         }
     }
 }
+
+private fun AndroidViewModel.currentLanguageTag(): String? =
+    AppLanguages.currentTag(getApplication())
 
 private fun HighlightStrength.alpha(): Int = when (this) {
     HighlightStrength.LIGHT -> 70

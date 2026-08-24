@@ -138,15 +138,6 @@ class PdfPageView(context: Context) : View(context) {
         invalidate()
     }
 
-    fun scrollByPixels(pixels: Float): Boolean {
-        if (renderedPageIndex != pageIndex) return false
-        val page = bitmap ?: return false
-        val result = scrollPan(panY, maxPanY(page), pixels)
-        panY = result.panY
-        invalidate()
-        return result.reachedEnd
-    }
-
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
         super.onSizeChanged(width, height, oldWidth, oldHeight)
         if (width != oldWidth || height != oldHeight) renderPage()

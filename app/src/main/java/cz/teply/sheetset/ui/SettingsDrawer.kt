@@ -1,9 +1,7 @@
 package cz.teply.sheetset.ui
 
-import android.app.LocaleManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -61,14 +59,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import cz.teply.sheetset.R
 import cz.teply.sheetset.settings.AnnotationTextSize
+import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderDefaultTool
+import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.settings.ToolSize
 import kotlinx.coroutines.launch
 
-private enum class DrawerScreen { MENU, LANGUAGE, READER, ANNOTATIONS, ABOUT }
+private enum class DrawerScreen { MENU, LANGUAGE, READER, ANNOTATIONS, APP_DETAILS }
 
 @Composable
 fun SettingsDrawer(
@@ -126,7 +126,9 @@ fun SettingsDrawer(
                         onBack = { screen = DrawerScreen.MENU },
                         onSettings = onSettings,
                     )
-                    DrawerScreen.ABOUT -> AboutSettings(onBack = { screen = DrawerScreen.MENU })
+                    DrawerScreen.APP_DETAILS -> AppDetailsSettings(
+                        onBack = { screen = DrawerScreen.MENU },
+                    )
                 }
             }
         },
@@ -183,7 +185,7 @@ private fun DrawerMenu(
         DrawerSection(R.string.share_backup, R.drawable.ic_share_24, onClick = onShareBackup)
         DrawerSection(R.string.restore_backup, R.drawable.ic_upload_file_24, onClick = onRestore)
         DrawerSection(R.string.about, R.drawable.ic_info_24) {
-            onScreen(DrawerScreen.ABOUT)
+            onScreen(DrawerScreen.APP_DETAILS)
         }
     }
 }
@@ -200,9 +202,7 @@ private fun DrawerSection(@StringRes label: Int, @DrawableRes icon: Int, onClick
 
 @Composable
 private fun LanguageSettings(onBack: () -> Unit, onLanguage: (String?) -> Unit) {
-    val context = LocalContext.current
-    val locales = context.getSystemService(LocaleManager::class.java).applicationLocales
-    val selected = if (locales.isEmpty) null else locales[0].language
+    val selected = AppLanguages.currentTag(LocalContext.current)
     SettingsPage(R.string.language, onBack) {
         listOf(
             null to R.string.device_language,
@@ -228,6 +228,17 @@ private fun ReaderSettings(
     onSettings: (AppSettings) -> Unit,
 ) {
     SettingsPage(R.string.reader_settings, onBack) {
+        ChoiceTitle(R.string.page_layout)
+        ChoiceRow(R.string.single_page, settings.readerLayout == ReaderLayout.SINGLE) {
+            onSettings(settings.copy(readerLayout = ReaderLayout.SINGLE))
+        }
+        ChoiceRow(R.string.half_page, settings.readerLayout == ReaderLayout.HALF) {
+            onSettings(settings.copy(readerLayout = ReaderLayout.HALF))
+        }
+        ChoiceRow(R.string.two_pages, settings.readerLayout == ReaderLayout.TWO_PAGE) {
+            onSettings(settings.copy(readerLayout = ReaderLayout.TWO_PAGE))
+        }
+        ChoiceTitle(R.string.pdf_navigation)
         SwitchRow(R.string.keep_screen_awake, settings.keepScreenAwake) {
             onSettings(settings.copy(keepScreenAwake = it))
         }
@@ -300,16 +311,14 @@ private fun AnnotationSettings(
     }
 }
 
+@Suppress("DEPRECATION")
 @Composable
-private fun AboutSettings(onBack: () -> Unit) {
+private fun AppDetailsSettings(onBack: () -> Unit) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val supportNotice = stringResource(R.string.support_app_notice)
     val version = remember(context) {
-        context.packageManager.getPackageInfo(
-            context.packageName,
-            PackageManager.PackageInfoFlags.of(0),
-        ).versionName.orEmpty()
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
     }
     SettingsPage(R.string.about, onBack) {
         ListItem(
@@ -318,6 +327,7 @@ private fun AboutSettings(onBack: () -> Unit) {
         )
         ListItem(headlineContent = { Text(stringResource(R.string.android_requirement)) })
         ListItem(headlineContent = { Text(stringResource(R.string.privacy_offline)) })
+        LinkRow(R.string.privacy_policy, PRIVACY_URL, context)
         LinkRow(R.string.license, "$REPOSITORY_URL/blob/main/LICENSE", context)
         LinkRow(R.string.github_repository, REPOSITORY_URL, context)
         LinkRow(R.string.release_page, "$REPOSITORY_URL/releases", context)
@@ -421,4 +431,5 @@ private fun openUrl(context: Context, url: String) {
 }
 
 private const val REPOSITORY_URL = "https://github.com/Majkey25/SheetSet"
+private const val PRIVACY_URL = "https://majkey25.github.io/SheetSet/privacy.html"
 private const val SUPPORT_URL = "https://www.buymeacoffee.com/majkey"

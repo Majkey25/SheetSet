@@ -49,8 +49,7 @@
     <string name="pen">Pero</string>
     <string name="highlighter">Zvýrazňovač</string>
     <string name="eraser">Guma</string>
-    <string name="draw_tools">Kreslenie</string>
-    <string name="add_tools">Vkladanie</string>
+    <string name="more_tools">Ďalšie nástroje</string>
     <string name="straight_line">Rovná čiara</string>
     <string name="stroke_width">Hrúbka ťahu</string>
     <string name="decrease_stroke_width">Zmenšiť hrúbku ťahu</string>
@@ -77,7 +76,7 @@
 +    <string name="language">Jazyk</string>
     <string name="reader_settings">Čítačka</string>
     <string name="annotation_defaults">Predvolené anotácie</string>
-    <string name="about">O aplikácii</string>
+    <string name="about">Podrobnosti aplikácie</string>
     <string name="device_language">Jazyk zariadenia</string>
     <string name="language_english">English</string>
     <string name="language_czech">Čeština</string>
@@ -104,8 +103,9 @@
     <string name="light">Nízke</string>
     <string name="strong">Vysoké</string>
     <string name="app_version">Verzia</string>
-    <string name="android_requirement">Vyžaduje Android 13 alebo novší</string>
+    <string name="android_requirement">Vyžaduje Android 10 alebo novší</string>
     <string name="privacy_offline">Offline. Bez účtu a zberu dát.</string>
+    <string name="privacy_policy">Zásady ochrany súkromia</string>
     <string name="license">Licencia</string>
     <string name="github_repository">GitHub repozitár</string>
     <string name="release_page">Vydania</string>
@@ -150,14 +150,6 @@
     <string name="page_bottom">dolná</string>
     <string name="half_page_position">%1$d %2$s / %3$d</string>
     <string name="spread_position">%1$d–%2$d / %3$d</string>
-    <string name="automatic_scrolling">Automatické posúvanie</string>
-    <string name="start">Spustiť</string>
-    <string name="pause">Pozastaviť</string>
-    <string name="resume">Pokračovať</string>
-    <string name="stop">Zastaviť</string>
-    <string name="scroll_speed">Rýchlosť posúvania</string>
-    <string name="slow">Pomaly</string>
-    <string name="fast">Rýchlo</string>
     <string name="sort_state">Zoradenie: %1$s</string>
     <string name="sort_title">Názov</string>
     <string name="sort_imported">Importované</string>

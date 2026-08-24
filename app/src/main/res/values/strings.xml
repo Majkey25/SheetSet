@@ -49,8 +49,7 @@
     <string name="pen">Pen</string>
     <string name="highlighter">Highlighter</string>
     <string name="eraser">Eraser</string>
-    <string name="draw_tools">Draw</string>
-    <string name="add_tools">Add tools</string>
+    <string name="more_tools">More tools</string>
     <string name="straight_line">Straight line</string>
     <string name="stroke_width">Stroke width</string>
     <string name="decrease_stroke_width">Decrease stroke width</string>
@@ -73,7 +72,7 @@
 +    <string name="language">Language</string>
     <string name="reader_settings">Reader</string>
     <string name="annotation_defaults">Annotation defaults</string>
-    <string name="about">About</string>
+    <string name="about">App details</string>
     <string name="device_language">Device language</string>
     <string name="language_english">English</string>
     <string name="language_czech">Čeština</string>
@@ -100,8 +99,9 @@
     <string name="light">Light</string>
     <string name="strong">Strong</string>
     <string name="app_version">Version</string>
-    <string name="android_requirement">Requires Android 13 or newer</string>
+    <string name="android_requirement">Requires Android 10 or newer</string>
     <string name="privacy_offline">Offline. No account or data collection.</string>
+    <string name="privacy_policy">Privacy policy</string>
     <string name="license">License</string>
     <string name="github_repository">GitHub repository</string>
     <string name="release_page">Releases</string>
@@ -146,14 +146,6 @@
     <string name="page_bottom">bottom</string>
     <string name="half_page_position">%1$d %2$s / %3$d</string>
     <string name="spread_position">%1$d–%2$d / %3$d</string>
-    <string name="automatic_scrolling">Automatic scrolling</string>
-    <string name="start">Start</string>
-    <string name="pause">Pause</string>
-    <string name="resume">Resume</string>
-    <string name="stop">Stop</string>
-    <string name="scroll_speed">Scroll speed</string>
-    <string name="slow">Slow</string>
-    <string name="fast">Fast</string>
     <string name="sort_state">Sort: %1$s</string>
     <string name="sort_title">Title</string>
     <string name="sort_imported">Imported</string>

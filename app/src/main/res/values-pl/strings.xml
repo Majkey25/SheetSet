@@ -49,8 +49,7 @@
     <string name="pen">Pióro</string>
     <string name="highlighter">Zakreślacz</string>
     <string name="eraser">Gumka</string>
-    <string name="draw_tools">Rysowanie</string>
-    <string name="add_tools">Dodawanie</string>
+    <string name="more_tools">Więcej narzędzi</string>
     <string name="straight_line">Linia prosta</string>
     <string name="stroke_width">Grubość linii</string>
     <string name="decrease_stroke_width">Zmniejsz grubość linii</string>
@@ -77,7 +76,7 @@
 +    <string name="language">Język</string>
     <string name="reader_settings">Czytnik</string>
     <string name="annotation_defaults">Domyślne adnotacje</string>
-    <string name="about">O aplikacji</string>
+    <string name="about">Szczegóły aplikacji</string>
     <string name="device_language">Język urządzenia</string>
     <string name="language_english">English</string>
     <string name="language_czech">Čeština</string>
@@ -104,8 +103,9 @@
     <string name="light">Lekkie</string>
     <string name="strong">Mocne</string>
     <string name="app_version">Wersja</string>
-    <string name="android_requirement">Wymaga Androida 13 lub nowszego</string>
+    <string name="android_requirement">Wymaga Androida 10 lub nowszego</string>
     <string name="privacy_offline">Offline. Bez konta i zbierania danych.</string>
+    <string name="privacy_policy">Polityka prywatności</string>
     <string name="license">Licencja</string>
     <string name="github_repository">Repozytorium GitHub</string>
     <string name="release_page">Wydania</string>
@@ -150,14 +150,6 @@
     <string name="page_bottom">dół</string>
     <string name="half_page_position">%1$d %2$s / %3$d</string>
     <string name="spread_position">%1$d–%2$d / %3$d</string>
-    <string name="automatic_scrolling">Automatyczne przewijanie</string>
-    <string name="start">Uruchom</string>
-    <string name="pause">Wstrzymaj</string>
-    <string name="resume">Wznów</string>
-    <string name="stop">Zatrzymaj</string>
-    <string name="scroll_speed">Prędkość przewijania</string>
-    <string name="slow">Wolno</string>
-    <string name="fast">Szybko</string>
     <string name="sort_state">Sortowanie: %1$s</string>
     <string name="sort_title">Tytuł</string>
     <string name="sort_imported">Zaimportowano</string>
