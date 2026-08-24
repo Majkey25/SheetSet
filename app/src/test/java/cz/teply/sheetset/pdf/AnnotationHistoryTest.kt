@@ -3,33 +3,36 @@ package cz.teply.sheetset.pdf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import cz.teply.sheetset.settings.AnnotationTextSize
 
 class AnnotationHistoryTest {
-    private val first = Stroke(
-        tool = AnnotationTool.PEN,
+    private val first = InkAnnotation(
+        id = "first",
+        kind = InkKind.PEN,
         width = 0.004f,
         points = listOf(NormalizedPoint(0.1f, 0.2f), NormalizedPoint(0.3f, 0.4f)),
     )
-    private val second = Stroke(
-        tool = AnnotationTool.HIGHLIGHTER,
+    private val second = InkAnnotation(
+        id = "second",
+        kind = InkKind.HIGHLIGHTER,
         width = 0.02f,
         points = listOf(NormalizedPoint(0.5f, 0.5f)),
     )
 
     @Test
-    fun `stroke can be undone and redone`() {
+    fun `annotation can be undone and redone`() {
         val added = AnnotationHistory().add(first)
         val undone = added.undo()
 
-        assertTrue(undone.strokes.isEmpty())
-        assertEquals(listOf(first), undone.redo().strokes)
+        assertTrue(undone.annotations.isEmpty())
+        assertEquals(listOf(first), undone.redo().annotations)
     }
 
     @Test
-    fun `new stroke clears redo history`() {
+    fun `new annotation clears redo history`() {
         val history = AnnotationHistory().add(first).undo().add(second)
 
-        assertEquals(listOf(second), history.redo().strokes)
+        assertEquals(listOf(second), history.redo().annotations)
     }
 
     @Test
@@ -40,5 +43,23 @@ class AnnotationHistoryTest {
             annotations,
             AnnotationJson.decode(AnnotationJson.encode(annotations)),
         )
+    }
+
+    @Test
+    fun updateDeleteUndoAndRedoUseIds() {
+        val text = TextBoxAnnotation(
+            id = "text",
+            bounds = NormalizedRect(0.1f, 0.1f, 0.5f, 0.3f),
+            text = "Original",
+            size = AnnotationTextSize.MEDIUM,
+        )
+        val changed = AnnotationHistory().add(text).update(text.copy(text = "Changed"))
+        val deleted = changed.delete(text.id)
+
+        assertEquals(
+            "Changed",
+            (deleted.undo().annotations.single() as TextBoxAnnotation).text,
+        )
+        assertTrue(deleted.redo().annotations.isEmpty())
     }
 }

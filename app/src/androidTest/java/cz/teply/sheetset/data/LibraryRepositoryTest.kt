@@ -2,10 +2,10 @@ package cz.teply.sheetset.data
 
 import android.graphics.pdf.PdfDocument
 import androidx.test.core.app.ApplicationProvider
-import cz.teply.sheetset.pdf.AnnotationTool
 import cz.teply.sheetset.pdf.DocumentAnnotations
+import cz.teply.sheetset.pdf.InkAnnotation
+import cz.teply.sheetset.pdf.InkKind
 import cz.teply.sheetset.pdf.NormalizedPoint
-import cz.teply.sheetset.pdf.Stroke
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -84,10 +84,11 @@ class LibraryRepositoryTest {
         val annotations = DocumentAnnotations(
             mapOf(
                 0 to listOf(
-                    Stroke(
-                        AnnotationTool.PEN,
-                        0.004f,
-                        listOf(NormalizedPoint(0.25f, 0.75f)),
+                    InkAnnotation(
+                        id = "ink",
+                        kind = InkKind.PEN,
+                        width = 0.004f,
+                        points = listOf(NormalizedPoint(0.25f, 0.75f)),
                     ),
                 ),
             ),
@@ -132,6 +133,53 @@ class LibraryRepositoryTest {
         assertTrue(reloaded.setlists.all { score.id !in it.scoreIds })
         assertTrue(reloaded.scores.isEmpty())
         assertTrue(!File(root, "scores/${score.fileName}").exists())
+    }
+
+    @Test
+    fun reorderedSetlistPersistsWithDuplicateScores() = runBlocking {
+        val source = createPdf("song.pdf", pages = 1)
+        val repository = LibraryRepository(root)
+        val first = repository.importPdf(
+            PdfImport("First.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val second = repository.importPdf(
+            PdfImport("Second.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val setlist = repository.createSetlist("Show")
+        listOf(first.id, second.id, first.id).forEach { scoreId ->
+            repository.addScoreToSetlist(setlist.id, scoreId)
+        }
+
+        repository.reorderScores(setlist.id, listOf(first.id, first.id, second.id))
+
+        assertEquals(
+            listOf(first.id, first.id, second.id),
+            LibraryRepository(root).load().setlists.single().scoreIds,
+        )
+    }
+
+    @Test
+    fun scoreMetadataPersists() = runBlocking {
+        val source = createPdf("metadata.pdf", pages = 3)
+        val repository = LibraryRepository(root)
+        val score = repository.importPdf(
+            PdfImport("Metadata.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val setlist = repository.createSetlist("Show")
+
+        repository.addBookmark(score.id, Bookmark("bookmark-1", "Chorus", 2))
+        repository.renameBookmark(score.id, "bookmark-1", "Finale")
+        repository.updateScoreLabels(score.id, listOf("Band"))
+        repository.updateSetlistLabels(setlist.id, listOf("Saturday"))
+        repository.saveReaderPosition(score.id, page = 2, part = 1, viewedAt = 99L)
+
+        val catalog = LibraryRepository(root).load()
+        assertEquals(Bookmark("bookmark-1", "Finale", 2), catalog.scores.single().bookmarks.single())
+        assertEquals(listOf("Band"), catalog.scores.single().labels)
+        assertEquals(listOf("Saturday"), catalog.setlists.single().labels)
+        assertEquals(2, catalog.scores.single().lastPageIndex)
+        assertEquals(1, catalog.scores.single().lastPagePart)
+        assertEquals(99L, catalog.scores.single().lastViewedAtEpochMs)
     }
 
     private fun createPdf(name: String, pages: Int): File {

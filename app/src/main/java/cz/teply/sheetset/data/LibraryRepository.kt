@@ -5,6 +5,7 @@ import android.os.ParcelFileDescriptor
 import android.util.AtomicFile
 import cz.teply.sheetset.pdf.AnnotationJson
 import cz.teply.sheetset.pdf.DocumentAnnotations
+import cz.teply.sheetset.settings.AppSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -14,7 +15,9 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
+import java.util.zip.ZipFile
 
 const val MAX_PDF_BYTES = 250L * 1024L * 1024L
 
@@ -65,6 +68,38 @@ class LibraryRepository(private val root: File) {
         }
     }
 
+    suspend fun createBackup(
+        destination: OutputStream,
+        settings: AppSettings,
+        languageTag: String?,
+    ) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            writeLibraryBackup(root, loadCatalog(), destination, settings, languageTag)
+        }
+    }
+
+    suspend fun restoreBackup(source: InputStream): BackupMetadata? = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val archive = stageBackup(source)
+            try {
+                if (isSheetSetBackup(archive)) {
+                    restoreLibraryBackup(root, archive.inputStream())
+                } else {
+                    val prepared = prepareScorePdfImport(root, loadCatalog(), archive)
+                    try {
+                        writeCatalog(prepared.catalog)
+                    } catch (error: Exception) {
+                        prepared.createdFiles.forEach(File::delete)
+                        throw error
+                    }
+                    null
+                }
+            } finally {
+                archive.delete()
+            }
+        }
+    }
+
     suspend fun createSetlist(name: String): Setlist {
         val id = UUID.randomUUID().toString()
         return updateCatalog { it.createSetlist(name, id) }.setlists.first { it.id == id }
@@ -72,6 +107,30 @@ class LibraryRepository(private val root: File) {
 
     suspend fun renameScore(scoreId: String, title: String) {
         updateCatalog { it.renameScore(scoreId, title) }
+    }
+
+    suspend fun addBookmark(scoreId: String, bookmark: Bookmark) {
+        updateCatalog { it.addBookmark(scoreId, bookmark) }
+    }
+
+    suspend fun renameBookmark(scoreId: String, bookmarkId: String, title: String) {
+        updateCatalog { it.renameBookmark(scoreId, bookmarkId, title) }
+    }
+
+    suspend fun deleteBookmark(scoreId: String, bookmarkId: String) {
+        updateCatalog { it.deleteBookmark(scoreId, bookmarkId) }
+    }
+
+    suspend fun updateScoreLabels(scoreId: String, labels: List<String>) {
+        updateCatalog { it.updateScoreLabels(scoreId, labels) }
+    }
+
+    suspend fun updateSetlistLabels(setlistId: String, labels: List<String>) {
+        updateCatalog { it.updateSetlistLabels(setlistId, labels) }
+    }
+
+    suspend fun saveReaderPosition(scoreId: String, page: Int, part: Int, viewedAt: Long) {
+        updateCatalog { it.saveReaderPosition(scoreId, page, part, viewedAt) }
     }
 
     suspend fun renameSetlist(setlistId: String, name: String) {
@@ -90,8 +149,8 @@ class LibraryRepository(private val root: File) {
         updateCatalog { it.removeScoreFromSetlist(setlistId, index) }
     }
 
-    suspend fun moveScore(setlistId: String, fromIndex: Int, toIndex: Int) {
-        updateCatalog { it.moveScore(setlistId, fromIndex, toIndex) }
+    suspend fun reorderScores(setlistId: String, scoreIds: List<String>) {
+        updateCatalog { it.reorderScores(setlistId, scoreIds) }
     }
 
     suspend fun deleteScore(scoreId: String) {
@@ -120,8 +179,7 @@ class LibraryRepository(private val root: File) {
         val destination = File(scoresDirectory, "$id.pdf")
         try {
             source.open().use { input -> copyBounded(input, temporary) }
-            requirePdfSignature(temporary)
-            val pageCount = readPageCount(temporary)
+            val pageCount = validatePdfFile(temporary)
             if (!temporary.renameTo(destination)) {
                 throw PdfImportException("Could not store PDF")
             }
@@ -161,6 +219,38 @@ class LibraryRepository(private val root: File) {
         writeAtomic(catalogFile, CatalogJson.encode(catalog))
     }
 
+    private fun stageBackup(source: InputStream): File {
+        val parent = root.parentFile ?: throw BackupException("Library has no parent directory")
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw BackupException("Could not create backup directory")
+        }
+        val archive = File.createTempFile("sheetset-backup-", ".zip", parent)
+        try {
+            FileOutputStream(archive).use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var copied = 0L
+                while (true) {
+                    val read = source.read(buffer)
+                    if (read < 0) break
+                    copied += read
+                    if (copied > MAX_BACKUP_BYTES) throw BackupException("Backup is too large")
+                    output.write(buffer, 0, read)
+                }
+                output.fd.sync()
+            }
+            return archive
+        } catch (error: Exception) {
+            archive.delete()
+            throw error
+        }
+    }
+
+    private fun isSheetSetBackup(archive: File): Boolean = try {
+        ZipFile(archive).use { zip -> zip.getEntry("manifest.json") != null }
+    } catch (error: Exception) {
+        throw BackupException("Backup is not a valid ZIP archive", error)
+    }
+
     private suspend fun updateCatalog(
         transform: (LibraryCatalog) -> LibraryCatalog,
     ): LibraryCatalog = withContext(Dispatchers.IO) {
@@ -189,30 +279,6 @@ class LibraryRepository(private val root: File) {
         }
     }
 
-    private fun requirePdfSignature(file: File) {
-        val expected = "%PDF-".toByteArray(Charsets.US_ASCII)
-        val actual = ByteArray(expected.size)
-        FileInputStream(file).use { input ->
-            if (input.read(actual) != expected.size || !actual.contentEquals(expected)) {
-                throw PdfImportException("File is not a valid PDF")
-            }
-        }
-    }
-
-    private fun readPageCount(file: File): Int = try {
-        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-            PdfRenderer(descriptor).use { renderer ->
-                renderer.pageCount.also { count ->
-                    if (count < 1) throw PdfImportException("PDF has no pages")
-                }
-            }
-        }
-    } catch (error: PdfImportException) {
-        throw error
-    } catch (error: Exception) {
-        throw PdfImportException("File is not a readable PDF", error)
-    }
-
     private fun writeAtomic(file: File, text: String) {
         file.parentFile?.mkdirsOrThrow()
         val atomicFile = AtomicFile(file)
@@ -235,5 +301,20 @@ class LibraryRepository(private val root: File) {
 
     private fun File.mkdirsOrThrow() {
         if (!exists() && !mkdirs()) throw IllegalStateException("Could not create ${name}")
+    }
+}
+
+internal fun validatePdfFile(file: File): Int {
+    val expected = "%PDF-".toByteArray(Charsets.US_ASCII)
+    val actual = ByteArray(expected.size)
+    FileInputStream(file).use { input ->
+        require(input.read(actual) == expected.size && actual.contentEquals(expected)) {
+            "File is not a valid PDF"
+        }
+    }
+    return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+        PdfRenderer(descriptor).use { renderer ->
+            renderer.pageCount.also { count -> require(count > 0) { "PDF has no pages" } }
+        }
     }
 }

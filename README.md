@@ -5,27 +5,38 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 [![Android CI](https://github.com/Majkey25/SheetSet/actions/workflows/android-ci.yml/badge.svg)](https://github.com/Majkey25/SheetSet/actions/workflows/android-ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/Majkey25/SheetSet?include_prereleases)](https://github.com/Majkey25/SheetSet/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-111111.svg)](LICENSE)
+![Android 13+](https://img.shields.io/badge/Android-13%2B-111111.svg)
+![Offline only](https://img.shields.io/badge/offline-only-111111.svg)
 
 <p align="center">
-  <img src="site/assets/home.png" alt="SheetSet PDF library empty state" width="280">
-  <img src="site/assets/reader.png" alt="SheetSet reader with a handwritten annotation" width="280">
+  <img src="site/assets/home.png" alt="SheetSet phone library with Menu and Import PDF actions" width="260">
+  <img src="site/assets/reader.png" alt="SheetSet phone PDF editor with a two-row tool dock, direct colors, pen, and highlighter" width="260">
+  <img src="site/assets/tablet.png" alt="SheetSet tablet library with a left navigation rail" width="420">
 </p>
 
 ## What it does
 
 - Imports one or more PDFs through the Android file picker.
 - Stores private offline copies and validates each file before adding it.
-- Creates unlimited ordered setlists without duplicating PDFs.
+- Creates unlimited setlists with direct drag ordering and no duplicated PDFs.
 - Reads a setlist continuously across score boundaries.
-- Supports pen, highlighter, eraser, undo, redo, page taps, swipes, and pinch zoom.
+- Resumes the last page, stores searchable bookmarks, and jumps directly to bookmarked passages.
+- Offers Single, Half, and tablet Two-page layouts, Bluetooth pedal/keyboard page turns, and automatic scrolling.
+- Organizes scores and setlists with labels, label search, and title/date sorting.
+- Supports colored pen, highlight, underline, strike-through, text boxes, lines, arrows, rectangles, and ellipses.
+- Selects, moves, resizes, deletes, erases, undoes, and redoes annotations.
+- Uses the same two-row bottom editor on phones and tablets, with fixed page/history controls and scrollable tool and color sections.
 - Preserves the imported original and exports a new annotated PDF.
-- Uses Android per-app languages: English, Czech, Slovak, German, and Polish.
+- Backs up and safely restores PDFs, setlists, annotations, settings, and language in a validated ZIP.
+- Imports ScorePDF backup ZIPs as a non-destructive merge and shares SheetSet backups through Android.
+- Uses English, Czech, Slovak, German, Polish, or the Android device language.
+- Offers Scan with ScanIt from the import sheet and opens its Google Play listing.
 
 ## Install
 
 Download the preview APK from [GitHub Releases](https://github.com/Majkey25/SheetSet/releases). Preview builds are debug-signed and intended for testing. Google Play publishing is not part of this repository yet.
 
-SheetSet requires Android 8.0 or newer.
+SheetSet requires Android 13 or newer.
 
 ## Build
 
@@ -44,18 +55,22 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Design
 
-SheetSet uses one Android application module, Jetpack Compose, and platform PDF APIs. `LibraryRepository` stores PDFs and an atomic JSON catalog. `PdfPageView` renders and annotates pages. `PdfExporter` writes an annotated copy one page at a time.
+SheetSet uses one Android application module, Jetpack Compose, and platform PDF APIs. `LibraryRepository` stores PDFs and an atomic JSON catalog. Versioned typed annotations migrate old pen and highlighter data. `PdfPageView` and `PdfExporter` share one renderer so the on-screen page matches the non-destructive exported copy. Restore validates the complete ZIP in staging before an atomic directory swap with rollback.
 
 The app declares no permissions. Imported files stay in app-private storage. Export writes only to the location selected in the Android document picker.
 
 ## Current limits
 
 - Android only.
-- PDF text and vector objects are not edited. Annotations are a separate layer.
+- PDF text and vector objects are not edited. Annotations are a separate layer drawn by touch.
+- Underline and strike-through use manual drag bounds. Scanned PDFs have no OCR.
 - Export rasterizes source pages at up to 144 dpi with a 12 MP memory cap.
-- No cloud sync, backup, scanner, metronome, or Bluetooth pedal settings.
+- Backup restore accepts archives up to 1 GiB. There is no cloud sync.
+- Scanning is delegated to the separate ScanIt app; SheetSet has no built-in camera scanner.
+- Common page-turn pedals work as keyboards; custom MIDI mappings, audio tools, and a metronome are not included.
 
-See the [design specification](docs/superpowers/specs/2026-08-20-sheetset-design.md) and [implementation plan](docs/superpowers/plans/2026-08-20-sheetset.md).
+See the [adaptive editor specification](docs/superpowers/specs/2026-08-20-sheetset-editor-settings-adaptive-design.md) and [PDF editor plan](docs/superpowers/plans/2026-08-20-sheetset-pdf-editor.md).
+The [v0.4 performance specification](docs/superpowers/specs/2026-08-24-sheetset-performance-essentials-design.md) documents bookmarks, layouts, pedals, auto-scroll, labels, migration, and release acceptance.
 
 ## Contributing
 
