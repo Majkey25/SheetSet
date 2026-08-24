@@ -109,6 +109,30 @@ class LibraryRepository(private val root: File) {
         updateCatalog { it.renameScore(scoreId, title) }
     }
 
+    suspend fun addBookmark(scoreId: String, bookmark: Bookmark) {
+        updateCatalog { it.addBookmark(scoreId, bookmark) }
+    }
+
+    suspend fun renameBookmark(scoreId: String, bookmarkId: String, title: String) {
+        updateCatalog { it.renameBookmark(scoreId, bookmarkId, title) }
+    }
+
+    suspend fun deleteBookmark(scoreId: String, bookmarkId: String) {
+        updateCatalog { it.deleteBookmark(scoreId, bookmarkId) }
+    }
+
+    suspend fun updateScoreLabels(scoreId: String, labels: List<String>) {
+        updateCatalog { it.updateScoreLabels(scoreId, labels) }
+    }
+
+    suspend fun updateSetlistLabels(setlistId: String, labels: List<String>) {
+        updateCatalog { it.updateSetlistLabels(setlistId, labels) }
+    }
+
+    suspend fun saveReaderPosition(scoreId: String, page: Int, part: Int, viewedAt: Long) {
+        updateCatalog { it.saveReaderPosition(scoreId, page, part, viewedAt) }
+    }
+
     suspend fun renameSetlist(setlistId: String, name: String) {
         updateCatalog { it.renameSetlist(setlistId, name) }
     }

@@ -158,6 +158,30 @@ class LibraryRepositoryTest {
         )
     }
 
+    @Test
+    fun scoreMetadataPersists() = runBlocking {
+        val source = createPdf("metadata.pdf", pages = 3)
+        val repository = LibraryRepository(root)
+        val score = repository.importPdf(
+            PdfImport("Metadata.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val setlist = repository.createSetlist("Show")
+
+        repository.addBookmark(score.id, Bookmark("bookmark-1", "Chorus", 2))
+        repository.renameBookmark(score.id, "bookmark-1", "Finale")
+        repository.updateScoreLabels(score.id, listOf("Band"))
+        repository.updateSetlistLabels(setlist.id, listOf("Saturday"))
+        repository.saveReaderPosition(score.id, page = 2, part = 1, viewedAt = 99L)
+
+        val catalog = LibraryRepository(root).load()
+        assertEquals(Bookmark("bookmark-1", "Finale", 2), catalog.scores.single().bookmarks.single())
+        assertEquals(listOf("Band"), catalog.scores.single().labels)
+        assertEquals(listOf("Saturday"), catalog.setlists.single().labels)
+        assertEquals(2, catalog.scores.single().lastPageIndex)
+        assertEquals(1, catalog.scores.single().lastPagePart)
+        assertEquals(99L, catalog.scores.single().lastViewedAtEpochMs)
+    }
+
     private fun createPdf(name: String, pages: Int): File {
         root.mkdirs()
         val file = File(root, "${UUID.randomUUID()}-$name")

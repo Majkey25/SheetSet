@@ -42,4 +42,61 @@ class CatalogJsonTest {
 
         assertEquals(catalog, CatalogJson.decode(CatalogJson.encode(catalog)))
     }
+
+    @Test
+    fun `version two metadata survives literal JSON decode`() {
+        val json = """
+            {
+              "version": 2,
+              "scores": [{
+                "id": "score-1",
+                "title": "Etude",
+                "fileName": "score-1.pdf",
+                "pageCount": 4,
+                "importedAtEpochMs": 42,
+                "labels": ["Band", "Encore"],
+                "bookmarks": [{"id":"bookmark-1","title":"Chorus","pageIndex":2}],
+                "lastPageIndex": 3,
+                "lastPagePart": 1,
+                "lastViewedAtEpochMs": 99
+              }],
+              "setlists": [{
+                "id": "set-1",
+                "name": "Concert",
+                "scoreIds": ["score-1"],
+                "labels": ["Saturday"],
+                "createdAtEpochMs": 77
+              }]
+            }
+        """.trimIndent()
+
+        assertEquals(
+            LibraryCatalog(
+                scores = listOf(
+                    Score(
+                        id = "score-1",
+                        title = "Etude",
+                        fileName = "score-1.pdf",
+                        pageCount = 4,
+                        importedAtEpochMs = 42L,
+                        labels = listOf("Band", "Encore"),
+                        bookmarks = listOf(Bookmark("bookmark-1", "Chorus", 2)),
+                        lastPageIndex = 3,
+                        lastPagePart = 1,
+                        lastViewedAtEpochMs = 99L,
+                    ),
+                ),
+                setlists = listOf(
+                    Setlist(
+                        id = "set-1",
+                        name = "Concert",
+                        scoreIds = listOf("score-1"),
+                        labels = listOf("Saturday"),
+                        createdAtEpochMs = 77L,
+                    ),
+                ),
+            ),
+            CatalogJson.decode(json),
+        )
+    }
 }
