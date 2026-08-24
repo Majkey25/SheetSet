@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -105,6 +111,7 @@ fun ReaderScreen(
     }
     val platformView = LocalView.current
     val density = LocalDensity.current.density
+    val readerFocusRequester = remember { FocusRequester() }
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri -> uri?.let(actions.exportPdf) }
@@ -124,6 +131,9 @@ fun ReaderScreen(
     }
     LaunchedEffect(reader.score.id, reader.pageIndex) {
         selectedAnnotationId = null
+    }
+    LaunchedEffect(reader.score.id) {
+        readerFocusRequester.requestFocus()
     }
     LaunchedEffect(autoHideRequest, settings.autoHideControls) {
         if (autoHideRequest > 0 && settings.autoHideControls) {
@@ -164,7 +174,28 @@ fun ReaderScreen(
         updateHistory(history.add(annotation))
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black)
+            .focusRequester(readerFocusRequester).focusable().onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) {
+                false
+            } else {
+                when (pedalDirection(event.nativeKeyEvent.keyCode, event.nativeKeyEvent.repeatCount)) {
+                    PageDirection.PREVIOUS -> {
+                        autoScrollState = AutoScrollState.STOPPED
+                        actions.previousPage(effectiveLayout)
+                        true
+                    }
+                    PageDirection.NEXT -> {
+                        autoScrollState = AutoScrollState.STOPPED
+                        actions.nextPage(effectiveLayout)
+                        true
+                    }
+                    null -> false
+                }
+            }
+        },
+    ) {
         if (effectiveLayout == ReaderLayout.TWO_PAGE) {
             TwoPageReader(
                 reader = reader,

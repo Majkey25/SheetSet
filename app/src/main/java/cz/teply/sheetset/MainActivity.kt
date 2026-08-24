@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,9 +16,6 @@ import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
 import cz.teply.sheetset.ui.WindowLayout
-import cz.teply.sheetset.ui.PageDirection
-import cz.teply.sheetset.ui.effectiveReaderLayout
-import cz.teply.sheetset.ui.pedalDirection
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<SheetSetViewModel>()
@@ -74,28 +70,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (viewModel.state.value.reader != null) {
-            when (pedalDirection(keyCode, event.repeatCount)) {
-                PageDirection.PREVIOUS -> {
-                    viewModel.previousPage(activeReaderLayout())
-                    return true
-                }
-                PageDirection.NEXT -> {
-                    viewModel.nextPage(activeReaderLayout())
-                    return true
-                }
-                null -> Unit
-            }
-        }
-        return super.onKeyDown(keyCode, event)
-    }
-
-    private fun activeReaderLayout() = effectiveReaderLayout(
-        viewModel.state.value.settings.readerLayout,
-        resources.configuration.screenWidthDp >= 600,
-    )
 
     private fun openBackupShareSheet(uri: Uri) {
         val share = Intent(Intent.ACTION_SEND)
