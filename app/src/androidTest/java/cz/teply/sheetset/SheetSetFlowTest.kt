@@ -485,12 +485,13 @@ class SheetSetFlowTest {
         }
 
         composeRule.onNodeWithContentDescription("Performance tools").performClick()
+        composeRule.onNodeWithText("Bookmarks").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Chorus").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(2, jumpedTo) }
+        composeRule.onNodeWithContentDescription("Performance tools").performClick()
         composeRule.onNodeWithText("Single page").assertIsDisplayed()
         composeRule.onNodeWithText("Half page").performClick()
         composeRule.runOnIdle { assertEquals(ReaderLayout.HALF, settings.readerLayout) }
-        composeRule.onNodeWithText("Bookmarks").assertIsDisplayed()
-        composeRule.onNodeWithText("Chorus").performClick()
-        composeRule.runOnIdle { assertEquals(2, jumpedTo) }
         composeRule.onAllNodesWithText("Two pages").assertCountEquals(0)
     }
 
