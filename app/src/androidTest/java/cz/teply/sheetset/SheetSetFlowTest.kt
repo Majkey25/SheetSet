@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -109,6 +110,25 @@ class SheetSetFlowTest {
     }
 
     @Test
+    fun setlistSearchMatchesLabels() {
+        val setlist = Setlist("set-1", "Show", labels = listOf("Saturday"))
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(catalog = LibraryCatalog(setlists = listOf(setlist))),
+                    SheetSetActions(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Setlists").performClick()
+        composeRule.onNodeWithContentDescription("Search setlists").performClick()
+        composeRule.onNodeWithText("Search setlists").performTextInput("saturday")
+
+        composeRule.onNodeWithText("Show").assertIsDisplayed()
+    }
+
+    @Test
     fun searchOpensOnlyWhenRequested() {
         val score = Score("score-1", "Moonlight Sonata", "score-1.pdf", 3, 1L)
         composeRule.setContent {
@@ -160,6 +180,64 @@ class SheetSetFlowTest {
         composeRule.onNodeWithText("PDF").performClick()
 
         composeRule.onAllNodesWithText("Search PDFs").assertCountEquals(0)
+    }
+
+    @Test
+    fun bookmarkSearchOpensExactPage() {
+        var openedPage = -1
+        val score = Score(
+            "score-1",
+            "Song",
+            "score-1.pdf",
+            4,
+            1L,
+            bookmarks = listOf(cz.teply.sheetset.data.Bookmark("chorus", "Chorus", 2)),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    LibraryUiState(catalog = LibraryCatalog(scores = listOf(score))),
+                    SheetSetActions(openScoreAt = { _, page -> openedPage = page }),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Search PDFs").performClick()
+        composeRule.onNodeWithText("Search PDFs").performTextInput("chorus")
+        composeRule.onNodeWithText("Chorus").performClick()
+
+        composeRule.runOnIdle { assertEquals(2, openedPage) }
+    }
+
+    @Test
+    fun scoreLabelsCanBeEditedFromRowMenu() {
+        var state by mutableStateOf(
+            LibraryUiState(
+                catalog = LibraryCatalog(
+                    scores = listOf(Score("score-1", "Song", "score-1.pdf", 2, 1L)),
+                ),
+            ),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    state,
+                    SheetSetActions(
+                        updateScoreLabels = { id, labels ->
+                            state = state.copy(catalog = state.catalog.updateScoreLabels(id, labels))
+                        },
+                    ),
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithContentDescription("More options")[0].performClick()
+        composeRule.onNodeWithText("Labels").performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("Band, Encore")
+        composeRule.onNodeWithText("Save").performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("Band", "Encore"), state.catalog.scores.single().labels) }
+        composeRule.onNodeWithText("Band · Encore").assertIsDisplayed()
     }
 
     @Test

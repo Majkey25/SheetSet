@@ -43,14 +43,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import cz.teply.sheetset.R
+import cz.teply.sheetset.data.LibraryCatalog
+import cz.teply.sheetset.data.MAX_LABEL_LENGTH
+import cz.teply.sheetset.data.MAX_LABELS
 import cz.teply.sheetset.data.Score
 
 @Composable
 fun LibraryScreen(
     scores: List<Score>,
     onOpen: (Score) -> Unit,
+    onOpenBookmark: (Score, Int) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onLabels: (String, List<String>) -> Unit,
     searching: Boolean,
     onSearchingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -59,8 +64,12 @@ fun LibraryScreen(
     var menuScoreId by remember { mutableStateOf<String?>(null) }
     var renameScore by remember { mutableStateOf<Score?>(null) }
     var deleteScore by remember { mutableStateOf<Score?>(null) }
-    val visibleScores = remember(scores, query) {
-        scores.filter { it.title.contains(query.trim(), ignoreCase = true) }
+    var labelScore by remember { mutableStateOf<Score?>(null) }
+    var sort by rememberSaveable { mutableStateOf(LibrarySort.IMPORTED) }
+    var direction by rememberSaveable { mutableStateOf(SortDirection.ASCENDING) }
+    var sortMenu by remember { mutableStateOf(false) }
+    val visibleResults = remember(scores, query, sort, direction) {
+        queryScores(LibraryCatalog(scores = scores), query, sort, direction)
     }
 
     LaunchedEffect(searching) {
@@ -93,10 +102,64 @@ fun LibraryScreen(
                 }
             }
         } else {
+            val sortDescription = stringResource(
+                R.string.sort_state,
+                stringResource(
+                    when (sort) {
+                        LibrarySort.TITLE -> R.string.sort_title
+                        LibrarySort.IMPORTED -> R.string.sort_imported
+                        LibrarySort.LAST_VIEWED -> R.string.sort_last_viewed
+                    },
+                ),
+            )
+            val directionDescription = stringResource(
+                if (direction == SortDirection.ASCENDING) R.string.ascending else R.string.descending,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
+                Box {
+                    IconButton(
+                        modifier = Modifier.semantics { contentDescription = sortDescription },
+                        onClick = { sortMenu = true },
+                    ) {
+                        Icon(painterResource(R.drawable.ic_sort_24), contentDescription = null)
+                    }
+                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                        listOf(
+                            LibrarySort.TITLE to R.string.sort_title,
+                            LibrarySort.IMPORTED to R.string.sort_imported,
+                            LibrarySort.LAST_VIEWED to R.string.sort_last_viewed,
+                        ).forEach { (option, label) ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(label)) },
+                                onClick = { sort = option; sortMenu = false },
+                            )
+                        }
+                    }
+                }
+                IconButton(
+                    modifier = Modifier.semantics { contentDescription = directionDescription },
+                    onClick = {
+                        direction = if (direction == SortDirection.ASCENDING) {
+                            SortDirection.DESCENDING
+                        } else {
+                            SortDirection.ASCENDING
+                        }
+                    },
+                ) {
+                    Icon(
+                        painterResource(
+                            if (direction == SortDirection.ASCENDING) {
+                                R.drawable.ic_arrow_up_24
+                            } else {
+                                R.drawable.ic_arrow_down_24
+                            },
+                        ),
+                        contentDescription = null,
+                    )
+                }
                 val searchDescription = stringResource(R.string.search_pdfs)
                 IconButton(
                     modifier = Modifier.semantics { contentDescription = searchDescription },
@@ -109,21 +172,36 @@ fun LibraryScreen(
                 }
             }
         }
-        if (visibleScores.isEmpty()) {
+        if (visibleResults.isEmpty()) {
             AppEmptyState(R.string.no_search_results, R.string.search_pdfs)
         } else {
             LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)) {
-                itemsIndexed(visibleScores, key = { _, score -> score.id }) { index, score ->
-                    ScoreRow(
-                        score = score,
-                        index = index,
-                        expanded = menuScoreId == score.id,
-                        onOpen = onOpen,
-                        onMore = { menuScoreId = score.id },
-                        onDismissMenu = { menuScoreId = null },
-                        onRename = { menuScoreId = null; renameScore = score },
-                        onDelete = { menuScoreId = null; deleteScore = score },
-                    )
+                itemsIndexed(
+                    visibleResults,
+                    key = { _, result -> when (result) {
+                        is LibraryResult.ScoreResult -> "score-${result.score.id}"
+                        is LibraryResult.BookmarkResult -> {
+                            "bookmark-${result.score.id}-${result.bookmark.id}"
+                        }
+                    } },
+                ) { index, result ->
+                    when (result) {
+                        is LibraryResult.ScoreResult -> ScoreRow(
+                            score = result.score,
+                            index = index,
+                            expanded = menuScoreId == result.score.id,
+                            onOpen = onOpen,
+                            onMore = { menuScoreId = result.score.id },
+                            onDismissMenu = { menuScoreId = null },
+                            onRename = { menuScoreId = null; renameScore = result.score },
+                            onLabels = { menuScoreId = null; labelScore = result.score },
+                            onDelete = { menuScoreId = null; deleteScore = result.score },
+                        )
+                        is LibraryResult.BookmarkResult -> BookmarkRow(
+                            result = result,
+                            onOpen = { onOpenBookmark(result.score, result.bookmark.pageIndex) },
+                        )
+                    }
                     HorizontalDivider()
                 }
             }
@@ -146,6 +224,13 @@ fun LibraryScreen(
             onConfirm = { onDelete(score.id); deleteScore = null },
         )
     }
+    labelScore?.let { score ->
+        LabelsDialog(
+            initialLabels = score.labels,
+            onDismiss = { labelScore = null },
+            onSave = { onLabels(score.id, it); labelScore = null },
+        )
+    }
 }
 
 @Composable
@@ -157,6 +242,7 @@ private fun ScoreRow(
     onMore: () -> Unit,
     onDismissMenu: () -> Unit,
     onRename: () -> Unit,
+    onLabels: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val more = stringResource(R.string.more_options)
@@ -178,6 +264,13 @@ private fun ScoreRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (score.labels.isNotEmpty()) {
+                Text(
+                    score.labels.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Box {
             IconButton(
@@ -193,6 +286,10 @@ private fun ScoreRow(
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.rename)) },
                     onClick = onRename,
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.labels)) },
+                    onClick = onLabels,
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.delete)) },
@@ -237,6 +334,57 @@ internal fun AppEmptyState(
             )
         }
     }
+}
+
+@Composable
+private fun BookmarkRow(result: LibraryResult.BookmarkResult, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(painterResource(R.drawable.ic_view_module_24), contentDescription = null)
+        Column(Modifier.weight(1f)) {
+            Text(result.bookmark.title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${result.score.title} · " +
+                    stringResource(R.string.bookmark_page, result.bookmark.pageIndex + 1),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun LabelsDialog(
+    initialLabels: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (List<String>) -> Unit,
+) {
+    var value by rememberSaveable(initialLabels) { mutableStateOf(initialLabels.joinToString(", ")) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.labels)) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it.take(MAX_LABELS * (MAX_LABEL_LENGTH + 2)) },
+                label = { Text(stringResource(R.string.labels)) },
+                supportingText = { Text(stringResource(R.string.labels_hint)) },
+                singleLine = false,
+                minLines = 2,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(value.split(',')) }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable

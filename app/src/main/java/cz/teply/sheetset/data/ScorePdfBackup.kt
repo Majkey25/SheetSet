@@ -90,6 +90,7 @@ internal fun prepareScorePdfImport(
                     id = UUID.randomUUID().toString(),
                     name = record.name,
                     scoreIds = record.scoreKeys.map { key -> scoresByKey.getValue(key).id },
+                    createdAtEpochMs = importedAt,
                 )
             }
             return PreparedScorePdfImport(

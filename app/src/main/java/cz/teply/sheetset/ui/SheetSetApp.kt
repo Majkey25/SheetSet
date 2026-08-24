@@ -69,6 +69,7 @@ data class SheetSetActions(
     val importPdfs: (List<Uri>) -> Unit = {},
     val createSetlist: (String) -> Unit = {},
     val openScore: (Score) -> Unit = {},
+    val openScoreAt: (Score, Int) -> Unit = { _, _ -> },
     val openSetlistScore: (String, Int) -> Unit = { _, _ -> },
     val closeReader: () -> Unit = {},
     val previousPage: (ReaderLayout) -> Unit = {},
@@ -83,6 +84,8 @@ data class SheetSetActions(
     val deleteScore: (String) -> Unit = {},
     val renameSetlist: (String, String) -> Unit = { _, _ -> },
     val deleteSetlist: (String) -> Unit = {},
+    val updateScoreLabels: (String, List<String>) -> Unit = { _, _ -> },
+    val updateSetlistLabels: (String, List<String>) -> Unit = { _, _ -> },
     val addScores: (String, List<String>) -> Unit = { _, _ -> },
     val removeScore: (String, Int) -> Unit = { _, _ -> },
     val reorderScores: (String, List<String>) -> Unit = { _, _ -> },
@@ -228,8 +231,10 @@ fun SheetSetApp(
                         LibraryScreen(
                             scores = state.catalog.scores,
                             onOpen = actions.openScore,
+                            onOpenBookmark = actions.openScoreAt,
                             onRename = actions.renameScore,
                             onDelete = actions.deleteScore,
+                            onLabels = actions.updateScoreLabels,
                             searching = librarySearching,
                             onSearchingChange = { librarySearching = it },
                             modifier = Modifier.widthIn(max = 720.dp).fillMaxHeight(),
@@ -241,6 +246,7 @@ fun SheetSetApp(
                         onOpen = { activeSetlistId = it.id },
                         onRename = actions.renameSetlist,
                         onDelete = actions.deleteSetlist,
+                        onLabels = actions.updateSetlistLabels,
                         modifier = Modifier.width(360.dp).fillMaxHeight(),
                     )
                     VerticalDivider(Modifier.fillMaxHeight())
@@ -267,6 +273,7 @@ fun SheetSetApp(
                             onOpen = { activeSetlistId = it.id },
                             onRename = actions.renameSetlist,
                             onDelete = actions.deleteSetlist,
+                            onLabels = actions.updateSetlistLabels,
                             modifier = Modifier.widthIn(max = 720.dp).fillMaxHeight(),
                         )
                     }

@@ -64,11 +64,19 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
 
     fun deleteScore(scoreId: String) = launchAction { repository.deleteScore(scoreId) }
 
+    fun updateScoreLabels(scoreId: String, labels: List<String>) = launchAction {
+        repository.updateScoreLabels(scoreId, labels)
+    }
+
     fun renameSetlist(setlistId: String, name: String) = launchAction {
         repository.renameSetlist(setlistId, name)
     }
 
     fun deleteSetlist(setlistId: String) = launchAction { repository.deleteSetlist(setlistId) }
+
+    fun updateSetlistLabels(setlistId: String, labels: List<String>) = launchAction {
+        repository.updateSetlistLabels(setlistId, labels)
+    }
 
     fun addScores(setlistId: String, scoreIds: List<String>) = launchAction {
         scoreIds.forEach { scoreId -> repository.addScoreToSetlist(setlistId, scoreId) }

@@ -154,4 +154,15 @@
     <string name="scroll_speed">Scroll speed</string>
     <string name="slow">Slow</string>
     <string name="fast">Fast</string>
+    <string name="sort">Sort</string>
+    <string name="sort_state">Sort: %1$s</string>
+    <string name="sort_title">Title</string>
+    <string name="sort_imported">Imported</string>
+    <string name="sort_last_viewed">Last viewed</string>
+    <string name="sort_created">Created</string>
+    <string name="ascending">Ascending</string>
+    <string name="descending">Descending</string>
+    <string name="labels">Labels</string>
+    <string name="labels_hint">Separate labels with commas</string>
+    <string name="search_setlists">Search setlists</string>
 </resources>

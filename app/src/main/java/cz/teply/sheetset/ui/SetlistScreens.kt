@@ -28,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -97,11 +98,18 @@ fun SetlistsScreen(
     onOpen: (Setlist) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onLabels: (String, List<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menuSetlistId by remember { mutableStateOf<String?>(null) }
     var renameSetlist by remember { mutableStateOf<Setlist?>(null) }
     var deleteSetlist by remember { mutableStateOf<Setlist?>(null) }
+    var labelSetlist by remember { mutableStateOf<Setlist?>(null) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var sort by rememberSaveable { mutableStateOf(SetlistSort.CREATED) }
+    var direction by rememberSaveable { mutableStateOf(SortDirection.ASCENDING) }
+    var sortMenu by remember { mutableStateOf(false) }
     if (setlists.isEmpty()) {
         AppEmptyState(
             R.string.no_setlists,
@@ -110,22 +118,122 @@ fun SetlistsScreen(
         )
         return
     }
-    LazyColumn(
-        modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-    ) {
-        itemsIndexed(setlists, key = { _, setlist -> setlist.id }) { index, setlist ->
-            SetlistRow(
-                setlist = setlist,
-                index = index,
-                expanded = menuSetlistId == setlist.id,
-                onOpen = onOpen,
-                onMore = { menuSetlistId = setlist.id },
-                onDismissMenu = { menuSetlistId = null },
-                onRename = { menuSetlistId = null; renameSetlist = setlist },
-                onDelete = { menuSetlistId = null; deleteSetlist = setlist },
+    val visibleSetlists = remember(setlists, query, sort, direction) {
+        val needle = query.trim()
+        sortSetlists(
+            setlists.filter { setlist ->
+                needle.isEmpty() ||
+                    setlist.name.contains(needle, ignoreCase = true) ||
+                    setlist.labels.any { it.contains(needle, ignoreCase = true) }
+            },
+            sort,
+            direction,
+        )
+    }
+    Column(modifier.fillMaxSize()) {
+        if (searching) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.weight(1f),
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(stringResource(R.string.search_setlists)) },
+                    singleLine = true,
+                )
+                TextButton(onClick = { searching = false; query = "" }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        } else {
+            val sortDescription = stringResource(
+                R.string.sort_state,
+                stringResource(
+                    if (sort == SetlistSort.TITLE) R.string.sort_title else R.string.sort_created,
+                ),
             )
-            HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Box {
+                    IconButton(onClick = { sortMenu = true }) {
+                        Icon(painterResource(R.drawable.ic_sort_24), sortDescription)
+                    }
+                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                        listOf(
+                            SetlistSort.TITLE to R.string.sort_title,
+                            SetlistSort.CREATED to R.string.sort_created,
+                        ).forEach { (option, label) ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(label)) },
+                                onClick = { sort = option; sortMenu = false },
+                            )
+                        }
+                    }
+                }
+                IconButton(
+                    onClick = {
+                        direction = if (direction == SortDirection.ASCENDING) {
+                            SortDirection.DESCENDING
+                        } else {
+                            SortDirection.ASCENDING
+                        }
+                    },
+                ) {
+                    Icon(
+                        painterResource(
+                            if (direction == SortDirection.ASCENDING) {
+                                R.drawable.ic_arrow_up_24
+                            } else {
+                                R.drawable.ic_arrow_down_24
+                            },
+                        ),
+                        stringResource(
+                            if (direction == SortDirection.ASCENDING) {
+                                R.string.ascending
+                            } else {
+                                R.string.descending
+                            },
+                        ),
+                    )
+                }
+                IconButton(onClick = { searching = true }) {
+                    Icon(
+                        painterResource(R.drawable.ic_search_24),
+                        stringResource(R.string.search_setlists),
+                    )
+                }
+            }
+        }
+        if (visibleSetlists.isEmpty()) {
+            AppEmptyState(
+                R.string.no_search_results,
+                R.string.search_setlists,
+                Modifier.weight(1f),
+            )
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                itemsIndexed(visibleSetlists, key = { _, setlist -> setlist.id }) { index, setlist ->
+                    SetlistRow(
+                        setlist = setlist,
+                        index = index,
+                        expanded = menuSetlistId == setlist.id,
+                        onOpen = onOpen,
+                        onMore = { menuSetlistId = setlist.id },
+                        onDismissMenu = { menuSetlistId = null },
+                        onRename = { menuSetlistId = null; renameSetlist = setlist },
+                        onLabels = { menuSetlistId = null; labelSetlist = setlist },
+                        onDelete = { menuSetlistId = null; deleteSetlist = setlist },
+                    )
+                    HorizontalDivider()
+                }
+            }
         }
     }
     renameSetlist?.let { setlist ->
@@ -145,6 +253,13 @@ fun SetlistsScreen(
             onConfirm = { onDelete(setlist.id); deleteSetlist = null },
         )
     }
+    labelSetlist?.let { setlist ->
+        LabelsDialog(
+            initialLabels = setlist.labels,
+            onDismiss = { labelSetlist = null },
+            onSave = { onLabels(setlist.id, it); labelSetlist = null },
+        )
+    }
 }
 
 @Composable
@@ -156,6 +271,7 @@ private fun SetlistRow(
     onMore: () -> Unit,
     onDismissMenu: () -> Unit,
     onRename: () -> Unit,
+    onLabels: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val more = stringResource(R.string.more_options)
@@ -180,6 +296,13 @@ private fun SetlistRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (setlist.labels.isNotEmpty()) {
+                Text(
+                    setlist.labels.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Box {
             IconButton(
@@ -195,6 +318,10 @@ private fun SetlistRow(
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.rename)) },
                     onClick = onRename,
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.labels)) },
+                    onClick = onLabels,
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.delete)) },
