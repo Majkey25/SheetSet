@@ -20,6 +20,8 @@ class SettingsStoreTest {
         preferences.edit()
             .putString("page_fit", "BROKEN")
             .putString("pen_width", "MISSING")
+            .putString("reader_layout", "UNKNOWN")
+            .putString("auto_scroll_speed", "IMPOSSIBLE")
             .putBoolean("keep_screen_awake", false)
             .commit()
 
@@ -40,6 +42,8 @@ class SettingsStoreTest {
             penWidth = ToolSize.THICK,
             highlighterStrength = HighlightStrength.STRONG,
             textSize = AnnotationTextSize.LARGE,
+            readerLayout = ReaderLayout.HALF,
+            autoScrollSpeed = AutoScrollSpeed.FAST,
         )
 
         val store = SettingsStore(preferences)

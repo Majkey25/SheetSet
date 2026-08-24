@@ -9,7 +9,9 @@ import cz.teply.sheetset.pdf.InkAnnotation
 import cz.teply.sheetset.pdf.InkKind
 import cz.teply.sheetset.pdf.NormalizedPoint
 import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.AutoScrollSpeed
 import cz.teply.sheetset.settings.PageFit
+import cz.teply.sheetset.settings.ReaderLayout
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -17,11 +19,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 class LibraryBackupTest {
@@ -65,7 +69,12 @@ class LibraryBackupTest {
                 ),
             )
             source.saveAnnotations(score.id, annotations)
-            val settings = AppSettings(pageFit = PageFit.WIDTH, pageTurnTaps = false)
+            val settings = AppSettings(
+                pageFit = PageFit.WIDTH,
+                pageTurnTaps = false,
+                readerLayout = ReaderLayout.HALF,
+                autoScrollSpeed = AutoScrollSpeed.FAST,
+            )
             val archive = ByteArrayOutputStream()
             source.createBackup(archive, settings, "cs")
 
@@ -108,6 +117,53 @@ class LibraryBackupTest {
             pdf.delete()
         }
     }
+
+    @Test
+    fun versionOneBackupUsesNewReaderDefaults() {
+        runBlocking {
+            val source = LibraryRepository(sourceRoot)
+            val pdf = createPdf(pages = 1)
+            source.importPdf(PdfImport("Score.pdf", "application/pdf", pdf.length(), pdf::inputStream))
+            val archive = ByteArrayOutputStream()
+            source.createBackup(
+                archive,
+                AppSettings(readerLayout = ReaderLayout.HALF, autoScrollSpeed = AutoScrollSpeed.FAST),
+                null,
+            )
+
+            val restored = LibraryRepository(restoreRoot).restoreBackup(
+                ByteArrayInputStream(asVersionOne(archive.toByteArray())),
+            )
+
+            assertEquals(ReaderLayout.SINGLE, requireNotNull(restored).settings.readerLayout)
+            assertEquals(AutoScrollSpeed.MEDIUM, restored.settings.autoScrollSpeed)
+            pdf.delete()
+        }
+    }
+
+    private fun asVersionOne(archive: ByteArray): ByteArray = ByteArrayOutputStream().also { output ->
+        ZipInputStream(ByteArrayInputStream(archive)).use { input ->
+            ZipOutputStream(output).use { zip ->
+                while (true) {
+                    val entry = input.nextEntry ?: break
+                    zip.putNextEntry(ZipEntry(entry.name))
+                    if (entry.name == "manifest.json") {
+                        val manifest = JSONObject(input.readBytes().toString(Charsets.UTF_8))
+                        manifest.put("version", 1)
+                        manifest.getJSONObject("settings")
+                            .remove("readerLayout")
+                        manifest.getJSONObject("settings")
+                            .remove("autoScrollSpeed")
+                        zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
+                    } else {
+                        input.copyTo(zip)
+                    }
+                    zip.closeEntry()
+                    input.closeEntry()
+                }
+            }
+        }
+    }.toByteArray()
 
     private fun createPdf(pages: Int): File {
         val context = ApplicationProvider.getApplicationContext<Context>()

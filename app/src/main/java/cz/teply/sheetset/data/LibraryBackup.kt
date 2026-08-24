@@ -4,9 +4,11 @@ import cz.teply.sheetset.pdf.AnnotationJson
 import cz.teply.sheetset.settings.AnnotationTextSize
 import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.AppSettings
+import cz.teply.sheetset.settings.AutoScrollSpeed
 import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderDefaultTool
+import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.settings.ToolSize
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -21,7 +23,7 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 private const val BACKUP_FORMAT = "sheetset-backup"
-private const val BACKUP_VERSION = 1
+private const val BACKUP_VERSION = 2
 // ponytail: 1 GiB bounds untrusted ZIPs; raise after testing larger real libraries.
 internal const val MAX_BACKUP_BYTES = 1L * 1024L * 1024L * 1024L
 internal const val MAX_BACKUP_ENTRIES = 20_000
@@ -138,10 +140,8 @@ private fun validateStaging(staging: File): BackupMetadata {
         throw BackupException("Backup manifest or catalog is missing")
     }
     val manifest = JSONObject(manifestFile.readText(Charsets.UTF_8))
-    if (
-        manifest.optString("format") != BACKUP_FORMAT ||
-        manifest.optInt("version", -1) != BACKUP_VERSION
-    ) {
+    val version = manifest.optInt("version", -1)
+    if (manifest.optString("format") != BACKUP_FORMAT || version !in 1..BACKUP_VERSION) {
         throw BackupException("Unsupported backup format")
     }
     val languageTag = if (manifest.isNull("languageTag")) {
@@ -152,7 +152,7 @@ private fun validateStaging(staging: File): BackupMetadata {
     if (languageTag != null && languageTag !in AppLanguages.supportedTags) {
         throw BackupException("Backup contains an unsupported language")
     }
-    val settings = manifest.getJSONObject("settings").toSettings()
+    val settings = manifest.getJSONObject("settings").toSettings(version)
     val catalog = CatalogJson.decode(catalogFile.readText(Charsets.UTF_8))
     val scoreDirectory = File(staging, "scores")
     val expectedScores = catalog.scores.map(Score::fileName).toSet()
@@ -240,8 +240,11 @@ private fun AppSettings.toJson(): JSONObject = JSONObject()
     .put("penWidth", penWidth.name)
     .put("highlighterStrength", highlighterStrength.name)
     .put("textSize", textSize.name)
+    .put("readerLayout", readerLayout.name)
+    .put("autoScrollSpeed", autoScrollSpeed.name)
 
-private fun JSONObject.toSettings(): AppSettings = try {
+private fun JSONObject.toSettings(version: Int): AppSettings = try {
+    val defaults = AppSettings()
     AppSettings(
         keepScreenAwake = getBoolean("keepScreenAwake"),
         pageFit = PageFit.valueOf(getString("pageFit")),
@@ -252,6 +255,16 @@ private fun JSONObject.toSettings(): AppSettings = try {
         penWidth = ToolSize.valueOf(getString("penWidth")),
         highlighterStrength = HighlightStrength.valueOf(getString("highlighterStrength")),
         textSize = AnnotationTextSize.valueOf(getString("textSize")),
+        readerLayout = if (version >= 2) {
+            ReaderLayout.valueOf(getString("readerLayout"))
+        } else {
+            defaults.readerLayout
+        },
+        autoScrollSpeed = if (version >= 2) {
+            AutoScrollSpeed.valueOf(getString("autoScrollSpeed"))
+        } else {
+            defaults.autoScrollSpeed
+        },
     )
 } catch (error: Exception) {
     throw BackupException("Backup settings are invalid", error)
