@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.4] - 2026-08-26
+
+### Changed
+
+- Reworked the phone PDF editor into a compact ScorePDF-inspired two-row toolbar with one mode switch, color-tinted presets, fixed undo/redo/Done actions, and horizontal access to secondary tools.
+- Simplified color and text editing so quick choices are visible first while HSV, line height, and alignment remain available under optional advanced controls.
+
+### Fixed
+
+- Corrected the scanner branding to SeliaScan across the app, website, and release documentation.
+
 ## [0.5.0-alpha.3] - 2026-08-26
 
 ### Added
@@ -9,7 +20,7 @@
 - Contextual Draw and Objects tool groups with reusable pen presets, lasso selection, musical symbols, text editing, duplicate/delete actions, and one compact color control.
 - Quick, recent, and custom HSV colors with opacity, live preview, and an eyedropper that samples the rendered PDF.
 - Persisted annotation-tool order and visibility, drag-handle customization, palm rejection, and accessible move actions.
-- Direct CeliaScan launch plus Android PDF share/open intake for validated content URI documents.
+- Direct SeliaScan launch plus Android PDF share/open intake for validated content URI documents.
 - Version 3 annotation storage for per-object opacity, text alignment and line height, and musical symbols rendered consistently in the reader and exported PDF.
 
 ### Changed
@@ -18,7 +29,7 @@
 - Changed the Google Play application ID to `com.majkeylab.sheetset`; the new package installs separately, so migrate an existing library with ZIP backup and restore.
 - Replaced the crowded annotation palette with a responsive two-row toolbar that keeps navigation and Done fixed while tools scroll.
 - Grouped settings into Library, Reading, Data, and App pages with current-value rows and bounded choice dialogs.
-- Replaced the SeliaLists launcher and Play Store artwork with the current first-party CeliaScan icon.
+- Replaced the SeliaLists launcher and Play Store artwork with the current first-party SeliaScan icon.
 - Added Single, Half, and Two-page defaults to the main Reader settings page.
 - Lowered the minimum version to Android 10 and moved per-app language handling to the AndroidX compatibility path.
 

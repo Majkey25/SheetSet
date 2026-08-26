@@ -286,7 +286,7 @@ fun SheetSetApp(
         ImportSourceSheet(
             onDismiss = { importOptions = false },
             onFiles = { importLauncher.launch(arrayOf("application/pdf")) },
-            onScan = { openCeliaScan(context) },
+            onScan = { openSeliaScan(context) },
         )
     }
 
@@ -343,19 +343,19 @@ fun SheetSetApp(
     }
 }
 
-private const val CELIA_SCAN_PACKAGE = "com.majkeylab.scanit"
+private const val SELIA_SCAN_PACKAGE = "com.majkeylab.scanit"
 
-private fun openCeliaScan(context: Context) {
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(CELIA_SCAN_PACKAGE)
+private fun openSeliaScan(context: Context) {
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(SELIA_SCAN_PACKAGE)
     if (launchIntent != null && runCatching { context.startActivity(launchIntent) }.isSuccess) return
 
     val market = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("market://details?id=$CELIA_SCAN_PACKAGE"),
+        Uri.parse("market://details?id=$SELIA_SCAN_PACKAGE"),
     )
     val web = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("https://play.google.com/store/apps/details?id=$CELIA_SCAN_PACKAGE"),
+        Uri.parse("https://play.google.com/store/apps/details?id=$SELIA_SCAN_PACKAGE"),
     )
     runCatching { context.startActivity(market) }
         .recoverCatching { context.startActivity(web) }

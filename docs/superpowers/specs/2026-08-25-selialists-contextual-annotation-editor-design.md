@@ -47,8 +47,8 @@ This change includes:
 - Version 3 annotation migration.
 - A sectioned settings hierarchy.
 - Editor and settings acceptance tests.
-- Installed-app handoff to CeliaScan and Android PDF share/open intake.
-- Exact reuse of the current first-party CeliaScan launcher and Play Store icon in SeliaLists.
+- Installed-app handoff to SeliaScan and Android PDF share/open intake.
+- Exact reuse of the current first-party SeliaScan launcher and Play Store icon in SeliaLists.
 
 This change does not include page reordering, duplicate-page common and local layers, jump links, metronome, timed page turning, cloud sync, OCR, or collaboration. Those features require separate reader or storage designs and do not solve the current editor usability problem.
 
@@ -333,16 +333,16 @@ Primitive settings keep their existing keys. If no preset JSON exists, `Settings
 
 The native backup must include the expanded settings. Restoring an older backup supplies defaults for fields that do not exist.
 
-## CeliaScan and Android PDF intake
+## SeliaScan and Android PDF intake
 
-SeliaLists integrates with the installed scanner without changing CeliaScan.
+SeliaLists integrates with the installed scanner without changing SeliaScan.
 
 The scanner package is `com.majkeylab.scanit`. The manifest declares this package in `<queries>` so Android 11 and newer can resolve it.
 
 The **Import PDF** source sheet keeps two actions:
 
 - **Files** opens Android's multiple-document picker for `application/pdf`.
-- **Scan with CeliaScan** opens the installed app's launch activity. If the package is absent, SeliaLists opens its Google Play listing with a web fallback.
+- **Scan with SeliaScan** opens the installed app's launch activity. If the package is absent, SeliaLists opens its Google Play listing with a web fallback.
 
 SeliaLists declares exported PDF intake filters for `ACTION_SEND`, `ACTION_SEND_MULTIPLE`, and `ACTION_VIEW` with `application/pdf` and the default category. `MainActivity` uses `singleTop` so a PDF shared while SeliaLists is open arrives through `onNewIntent`.
 
@@ -350,7 +350,7 @@ One intent parser extracts `Intent.EXTRA_STREAM`, multiple stream extras, and PD
 
 `MainActivity` sends accepted URIs to `SheetSetViewModel.importPdfs`. It consumes the external intent once so activity recreation does not import the same PDF again. Unsupported, empty, or malformed intents leave the library unchanged and show the existing localized failure state when import validation fails.
 
-SeliaLists does not call a private CeliaScan activity, read CeliaScan storage, add a shared SDK, or modify the CeliaScan repository. CeliaScan returns a scan through the Android Sharesheet like any other PDF-producing app.
+SeliaLists does not call a private SeliaScan activity, read SeliaScan storage, add a shared SDK, or modify the SeliaScan repository. SeliaScan returns a scan through the Android Sharesheet like any other PDF-producing app.
 
 ## Accessibility
 
@@ -374,7 +374,7 @@ Expected production changes are limited to these areas:
 - `ui/ReaderScreen.kt`: editor orchestration and dialogs.
 - `ui/AnnotationToolbar.kt`: contextual toolbar and color panel.
 - `ui/SettingsDrawer.kt`: sectioned navigation and settings pages.
-- `MainActivity.kt` and `AndroidManifest.xml`: installed CeliaScan launch plus Android PDF share/open intake.
+- `MainActivity.kt` and `AndroidManifest.xml`: installed SeliaScan launch plus Android PDF share/open intake.
 - `IncomingPdfIntent.kt`: bounded extraction and one-time consumption of shared PDF URIs.
 - `settings/AppSettings.kt` and `settings/SettingsStore.kt`: presets and input settings.
 - localized string resources and focused unit or instrumentation tests.
@@ -416,7 +416,7 @@ Instrumentation tests must cover:
 9. Complete a stroke, rapidly close the text dialog, close Edit mode, and open Tools without ANR or data loss.
 10. Navigate every settings section and verify the displayed current values.
 11. Restore an older native backup and retain safe editor defaults.
-12. Open installed CeliaScan, use the Play fallback when absent, and import one or multiple shared PDF `content://` URIs exactly once.
+12. Open installed SeliaScan, use the Play fallback when absent, and import one or multiple shared PDF `content://` URIs exactly once.
 
 Run the full existing Android test suite after the focused tests. Perform phone QA on the explicitly authorized Huawei YAL-L21 running Android 10 when replacement installation is signature-safe. Run the full data test suite and expanded-layout QA on a disposable tablet AVD. Do not uninstall the Huawei app or clear its data on a signature conflict.
 
@@ -432,5 +432,5 @@ Run the full existing Android test suite after the focused tests. Perform phone 
 - The UI remains usable at 320 dp width and on an expanded tablet.
 - Existing version 1 and version 2 annotations render with their previous appearance after migration.
 - Existing backup, restore, ScorePDF import, export, setlist, Back, and language flows continue to pass.
-- CeliaScan remains unchanged, and SeliaLists appears as a target for Android PDF sharing and opening.
-- SeliaLists launcher and Play artwork match the current first-party CeliaScan assets byte-for-byte.
+- SeliaScan remains unchanged, and SeliaLists appears as a target for Android PDF sharing and opening.
+- SeliaLists launcher and Play artwork match the current first-party SeliaScan assets byte-for-byte.

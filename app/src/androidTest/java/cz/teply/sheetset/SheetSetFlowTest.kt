@@ -103,7 +103,7 @@ class SheetSetFlowTest {
     }
 
     @Test
-    fun importSheetShowsOneFilesAndOneCeliaScanRow() {
+    fun importSheetShowsOneFilesAndOneSeliaScanRow() {
         composeRule.setContent {
             SheetSetTheme {
                 SheetSetApp(LibraryUiState(), SheetSetActions())
@@ -113,7 +113,7 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Import PDF").performClick()
 
         composeRule.onAllNodesWithText("Files").assertCountEquals(1)
-        composeRule.onAllNodesWithText("Scan with CeliaScan").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Scan with SeliaScan").assertCountEquals(1)
     }
 
     @Test
@@ -443,8 +443,8 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Export").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Annotate").performClick()
 
-        composeRule.onNodeWithContentDescription("Objects").assertIsSelected()
         composeRule.onNodeWithContentDescription("Draw").performClick()
+        composeRule.onNodeWithContentDescription("Objects").assertIsDisplayed()
         listOf("Pen 1", "Pen 2", "Marker", "Highlighter", "Eraser", "Color", "Done")
             .forEach { label ->
                 composeRule.onAllNodesWithContentDescription(label).assertCountEquals(1)
@@ -484,6 +484,12 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Duplicate").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Delete annotation").assertIsDisplayed()
         composeRule.onAllNodesWithContentDescription("Straight line").assertCountEquals(0)
+
+        composeRule.onNodeWithContentDescription("Edit text").performClick()
+        composeRule.onAllNodesWithText("Line height").assertCountEquals(0)
+        composeRule.onNodeWithText("More options").performClick()
+        composeRule.onNodeWithText("Line height").assertIsDisplayed()
+        composeRule.onNodeWithText("Alignment").assertIsDisplayed()
     }
 
     @Test
@@ -507,12 +513,12 @@ class SheetSetFlowTest {
         setReaderContent()
         composeRule.onNodeWithContentDescription("Annotate").performClick()
         composeRule.onNodeWithContentDescription("Draw").performClick()
-        composeRule.onNodeWithContentDescription("Highlighter").performClick()
+        composeRule.onNodeWithContentDescription("Highlighter").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Done").performClick()
 
         composeRule.onNodeWithContentDescription("Annotate").performClick()
 
-        composeRule.onNodeWithContentDescription("Draw").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Objects").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Highlighter").assertIsSelected()
     }
 
@@ -587,7 +593,7 @@ class SheetSetFlowTest {
 
         composeRule.onNodeWithContentDescription("Annotate").performClick()
 
-        composeRule.onNodeWithContentDescription("Objects").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Draw").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ellipse").assertIsSelected()
         composeRule.onAllNodesWithContentDescription("Select").assertCountEquals(0)
     }
@@ -609,7 +615,7 @@ class SheetSetFlowTest {
 
         composeRule.onNodeWithContentDescription("Annotate").performClick()
 
-        composeRule.onNodeWithContentDescription("Draw").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Objects").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Pen 2").assertIsSelected()
         composeRule.onAllNodesWithContentDescription("Highlighter").assertCountEquals(0)
     }
@@ -658,6 +664,12 @@ class SheetSetFlowTest {
             .forEach { composeRule.onAllNodesWithContentDescription(it).assertCountEquals(1) }
         composeRule.onAllNodesWithContentDescription("Custom color #FF123456").assertCountEquals(1)
         listOf("Recent colors", "Custom color", "Opacity", "Eyedropper").forEach { label ->
+            composeRule.onNodeWithTag(COLOR_PANEL_SCROLL_TAG).performScrollToNode(hasText(label))
+            composeRule.onNodeWithText(label).assertIsDisplayed()
+        }
+        composeRule.onAllNodesWithText("Hue").assertCountEquals(0)
+        composeRule.onNodeWithText("Custom color").performClick()
+        listOf("Hue", "Saturation", "Brightness").forEach { label ->
             composeRule.onNodeWithTag(COLOR_PANEL_SCROLL_TAG).performScrollToNode(hasText(label))
             composeRule.onNodeWithText(label).assertIsDisplayed()
         }

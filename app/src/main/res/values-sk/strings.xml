@@ -10,8 +10,8 @@
     <string name="create">Vytvoriť</string>
     <string name="files">Súbory</string>
     <string name="files_hint">Vyberte PDF z tohto zariadenia.</string>
-    <string name="scan_with_scanit">Skenovať pomocou CeliaScan</string>
-    <string name="scan_with_scanit_hint">Otvorí nainštalovanú aplikáciu CeliaScan alebo Google Play, ak nie je nainštalovaná.</string>
+    <string name="scan_with_scanit">Skenovať pomocou SeliaScan</string>
+    <string name="scan_with_scanit_hint">Otvorí nainštalovanú aplikáciu SeliaScan alebo Google Play, ak nie je nainštalovaná.</string>
     <string name="untitled_pdf_file">Bez názvu.pdf</string>
     <string name="no_setlists">Zatiaľ žiadne setlisty</string>
     <string name="setlist_hint">Vytvorte setlist na skúšku alebo koncert.</string>
