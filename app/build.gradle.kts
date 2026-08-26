@@ -17,11 +17,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "cz.teply.sheetset"
+        applicationId = "com.majkeylab.sheetset"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.5.0-alpha.1"
+        versionCode = 8
+        versionName = "0.5.0-alpha.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

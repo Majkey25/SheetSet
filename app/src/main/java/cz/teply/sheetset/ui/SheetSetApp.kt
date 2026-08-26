@@ -60,7 +60,7 @@ import androidx.compose.ui.unit.dp
 import cz.teply.sheetset.LibraryUiState
 import cz.teply.sheetset.R
 import cz.teply.sheetset.data.Score
-import cz.teply.sheetset.pdf.PageAnnotation
+import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.ReaderLayout
 import kotlinx.coroutines.launch
@@ -78,7 +78,7 @@ data class SheetSetActions(
     val addBookmark: (String) -> Unit = {},
     val renameBookmark: (String, String) -> Unit = { _, _ -> },
     val deleteBookmark: (String) -> Unit = {},
-    val saveAnnotations: (List<PageAnnotation>) -> Unit = {},
+    val saveAnnotations: (String, Int, DocumentAnnotations) -> Unit = { _, _, _ -> },
     val exportPdf: (Uri) -> Unit = {},
     val renameScore: (String, String) -> Unit = { _, _ -> },
     val deleteScore: (String) -> Unit = {},
@@ -286,7 +286,7 @@ fun SheetSetApp(
         ImportSourceSheet(
             onDismiss = { importOptions = false },
             onFiles = { importLauncher.launch(arrayOf("application/pdf")) },
-            onScan = { openScanIt(context) },
+            onScan = { openCeliaScan(context) },
         )
     }
 
@@ -343,17 +343,20 @@ fun SheetSetApp(
     }
 }
 
-private const val SCAN_IT_PACKAGE = "com.majkeylab.scanit"
+private const val CELIA_SCAN_PACKAGE = "com.majkeylab.scanit"
 
-private fun openScanIt(context: Context) {
+private fun openCeliaScan(context: Context) {
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(CELIA_SCAN_PACKAGE)
+    if (launchIntent != null && runCatching { context.startActivity(launchIntent) }.isSuccess) return
+
     val market = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("market://details?id=$SCAN_IT_PACKAGE"),
-    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        Uri.parse("market://details?id=$CELIA_SCAN_PACKAGE"),
+    )
     val web = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("https://play.google.com/store/apps/details?id=$SCAN_IT_PACKAGE"),
-    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        Uri.parse("https://play.google.com/store/apps/details?id=$CELIA_SCAN_PACKAGE"),
+    )
     runCatching { context.startActivity(market) }
-        .getOrElse { context.startActivity(web) }
+        .recoverCatching { context.startActivity(web) }
 }

@@ -3,6 +3,7 @@ package cz.teply.sheetset.pdf
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -17,9 +18,8 @@ object PdfExporter {
         source: File,
         destination: OutputStream,
         annotations: DocumentAnnotations,
-        highlighterAlpha: Int = 105,
+        symbolTypeface: Typeface,
     ) {
-        require(highlighterAlpha in 0..255) { "Invalid highlighter alpha" }
         val document = PdfDocument()
         try {
             ParcelFileDescriptor.open(source, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
@@ -39,7 +39,7 @@ object PdfExporter {
                                             outputPage.canvas,
                                             annotation,
                                             bounds,
-                                            highlighterAlpha = highlighterAlpha,
+                                            symbolTypeface,
                                         )
                                     }
                                 } finally {

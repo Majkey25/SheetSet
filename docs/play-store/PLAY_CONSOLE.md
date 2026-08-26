@@ -1,15 +1,15 @@
 # Google Play Console publication worksheet
 
-Use these answers only for the verified SheetSet `0.5.0-alpha.1` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
+Use these answers only for the verified SeliaLists `0.5.0-alpha.3` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
 
 ## App identity
 
 | Field | Value |
 |---|---|
-| App name | `SheetSet` |
-| Package | `cz.teply.sheetset` |
-| Version code | `6` |
-| Version name | `0.5.0-alpha.1` |
+| App name | `SeliaLists` |
+| Package | `com.majkeylab.sheetset` |
+| Version code | `8` |
+| Version name | `0.5.0-alpha.3` |
 | Default language | English (United States) |
 | App or game | App |
 | Category | Music & Audio |
@@ -25,7 +25,7 @@ Use the verified legal name, address, phone, and account type already stored in 
 
 ### App name
 
-> SheetSet
+> SeliaLists
 
 ### Short description
 
@@ -33,7 +33,7 @@ Use the verified legal name, address, phone, and account type already stored in 
 
 ### Full description
 
-> SheetSet is a focused PDF score library for rehearsals, practice, and performance.
+> SeliaLists is a focused PDF score library for rehearsals, practice, and performance.
 >
 > Import one or more PDFs, organize them with labels and search, and build unlimited setlists with direct drag ordering. Open a score or setlist and move through every page without returning to the library.
 >
@@ -57,13 +57,13 @@ Use the verified legal name, address, phone, and account type already stored in 
 > - validated ZIP backup, restore, and sharing
 > - non-destructive import of compatible ScorePDF backup ZIPs
 >
-> SheetSet works offline and has no account, ads, analytics, subscription, tracking SDK, cloud library, or app-owned Internet permission. Imported originals remain unchanged. Scanning is delegated to the separate ScanIt app through an optional Google Play link.
+> SeliaLists works offline and has no account, ads, analytics, subscription, tracking SDK, cloud library, or app-owned Internet permission. Imported originals remain unchanged. Scanning is delegated to the separate CeliaScan app, which opens directly when installed or through its Google Play listing when absent.
 
 ## Czech listing
 
 ### App name
 
-> SheetSet
+> SeliaLists
 
 ### Short description
 
@@ -71,7 +71,7 @@ Use the verified legal name, address, phone, and account type already stored in 
 
 ### Full description
 
-> SheetSet je přehledná knihovna PDF not pro zkoušky, cvičení a vystoupení.
+> SeliaLists je přehledná knihovna PDF not pro zkoušky, cvičení a vystoupení.
 >
 > Importujte jedno nebo více PDF, organizujte je pomocí štítků a vyhledávání a vytvářejte neomezené setlisty s přímým řazením přetažením. Otevřete skladbu nebo setlist a procházejte všechny stránky bez návratu do knihovny.
 >
@@ -95,17 +95,17 @@ Use the verified legal name, address, phone, and account type already stored in 
 > - ověřená ZIP záloha, obnovení a sdílení
 > - nedestruktivní import kompatibilních ScorePDF záloh
 >
-> SheetSet funguje offline a neobsahuje účet, reklamy, analytiku, předplatné, sledovací SDK, cloudovou knihovnu ani vlastní přístup k internetu. Importované originály zůstávají beze změny. Skenování je volitelně předáno samostatné aplikaci ScanIt přes odkaz na Google Play.
+> SeliaLists funguje offline a neobsahuje účet, reklamy, analytiku, předplatné, sledovací SDK, cloudovou knihovnu ani vlastní přístup k internetu. Importované originály zůstávají beze změny. Skenování je volitelně předáno samostatné aplikaci CeliaScan, která se otevře přímo po instalaci nebo přes svou stránku na Google Play.
 
 ## Closed-test release notes
 
 ### English
 
-> Added a compact annotation toolbar with one color picker, direct core tools, and clearer secondary tools. Reader layouts are now available in App settings. Automatic scrolling was removed to keep page control predictable.
+> Rebuilt the PDF editor with contextual Draw and Objects tools, custom colors, text and symbol editing, lasso selection, palm rejection, and safer annotation backups. Added CeliaScan sharing and clearer grouped settings.
 
 ### Čeština
 
-> Přidán kompaktní panel anotací s jednou volbou barvy, přímými základními nástroji a přehlednějšími dalšími nástroji. Rozložení čtečky je nově v nastavení. Automatické posouvání bylo odstraněno.
+> Přepracován PDF editor s kontextovými nástroji Kreslení a Objekty, vlastními barvami, úpravou textu a symbolů, lasem, odmítnutím dlaně a bezpečnějšími zálohami anotací. Přidáno sdílení přes CeliaScan a přehlednější nastavení.
 
 ## App content
 
@@ -127,7 +127,7 @@ Use the verified legal name, address, phone, and account type already stored in 
 
 Reviewer note:
 
-> SheetSet requires no account. Tap Import PDF to select a PDF through Android's document picker, or restore a compatible backup from Menu. The app works offline. App details, Privacy policy, language, reader, annotation, backup, and restore settings are available from the top-left menu.
+> SeliaLists requires no account. Tap Import PDF to select a PDF through Android's document picker, or restore a compatible backup from Menu. The app works offline. App details, Privacy policy, language, reader, annotation, backup, and restore settings are available from the top-left menu.
 
 ## Data safety
 
@@ -135,31 +135,31 @@ Reviewer note:
 |---|---|
 | Does the app collect user data? | No |
 | Does the app share user data with the developer or third parties? | No |
-| Is data encrypted in transit? | Not applicable; SheetSet has no app-owned network transmission |
-| Can users request account deletion? | Not applicable; SheetSet has no accounts |
+| Is data encrypted in transit? | Not applicable; SeliaLists has no app-owned network transmission |
+| Can users request account deletion? | Not applicable; SeliaLists has no accounts |
 
-User-selected exports and shares are not developer collection. Android document providers, share recipients, browsers, Google Play, GitHub, ScanIt, and Buy Me a Coffee operate under their own terms after the user explicitly chooses them.
+User-selected exports and shares are not developer collection. Android document providers, share recipients, browsers, Google Play, GitHub, CeliaScan, and Buy Me a Coffee operate under their own terms after the user explicitly chooses them.
 
 ## Payments and support
 
-App details contains an optional external Buy Me a Coffee support link. It provides no feature, entitlement, badge, priority, digital content, or service. SheetSet has no billing SDK and no paid functionality.
+App details contains an optional external Buy Me a Coffee support link. It provides no feature, entitlement, badge, priority, digital content, or service. SeliaLists has no billing SDK and no paid functionality.
 
 ## Asset checklist
 
 - `assets/icon.png`: 512 × 512 RGBA PNG, 32-bit with alpha, under 1,024 KB.
 - `assets/feature-graphic.png`: 1024 × 500 RGB PNG without alpha.
 - `assets/en-US/phone/01-library.png` through `06-reader-settings.png`: six 1080 × 2400 RGB PNG screenshots from the exact current emulator build.
-- The screenshots show only SheetSet and the synthetic `SheetSet QA Score`; no private or copyrighted music is present.
+- The screenshots show only SeliaLists and the synthetic `SheetSet QA Score`; no private or copyrighted music is present.
 - No copyrighted scores, rankings, prices, Play badges, donation promotion, device frames, or unfinished features.
 
 Upload phone screenshots in this order: library, clean reader, compact annotation toolbar, color picker, App details, Reader settings.
 
 Alt text:
 
-1. `SheetSet PDF library with search, sorting, labels, and one synthetic QA score.`
-2. `A synthetic music score open in the SheetSet reader.`
-3. `Compact SheetSet annotation toolbar with direct pen, highlighter, eraser, selection, color, undo, and redo controls.`
-4. `SheetSet color picker with eight clear annotation colors.`
+1. `SeliaLists PDF library with search, sorting, labels, and one synthetic QA score.`
+2. `A synthetic music score open in the SeliaLists reader.`
+3. `Compact SeliaLists annotation toolbar with direct pen, highlighter, eraser, selection, color, undo, and redo controls.`
+4. `SeliaLists color picker with eight clear annotation colors.`
 5. `App details with version, Android requirement, Privacy policy, source links, and optional Buy Me a Coffee support.`
 6. `Reader settings for page layout, page turning, control visibility, and page fit.`
 

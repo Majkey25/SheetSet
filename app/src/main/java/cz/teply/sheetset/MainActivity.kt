@@ -69,6 +69,20 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        handleIncomingPdfIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingPdfIntent(intent)
+    }
+
+    private fun handleIncomingPdfIntent(source: Intent) {
+        val uris = IncomingPdfIntent.uris(source)
+        if (uris.isEmpty()) return
+        viewModel.importPdfs(uris)
+        setIntent(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN))
     }
 
     private fun openBackupShareSheet(uri: Uri) {
@@ -76,7 +90,7 @@ class MainActivity : AppCompatActivity() {
             .setType("application/zip")
             .putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        share.clipData = ClipData.newUri(contentResolver, "SheetSet backup", uri)
+        share.clipData = ClipData.newUri(contentResolver, "SeliaLists backup", uri)
         startActivity(Intent.createChooser(share, getString(R.string.share_backup_chooser)))
     }
 }

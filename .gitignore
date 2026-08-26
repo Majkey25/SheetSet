@@ -6,7 +6,7 @@ build/
 local.properties
 keystore.properties
 app/build/
-.reference/tmp/
+.reference/
 captures/
 .worktrees/
 *.jks

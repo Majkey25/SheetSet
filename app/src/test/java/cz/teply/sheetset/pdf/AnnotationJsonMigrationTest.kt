@@ -3,6 +3,7 @@ package cz.teply.sheetset.pdf
 import cz.teply.sheetset.settings.AnnotationTextSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnnotationJsonMigrationTest {
@@ -115,31 +116,78 @@ class AnnotationJsonMigrationTest {
     }
 
     @Test
-    fun annotationColorsPersistAndOldVersionTwoGetsSafeDefaults() {
-        val colored = DocumentAnnotations(
+    fun versionTwoColorAndHighlighterOpacityMigrateToVersionThree() {
+        val migrated = AnnotationJson.decode(
+            """{"version":2,"pages":{"0":[{"id":"old","type":"ink","kind":"HIGHLIGHTER","color":"RED","width":0.01,"points":[[0.1,0.2],[0.3,0.4]]}]}}""",
+        )
+
+        val annotation = migrated.pages.getValue(0).single() as InkAnnotation
+        assertEquals(AnnotationColor.RED, annotation.color)
+        assertEquals(LEGACY_HIGHLIGHTER_OPACITY, annotation.opacity)
+        assertTrue(AnnotationJson.encode(migrated).contains("\"version\":3"))
+        assertTrue(AnnotationJson.encode(migrated).contains("#FFD32F2F"))
+    }
+
+    @Test
+    fun textAppearanceSurvivesVersionThreeRoundTrip() {
+        val source = DocumentAnnotations(
             mapOf(
                 0 to listOf(
-                    InkAnnotation(
-                        id = "red-pen",
-                        kind = InkKind.PEN,
-                        width = 0.004f,
-                        points = listOf(NormalizedPoint(0.1f, 0.1f)),
-                        color = AnnotationColor.RED,
+                    TextBoxAnnotation(
+                        id = "text",
+                        bounds = NormalizedRect(0.1f, 0.1f, 0.4f, 0.25f),
+                        text = "rit.",
+                        size = AnnotationTextSize.MEDIUM,
+                        lineHeight = 1.3f,
+                        alignment = AnnotationTextAlignment.CENTER,
+                        color = AnnotationColor.BLACK,
+                        opacity = 255,
                     ),
                 ),
             ),
         )
-        val oldVersionTwo = """
-            {"version":2,"pages":{"0":[
-              {"id":"old","type":"ink","kind":"HIGHLIGHTER","width":0.02,
-               "points":[[0.2,0.2]]}
-            ]}}
-        """.trimIndent()
 
-        assertEquals(colored, AnnotationJson.decode(AnnotationJson.encode(colored)))
-        assertEquals(
-            AnnotationColor.YELLOW,
-            (AnnotationJson.decode(oldVersionTwo).pages.getValue(0).single() as InkAnnotation).color,
-        )
+        assertEquals(source, AnnotationJson.decode(AnnotationJson.encode(source)))
     }
+
+    @Test
+    fun symbolAppearanceSurvivesVersionThreeRoundTrip() {
+        val source = DocumentAnnotations(mapOf(3 to listOf(symbolAnnotation())))
+
+        assertEquals(source, AnnotationJson.decode(AnnotationJson.encode(source)))
+    }
+
+    @Test
+    fun symbolRotationNormalizesNegativeDegrees() {
+        assertEquals(315f, symbolAnnotation().rotated(-45f).rotationDegrees, 0f)
+    }
+
+    @Test
+    fun invalidSymbolValuesAreRejected() {
+        val valid = symbolAnnotation()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(symbolId = "unsupported")
+        }
+        assertThrows(IllegalArgumentException::class.java) { valid.copy(size = 0.009f) }
+        assertThrows(IllegalArgumentException::class.java) { valid.copy(size = 0.501f) }
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(rotationDegrees = -361f)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(rotationDegrees = 361f)
+        }
+        assertThrows(IllegalArgumentException::class.java) { valid.copy(opacity = -1) }
+        assertThrows(IllegalArgumentException::class.java) { valid.copy(opacity = 256) }
+    }
+
+    private fun symbolAnnotation(): SymbolAnnotation = SymbolAnnotation(
+        id = "symbol",
+        symbolId = "fermata",
+        center = NormalizedPoint(0.31f, 0.47f),
+        size = 0.19f,
+        rotationDegrees = -135f,
+        color = AnnotationColor(0xFF123456.toInt()),
+        opacity = 123,
+    )
 }

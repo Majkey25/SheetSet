@@ -1,0 +1,542 @@
+package cz.teply.sheetset.pdf
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.pdf.PdfDocument
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
+import androidx.test.core.app.ActivityScenario
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import cz.teply.sheetset.MainActivity
+import cz.teply.sheetset.settings.PageFit
+import java.io.File
+import java.util.UUID
+import kotlin.math.min
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class PdfPageViewInputTest {
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private lateinit var scenario: ActivityScenario<MainActivity>
+    private lateinit var source: File
+    private lateinit var view: PdfPageView
+
+    @Before
+    fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        source = createPdf(context)
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        scenario.onActivity { activity ->
+            view = PdfPageView(activity)
+            activity.setContentView(view)
+        }
+        instrumentation.waitForIdleSync()
+        scenario.onActivity { view.showPage(source, 0) }
+        awaitRenderedPage()
+    }
+
+    @After
+    fun tearDown() {
+        scenario.close()
+        source.delete()
+    }
+
+    @Test
+    fun penStrokeCommitsOnePresetStyledAnnotation() {
+        val added = mutableListOf<PageAnnotation>()
+        val settings = AnnotationEditorSettings.defaults()
+        scenario.onActivity {
+            view.editorSettings = settings
+            view.activeDrawingPreset = settings.preset("pen-2")
+            view.tool = ReaderTool.PEN
+            view.onAddAnnotation = added::add
+        }
+
+        drag(pagePoint(0.2f, 0.2f), pagePoint(0.8f, 0.8f))
+
+        val stroke = added.single() as InkAnnotation
+        assertEquals(AnnotationColor.BLUE, stroke.color)
+        assertEquals(255, stroke.opacity)
+        assertEquals(0.004f, stroke.width, 0.0001f)
+    }
+
+    @Test
+    fun canceledStrokeCommitsNothing() {
+        val added = mutableListOf<PageAnnotation>()
+        scenario.onActivity {
+            view.tool = ReaderTool.PEN
+            view.onAddAnnotation = added::add
+        }
+
+        drag(pagePoint(0.2f, 0.2f), pagePoint(0.8f, 0.8f), MotionEvent.ACTION_CANCEL)
+
+        assertTrue(added.isEmpty())
+    }
+
+    @Test
+    fun twoFingerGesturePansAndZoomsWithoutCommittingPenStroke() {
+        val added = mutableListOf<PageAnnotation>()
+        scenario.onActivity {
+            view.tool = ReaderTool.PEN
+            view.onAddAnnotation = added::add
+        }
+        val before = viewport()
+        val first = pagePoint(0.45f, 0.5f)
+        val second = pagePoint(0.55f, 0.5f)
+        val expandedFirst = pagePoint(0.425f, 0.5f)
+        val expandedSecond = pagePoint(0.575f, 0.5f)
+        val widerFirst = pagePoint(0.375f, 0.5f)
+        val widerSecond = pagePoint(0.625f, 0.5f)
+        val wideFirst = pagePoint(0.3f, 0.5f)
+        val wideSecond = pagePoint(0.7f, 0.5f)
+        val widestFirst = pagePoint(0.2f, 0.5f)
+        val widestSecond = pagePoint(0.8f, 0.5f)
+        val zoomedFirst = pagePoint(0.1f, 0.5f)
+        val zoomedSecond = pagePoint(0.9f, 0.5f)
+        val movedFirst = pagePoint(0.15f, 0.5f)
+        val movedSecond = pagePoint(0.95f, 0.5f)
+        val downTime = SystemClock.uptimeMillis()
+
+        send(event(downTime, downTime, MotionEvent.ACTION_DOWN, Pointer(0, FINGER, first)))
+        send(
+            event(
+                downTime,
+                downTime + 10,
+                MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                Pointer(0, FINGER, first),
+                Pointer(1, FINGER, second),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 20,
+                MotionEvent.ACTION_MOVE,
+                Pointer(0, FINGER, expandedFirst),
+                Pointer(1, FINGER, expandedSecond),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 30,
+                MotionEvent.ACTION_MOVE,
+                Pointer(0, FINGER, widerFirst),
+                Pointer(1, FINGER, widerSecond),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 50,
+                MotionEvent.ACTION_MOVE,
+                Pointer(0, FINGER, wideFirst),
+                Pointer(1, FINGER, wideSecond),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 70,
+                MotionEvent.ACTION_MOVE,
+                Pointer(0, FINGER, widestFirst),
+                Pointer(1, FINGER, widestSecond),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 90,
+                MotionEvent.ACTION_MOVE,
+                Pointer(0, FINGER, zoomedFirst),
+                Pointer(1, FINGER, zoomedSecond),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 110,
+                MotionEvent.ACTION_MOVE,
+                Pointer(0, FINGER, movedFirst),
+                Pointer(1, FINGER, movedSecond),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 130,
+                MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                Pointer(0, FINGER, movedFirst),
+                Pointer(1, FINGER, movedSecond),
+            ),
+        )
+        send(event(downTime, downTime + 150, MotionEvent.ACTION_UP, Pointer(0, FINGER, movedFirst)))
+
+        val after = viewport()
+        assertTrue("before=$before after=$after", after.zoom > before.zoom)
+        assertTrue("before=$before after=$after", after.panX > before.panX)
+        assertTrue(added.isEmpty())
+
+        scenario.onActivity {
+            view.tool = ReaderTool.PEN
+            view.pageFit = PageFit.PAGE
+            view.setHalfPagePart(0)
+        }
+        assertEquals(after, viewport())
+    }
+
+    @Test
+    fun palmRejectionKeepsStylusStrokeThroughMixedPointerStream() {
+        val added = mutableListOf<PageAnnotation>()
+        scenario.onActivity {
+            view.editorSettings = AnnotationEditorSettings.defaults().copy(palmRejection = true)
+            view.tool = ReaderTool.PEN
+            view.onAddAnnotation = added::add
+        }
+        val stylusStart = pagePoint(0.25f, 0.25f)
+        val stylusMiddle = pagePoint(0.4f, 0.4f)
+        val stylusEnd = pagePoint(0.75f, 0.75f)
+        val fingerStart = pagePoint(0.8f, 0.2f)
+        val fingerEnd = pagePoint(0.7f, 0.3f)
+        val downTime = SystemClock.uptimeMillis()
+
+        send(event(downTime, downTime, MotionEvent.ACTION_DOWN, Pointer(10, STYLUS, stylusStart)))
+        send(event(downTime, downTime + 10, MotionEvent.ACTION_MOVE, Pointer(10, STYLUS, stylusMiddle)))
+        send(
+            event(
+                downTime,
+                downTime + 20,
+                MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                Pointer(10, STYLUS, stylusMiddle),
+                Pointer(11, FINGER, fingerStart),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 30,
+                MotionEvent.ACTION_MOVE,
+                Pointer(11, FINGER, fingerEnd),
+                Pointer(10, STYLUS, stylusEnd),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 40,
+                MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                Pointer(10, STYLUS, stylusEnd),
+                Pointer(11, FINGER, fingerEnd),
+            ),
+        )
+        send(event(downTime, downTime + 50, MotionEvent.ACTION_UP, Pointer(10, STYLUS, stylusEnd)))
+
+        val stroke = added.single() as InkAnnotation
+        assertEquals(NormalizedPoint(0.25f, 0.25f), stroke.points.first())
+        assertEquals(NormalizedPoint(0.75f, 0.75f), stroke.points.last())
+    }
+
+    @Test
+    fun palmRejectionTransfersFingerGestureToStylus() {
+        val added = mutableListOf<PageAnnotation>()
+        scenario.onActivity {
+            view.editorSettings = AnnotationEditorSettings.defaults().copy(palmRejection = true)
+            view.tool = ReaderTool.PEN
+            view.onAddAnnotation = added::add
+        }
+        val fingerStart = pagePoint(0.1f, 0.8f)
+        val fingerMove = pagePoint(0.2f, 0.7f)
+        val stylusStart = pagePoint(0.3f, 0.3f)
+        val stylusMove = pagePoint(0.5f, 0.5f)
+        val stylusEnd = pagePoint(0.8f, 0.8f)
+        val downTime = SystemClock.uptimeMillis()
+
+        send(event(downTime, downTime, MotionEvent.ACTION_DOWN, Pointer(11, FINGER, fingerStart)))
+        send(event(downTime, downTime + 10, MotionEvent.ACTION_MOVE, Pointer(11, FINGER, fingerMove)))
+        send(
+            event(
+                downTime,
+                downTime + 20,
+                MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                Pointer(11, FINGER, fingerMove),
+                Pointer(10, STYLUS, stylusStart),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 30,
+                MotionEvent.ACTION_MOVE,
+                Pointer(10, STYLUS, stylusMove),
+                Pointer(11, FINGER, fingerMove),
+            ),
+        )
+        send(
+            event(
+                downTime,
+                downTime + 40,
+                MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                Pointer(10, STYLUS, stylusMove),
+                Pointer(11, FINGER, fingerMove),
+            ),
+        )
+        send(event(downTime, downTime + 50, MotionEvent.ACTION_MOVE, Pointer(10, STYLUS, stylusEnd)))
+        send(event(downTime, downTime + 60, MotionEvent.ACTION_UP, Pointer(10, STYLUS, stylusEnd)))
+
+        val stroke = added.single() as InkAnnotation
+        assertEquals(NormalizedPoint(0.3f, 0.3f), stroke.points.first())
+        assertEquals(NormalizedPoint(0.8f, 0.8f), stroke.points.last())
+        assertTrue(NormalizedPoint(0.1f, 0.8f) !in stroke.points)
+        assertTrue(NormalizedPoint(0.2f, 0.7f) !in stroke.points)
+    }
+
+    @Test
+    fun eyedropperSamplesPdfBitmapAndReturnsToPreviousTool() {
+        val sampled = mutableListOf<AnnotationColor>()
+        scenario.onActivity {
+            view.tool = ReaderTool.PEN
+            view.onSampleColor = sampled::add
+            view.startEyedropper()
+        }
+
+        tap(pagePoint(0.5f, 0.5f))
+
+        assertEquals(listOf(PDF_COLOR), sampled)
+        scenario.onActivity {
+            assertEquals(ReaderTool.PEN, view.tool)
+            assertFalse(view.eyedropperActive)
+        }
+    }
+
+    @Test
+    fun lassoReturnsIntersectingAnnotationIds() {
+        val selections = mutableListOf<Set<String>>()
+        scenario.onActivity {
+            view.annotations = listOf(
+                rectangle("inside", 0.1f, 0.1f, 0.2f, 0.2f),
+                rectangle("outside", 0.7f, 0.7f, 0.8f, 0.8f),
+            )
+            view.tool = ReaderTool.LASSO
+            view.onSelectionChange = selections::add
+        }
+
+        drag(pagePoint(0.05f, 0.05f), pagePoint(0.3f, 0.3f))
+
+        assertEquals(setOf("inside"), selections.single())
+    }
+
+    @Test
+    fun selectedBatchMoveEmitsOneFullPageUpdate() {
+        val updates = mutableListOf<List<PageAnnotation>>()
+        val first = rectangle("first", 0.1f, 0.1f, 0.2f, 0.2f)
+        val second = rectangle("second", 0.4f, 0.4f, 0.5f, 0.5f)
+        scenario.onActivity {
+            view.annotations = listOf(first, second)
+            view.selectedAnnotationIds = setOf(first.id, second.id)
+            view.tool = ReaderTool.SELECT
+            view.onUpdateAnnotations = updates::add
+        }
+
+        drag(pagePoint(0.15f, 0.15f), pagePoint(0.25f, 0.25f))
+
+        assertEquals(1, updates.size)
+        assertEquals(0.2f, updates.single()[0].normalizedBounds().left, 0.001f)
+        assertEquals(0.5f, updates.single()[1].normalizedBounds().left, 0.001f)
+    }
+
+    @Test
+    fun eraserGestureEmitsOneBatchDelete() {
+        val deletes = mutableListOf<Set<String>>()
+        scenario.onActivity {
+            view.annotations = listOf(
+                rectangle("first", 0.15f, 0.45f, 0.25f, 0.55f),
+                rectangle("second", 0.65f, 0.45f, 0.75f, 0.55f),
+            )
+            view.tool = ReaderTool.ERASER
+            view.onDeleteAnnotations = deletes::add
+        }
+
+        drag(pagePoint(0.2f, 0.5f), pagePoint(0.7f, 0.5f))
+
+        assertEquals(listOf(setOf("first", "second")), deletes)
+    }
+
+    @Test
+    fun symbolRotationEmitsOneFullPageUpdate() {
+        val updates = mutableListOf<List<PageAnnotation>>()
+        val symbol = SymbolAnnotation(
+            id = "symbol",
+            symbolId = "sharp",
+            center = NormalizedPoint(0.5f, 0.5f),
+            size = 0.2f,
+            rotationDegrees = 0f,
+            color = AnnotationColor.BLACK,
+            opacity = 255,
+        )
+        scenario.onActivity {
+            view.annotations = listOf(symbol)
+            view.selectedAnnotationIds = setOf(symbol.id)
+            view.tool = ReaderTool.SELECT
+            view.onUpdateAnnotations = updates::add
+        }
+
+        drag(pagePoint(0.5f, 0.4f), pagePoint(0.7f, 0.5f))
+
+        assertEquals(1, updates.size)
+        assertEquals(90f, (updates.single().single() as SymbolAnnotation).rotationDegrees, 0.001f)
+    }
+
+    @Test
+    fun symbolTapRequestsNormalizedPlacementPoint() {
+        val points = mutableListOf<NormalizedPoint>()
+        scenario.onActivity {
+            view.tool = ReaderTool.SYMBOL
+            view.onRequestSymbol = points::add
+        }
+
+        tap(pagePoint(0.5f, 0.5f))
+
+        assertEquals(0.5f, points.single().x, 0.001f)
+        assertEquals(0.5f, points.single().y, 0.001f)
+    }
+
+    private fun awaitRenderedPage() {
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (pageCenterColor() != PDF_COLOR.argb && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(20)
+        }
+        assertEquals(PDF_COLOR.argb, pageCenterColor())
+    }
+
+    private fun pageCenterColor(): Int {
+        var color = Color.TRANSPARENT
+        scenario.onActivity {
+            val output = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(output))
+            color = output.getPixel(view.width / 2, view.height / 2)
+            output.recycle()
+        }
+        return color
+    }
+
+    private fun viewport(): PdfViewport {
+        var result: PdfViewport? = null
+        scenario.onActivity { result = view.currentViewport }
+        return requireNotNull(result)
+    }
+
+    private fun pagePoint(x: Float, y: Float): Point {
+        var result: Point? = null
+        scenario.onActivity {
+            val size = min(view.width, view.height).toFloat()
+            result = Point(
+                x = (view.width - size) / 2f + size * x,
+                y = (view.height - size) / 2f + size * y,
+            )
+        }
+        return requireNotNull(result)
+    }
+
+    private fun tap(point: Point) = drag(point, point)
+
+    private fun drag(start: Point, end: Point, finishAction: Int = MotionEvent.ACTION_UP) {
+        val downTime = SystemClock.uptimeMillis()
+        send(event(downTime, downTime, MotionEvent.ACTION_DOWN, Pointer(0, FINGER, start)))
+        send(event(downTime, downTime + 10, MotionEvent.ACTION_MOVE, Pointer(0, FINGER, end)))
+        send(event(downTime, downTime + 20, finishAction, Pointer(0, FINGER, end)))
+    }
+
+    private fun send(event: MotionEvent) {
+        scenario.onActivity {
+            assertTrue(view.dispatchTouchEvent(event))
+            event.recycle()
+        }
+    }
+
+    private fun event(
+        downTime: Long,
+        eventTime: Long,
+        action: Int,
+        vararg pointers: Pointer,
+    ): MotionEvent = MotionEvent.obtain(
+        downTime,
+        eventTime,
+        action,
+        pointers.size,
+        pointers.map { pointer ->
+            MotionEvent.PointerProperties().apply {
+                id = pointer.id
+                toolType = pointer.toolType
+            }
+        }.toTypedArray(),
+        pointers.map { pointer ->
+            MotionEvent.PointerCoords().apply {
+                x = pointer.point.x
+                y = pointer.point.y
+                pressure = 1f
+                size = 0.1f
+            }
+        }.toTypedArray(),
+        0,
+        0,
+        1f,
+        1f,
+        0,
+        0,
+        if (pointers.any { it.toolType == STYLUS }) {
+            InputDevice.SOURCE_STYLUS
+        } else {
+            InputDevice.SOURCE_TOUCHSCREEN
+        },
+        0,
+    )
+
+    private fun createPdf(context: Context): File {
+        val file = File(context.cacheDir, "input-${UUID.randomUUID()}.pdf")
+        val document = PdfDocument()
+        try {
+            val page = document.startPage(PdfDocument.PageInfo.Builder(300, 300, 1).create())
+            page.canvas.drawColor(PDF_COLOR.argb)
+            document.finishPage(page)
+            file.outputStream().use(document::writeTo)
+        } finally {
+            document.close()
+        }
+        return file
+    }
+
+    private fun rectangle(
+        id: String,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+    ): ShapeAnnotation = ShapeAnnotation(
+        id = id,
+        kind = ShapeKind.RECTANGLE,
+        start = NormalizedPoint(left, top),
+        end = NormalizedPoint(right, bottom),
+        width = 0.004f,
+    )
+
+    private data class Point(val x: Float, val y: Float)
+
+    private data class Pointer(val id: Int, val toolType: Int, val point: Point)
+
+    private companion object {
+        val PDF_COLOR = AnnotationColor(Color.rgb(20, 80, 160))
+        const val FINGER = MotionEvent.TOOL_TYPE_FINGER
+        const val STYLUS = MotionEvent.TOOL_TYPE_STYLUS
+    }
+}

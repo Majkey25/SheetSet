@@ -2,7 +2,6 @@ package cz.teply.sheetset.ui
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -20,14 +20,20 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DrawerState
-import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,10 +41,10 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,24 +57,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import cz.teply.sheetset.R
-import cz.teply.sheetset.settings.AnnotationTextSize
 import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.AppSettings
-import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.PageFit
-import cz.teply.sheetset.settings.ReaderDefaultTool
 import cz.teply.sheetset.settings.ReaderLayout
-import cz.teply.sheetset.settings.ToolSize
 import kotlinx.coroutines.launch
 
-private enum class DrawerScreen { MENU, LANGUAGE, READER, ANNOTATIONS, APP_DETAILS }
+private enum class DrawerScreen {
+    MENU,
+    LANGUAGE,
+    READER,
+    GESTURES,
+    ANNOTATIONS,
+    BACKUP,
+    APP_DETAILS,
+}
+
+private enum class ReaderChoice { LAYOUT, PAGE_FIT }
 
 @Composable
 fun SettingsDrawer(
@@ -92,7 +109,7 @@ fun SettingsDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                modifier = Modifier.fillMaxHeight().widthIn(max = 360.dp).then(
+                modifier = Modifier.fillMaxHeight().widthIn(max = 380.dp).then(
                     if (drawerState.currentValue == DrawerValue.Closed) {
                         Modifier.clearAndSetSemantics { }
                     } else {
@@ -108,9 +125,6 @@ fun SettingsDrawer(
                             scope.launch { drawerState.close() }
                         },
                         onScreen = { screen = it },
-                        onBackup = onBackup,
-                        onShareBackup = onShareBackup,
-                        onRestore = onRestore,
                     )
                     DrawerScreen.LANGUAGE -> LanguageSettings(
                         onBack = { screen = DrawerScreen.MENU },
@@ -119,12 +133,24 @@ fun SettingsDrawer(
                     DrawerScreen.READER -> ReaderSettings(
                         settings = settings,
                         onBack = { screen = DrawerScreen.MENU },
+                        onGestures = { screen = DrawerScreen.GESTURES },
+                        onSettings = onSettings,
+                    )
+                    DrawerScreen.GESTURES -> GestureSettings(
+                        settings = settings,
+                        onBack = { screen = DrawerScreen.MENU },
                         onSettings = onSettings,
                     )
                     DrawerScreen.ANNOTATIONS -> AnnotationSettings(
                         settings = settings,
                         onBack = { screen = DrawerScreen.MENU },
                         onSettings = onSettings,
+                    )
+                    DrawerScreen.BACKUP -> BackupSettings(
+                        onBack = { screen = DrawerScreen.MENU },
+                        onBackup = onBackup,
+                        onShareBackup = onShareBackup,
+                        onRestore = onRestore,
                     )
                     DrawerScreen.APP_DETAILS -> AppDetailsSettings(
                         onBack = { screen = DrawerScreen.MENU },
@@ -146,9 +172,6 @@ private fun DrawerMenu(
     destination: AppDestination,
     onDestination: (AppDestination) -> Unit,
     onScreen: (DrawerScreen) -> Unit,
-    onBackup: () -> Unit,
-    onShareBackup: () -> Unit,
-    onRestore: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxHeight().statusBarsPadding().navigationBarsPadding()
@@ -159,64 +182,74 @@ private fun DrawerMenu(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
             style = MaterialTheme.typography.headlineSmall,
         )
-        NavigationDrawerItem(
-            label = { Text(stringResource(R.string.tab_pdf)) },
+        SettingsSectionTitle(R.string.settings_library)
+        SettingsNavigationRow(
+            label = R.string.tab_pdf,
+            summary = R.string.pdf_library_summary,
+            icon = R.drawable.ic_pdf_24,
             selected = destination == AppDestination.PDF,
-            onClick = { onDestination(AppDestination.PDF) },
-            icon = { Icon(painterResource(R.drawable.ic_pdf_24), contentDescription = null) },
-        )
-        NavigationDrawerItem(
-            label = { Text(stringResource(R.string.tab_setlists)) },
+        ) { onDestination(AppDestination.PDF) }
+        SettingsNavigationRow(
+            label = R.string.tab_setlists,
+            summary = R.string.setlists_summary,
+            icon = R.drawable.ic_setlist_24,
             selected = destination == AppDestination.SETLISTS,
-            onClick = { onDestination(AppDestination.SETLISTS) },
-            icon = { Icon(painterResource(R.drawable.ic_setlist_24), contentDescription = null) },
-        )
-        HorizontalDivider(Modifier.padding(vertical = 12.dp))
-        DrawerSection(R.string.language, R.drawable.ic_language_24) {
-            onScreen(DrawerScreen.LANGUAGE)
-        }
-        DrawerSection(R.string.reader_settings, R.drawable.ic_pdf_24) {
-            onScreen(DrawerScreen.READER)
-        }
-        DrawerSection(R.string.annotation_defaults, R.drawable.ic_edit_24) {
-            onScreen(DrawerScreen.ANNOTATIONS)
-        }
-        DrawerSection(R.string.backup, R.drawable.ic_download_24, onClick = onBackup)
-        DrawerSection(R.string.share_backup, R.drawable.ic_share_24, onClick = onShareBackup)
-        DrawerSection(R.string.restore_backup, R.drawable.ic_upload_file_24, onClick = onRestore)
-        DrawerSection(R.string.about, R.drawable.ic_info_24) {
-            onScreen(DrawerScreen.APP_DETAILS)
-        }
-    }
-}
+        ) { onDestination(AppDestination.SETLISTS) }
 
-@Composable
-private fun DrawerSection(@StringRes label: Int, @DrawableRes icon: Int, onClick: () -> Unit) {
-    NavigationDrawerItem(
-        label = { Text(stringResource(label)) },
-        selected = false,
-        onClick = onClick,
-        icon = { Icon(painterResource(icon), contentDescription = null) },
-    )
+        SettingsSectionTitle(R.string.settings_reading)
+        SettingsNavigationRow(
+            R.string.reader_page,
+            R.string.reader_page_summary,
+            R.drawable.ic_pdf_24,
+        ) { onScreen(DrawerScreen.READER) }
+        SettingsNavigationRow(
+            R.string.gestures,
+            R.string.gestures_summary,
+            R.drawable.ic_straighten_24,
+        ) { onScreen(DrawerScreen.GESTURES) }
+        SettingsNavigationRow(
+            R.string.annotation_tools,
+            R.string.annotation_tools_summary,
+            R.drawable.ic_edit_24,
+        ) { onScreen(DrawerScreen.ANNOTATIONS) }
+
+        SettingsSectionTitle(R.string.settings_data)
+        SettingsNavigationRow(
+            R.string.backup_restore,
+            R.string.backup_restore_summary,
+            R.drawable.ic_download_24,
+        ) { onScreen(DrawerScreen.BACKUP) }
+
+        SettingsSectionTitle(R.string.settings_app)
+        SettingsNavigationRow(
+            R.string.language,
+            R.string.language_summary,
+            R.drawable.ic_language_24,
+        ) { onScreen(DrawerScreen.LANGUAGE) }
+        SettingsNavigationRow(
+            R.string.about,
+            R.string.app_details_summary,
+            R.drawable.ic_info_24,
+        ) { onScreen(DrawerScreen.APP_DETAILS) }
+        Spacer(Modifier.height(24.dp))
+    }
 }
 
 @Composable
 private fun LanguageSettings(onBack: () -> Unit, onLanguage: (String?) -> Unit) {
     val selected = AppLanguages.currentTag(LocalContext.current)
+    val options = listOf(
+        null to R.string.device_language,
+        "en" to R.string.language_english,
+        "cs" to R.string.language_czech,
+        "sk" to R.string.language_slovak,
+        "de" to R.string.language_german,
+        "pl" to R.string.language_polish,
+    )
     SettingsPage(R.string.language, onBack) {
-        listOf(
-            null to R.string.device_language,
-            "en" to R.string.language_english,
-            "cs" to R.string.language_czech,
-            "sk" to R.string.language_slovak,
-            "de" to R.string.language_german,
-            "pl" to R.string.language_polish,
-        ).forEach { (tag, label) ->
-            ChoiceRow(
-                label = label,
-                selected = selected == tag,
-                onClick = { onLanguage(tag) },
-            )
+        item { SettingsSectionTitle(R.string.language) }
+        items(options, key = { it.first ?: "device" }) { (tag, label) ->
+            SettingsRadioRow(label, selected == tag) { onLanguage(tag) }
         }
     }
 }
@@ -225,89 +258,123 @@ private fun LanguageSettings(onBack: () -> Unit, onLanguage: (String?) -> Unit) 
 private fun ReaderSettings(
     settings: AppSettings,
     onBack: () -> Unit,
+    onGestures: () -> Unit,
     onSettings: (AppSettings) -> Unit,
 ) {
-    SettingsPage(R.string.reader_settings, onBack) {
-        ChoiceTitle(R.string.page_layout)
-        ChoiceRow(R.string.single_page, settings.readerLayout == ReaderLayout.SINGLE) {
-            onSettings(settings.copy(readerLayout = ReaderLayout.SINGLE))
+    var choice by remember { mutableStateOf<ReaderChoice?>(null) }
+    SettingsPage(R.string.reader_page, onBack) {
+        item { SettingsSectionTitle(R.string.settings_layout) }
+        item {
+            SettingsChoiceRow(R.string.page_layout, readerLayoutLabel(settings.readerLayout)) {
+                choice = ReaderChoice.LAYOUT
+            }
         }
-        ChoiceRow(R.string.half_page, settings.readerLayout == ReaderLayout.HALF) {
-            onSettings(settings.copy(readerLayout = ReaderLayout.HALF))
+        item {
+            SettingsChoiceRow(R.string.page_fit, pageFitLabel(settings.pageFit)) {
+                choice = ReaderChoice.PAGE_FIT
+            }
         }
-        ChoiceRow(R.string.two_pages, settings.readerLayout == ReaderLayout.TWO_PAGE) {
-            onSettings(settings.copy(readerLayout = ReaderLayout.TWO_PAGE))
+        item { SettingsSectionTitle(R.string.settings_page_turning) }
+        item {
+            SettingsNavigationRow(R.string.gestures, R.string.page_turning_open_gestures) {
+                onGestures()
+            }
         }
-        ChoiceTitle(R.string.pdf_navigation)
-        SwitchRow(R.string.keep_screen_awake, settings.keepScreenAwake) {
-            onSettings(settings.copy(keepScreenAwake = it))
+        item { SettingsSectionTitle(R.string.settings_display) }
+        item {
+            SettingsSwitchRow(
+                R.string.keep_screen_awake,
+                R.string.keep_screen_awake_summary,
+                settings.keepScreenAwake,
+            ) { onSettings(settings.copy(keepScreenAwake = it)) }
         }
-        SwitchRow(R.string.page_turn_taps, settings.pageTurnTaps) {
-            onSettings(settings.copy(pageTurnTaps = it))
+        item {
+            SettingsSwitchRow(
+                R.string.auto_hide_controls,
+                R.string.auto_hide_controls_summary,
+                settings.autoHideControls,
+            ) { onSettings(settings.copy(autoHideControls = it)) }
         }
-        SwitchRow(R.string.page_turn_swipes, settings.pageTurnSwipes) {
-            onSettings(settings.copy(pageTurnSwipes = it))
+    }
+    when (choice) {
+        ReaderChoice.LAYOUT -> SettingsChoiceDialog(
+            title = R.string.page_layout,
+            selected = settings.readerLayout,
+            options = listOf(
+                ReaderLayout.SINGLE to R.string.single_page,
+                ReaderLayout.HALF to R.string.half_page,
+                ReaderLayout.TWO_PAGE to R.string.two_pages,
+            ),
+            onDismiss = { choice = null },
+        ) {
+            onSettings(settings.copy(readerLayout = it))
+            choice = null
         }
-        SwitchRow(R.string.auto_hide_controls, settings.autoHideControls) {
-            onSettings(settings.copy(autoHideControls = it))
+        ReaderChoice.PAGE_FIT -> SettingsChoiceDialog(
+            title = R.string.page_fit,
+            selected = settings.pageFit,
+            options = listOf(
+                PageFit.PAGE to R.string.fit_page,
+                PageFit.WIDTH to R.string.fit_width,
+            ),
+            onDismiss = { choice = null },
+        ) {
+            onSettings(settings.copy(pageFit = it))
+            choice = null
         }
-        ChoiceTitle(R.string.page_fit)
-        ChoiceRow(R.string.fit_page, settings.pageFit == PageFit.PAGE) {
-            onSettings(settings.copy(pageFit = PageFit.PAGE))
+        null -> Unit
+    }
+}
+
+@Composable
+private fun GestureSettings(
+    settings: AppSettings,
+    onBack: () -> Unit,
+    onSettings: (AppSettings) -> Unit,
+) {
+    SettingsPage(R.string.gestures, onBack) {
+        item { SettingsSectionTitle(R.string.settings_page_turning) }
+        item {
+            SettingsSwitchRow(
+                R.string.page_turn_taps,
+                R.string.page_turn_taps_summary,
+                settings.pageTurnTaps,
+            ) { onSettings(settings.copy(pageTurnTaps = it)) }
         }
-        ChoiceRow(R.string.fit_width, settings.pageFit == PageFit.WIDTH) {
-            onSettings(settings.copy(pageFit = PageFit.WIDTH))
+        item {
+            SettingsSwitchRow(
+                R.string.page_turn_swipes,
+                R.string.page_turn_swipes_summary,
+                settings.pageTurnSwipes,
+            ) { onSettings(settings.copy(pageTurnSwipes = it)) }
+        }
+        item { SettingsSectionTitle(R.string.settings_zoom) }
+        item { SettingsInfoRow(R.string.pinch_zoom, R.string.pinch_zoom_summary) }
+        item { SettingsSectionTitle(R.string.settings_input) }
+        item {
+            SettingsSwitchRow(
+                R.string.palm_rejection,
+                R.string.palm_rejection_summary,
+                settings.editor.palmRejection,
+            ) {
+                onSettings(settings.copy(editor = settings.editor.copy(palmRejection = it)))
+            }
         }
     }
 }
 
 @Composable
-private fun AnnotationSettings(
-    settings: AppSettings,
+private fun BackupSettings(
     onBack: () -> Unit,
-    onSettings: (AppSettings) -> Unit,
+    onBackup: () -> Unit,
+    onShareBackup: () -> Unit,
+    onRestore: () -> Unit,
 ) {
-    SettingsPage(R.string.annotation_defaults, onBack) {
-        ChoiceTitle(R.string.default_tool)
-        listOf(
-            ReaderDefaultTool.VIEW to R.string.view,
-            ReaderDefaultTool.PEN to R.string.pen,
-            ReaderDefaultTool.HIGHLIGHTER to R.string.highlighter,
-        ).forEach { (value, label) ->
-            ChoiceRow(label, settings.defaultTool == value) {
-                onSettings(settings.copy(defaultTool = value))
-            }
-        }
-        ChoiceTitle(R.string.pen_width)
-        listOf(
-            ToolSize.THIN to R.string.thin,
-            ToolSize.MEDIUM to R.string.medium,
-            ToolSize.THICK to R.string.thick,
-        ).forEach { (value, label) ->
-            ChoiceRow(label, settings.penWidth == value) {
-                onSettings(settings.copy(penWidth = value))
-            }
-        }
-        ChoiceTitle(R.string.highlighter_opacity)
-        listOf(
-            HighlightStrength.LIGHT to R.string.light,
-            HighlightStrength.MEDIUM to R.string.medium,
-            HighlightStrength.STRONG to R.string.strong,
-        ).forEach { (value, label) ->
-            ChoiceRow(label, settings.highlighterStrength == value) {
-                onSettings(settings.copy(highlighterStrength = value))
-            }
-        }
-        ChoiceTitle(R.string.text_size)
-        listOf(
-            AnnotationTextSize.SMALL to R.string.small,
-            AnnotationTextSize.MEDIUM to R.string.medium,
-            AnnotationTextSize.LARGE to R.string.large,
-        ).forEach { (value, label) ->
-            ChoiceRow(label, settings.textSize == value) {
-                onSettings(settings.copy(textSize = value))
-            }
-        }
+    SettingsPage(R.string.backup_restore, onBack) {
+        item { SettingsSectionTitle(R.string.settings_backup_actions) }
+        item { SettingsActionRow(R.string.create_backup, R.string.create_backup_summary, onBackup) }
+        item { SettingsActionRow(R.string.share_backup, R.string.share_backup_summary, onShareBackup) }
+        item { SettingsActionRow(R.string.restore_backup, R.string.restore_backup_summary, onRestore) }
     }
 }
 
@@ -321,51 +388,56 @@ private fun AppDetailsSettings(onBack: () -> Unit) {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
     }
     SettingsPage(R.string.about, onBack) {
-        ListItem(
-            headlineContent = { Text(stringResource(R.string.app_version)) },
-            supportingContent = { Text(version) },
-        )
-        ListItem(headlineContent = { Text(stringResource(R.string.android_requirement)) })
-        ListItem(headlineContent = { Text(stringResource(R.string.privacy_offline)) })
-        LinkRow(R.string.privacy_policy, PRIVACY_URL, context)
-        LinkRow(R.string.license, "$REPOSITORY_URL/blob/main/LICENSE", context)
-        LinkRow(R.string.github_repository, REPOSITORY_URL, context)
-        LinkRow(R.string.release_page, "$REPOSITORY_URL/releases", context)
-        Button(
-            onClick = {
-                Toast.makeText(context, supportNotice, Toast.LENGTH_SHORT).show()
-                runCatching { uriHandler.openUri(SUPPORT_URL) }
-            },
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                .fillMaxWidth().heightIn(min = 56.dp),
-            border = BorderStroke(1.dp, Color(0xFF111111)),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFFFDD00),
-                contentColor = Color(0xFF111111),
-            ),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_coffee),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
+        item { SettingsSectionTitle(R.string.about) }
+        item {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.app_version)) },
+                supportingContent = { Text(version) },
             )
-            Spacer(Modifier.width(10.dp))
-            Text(stringResource(R.string.support_app))
         }
+        item { ListItem(headlineContent = { Text(stringResource(R.string.android_requirement)) }) }
+        item { ListItem(headlineContent = { Text(stringResource(R.string.privacy_offline)) }) }
+        item { LinkRow(R.string.privacy_policy, PRIVACY_URL, context) }
+        item { LinkRow(R.string.license, "$REPOSITORY_URL/blob/main/LICENSE", context) }
+        item { LinkRow(R.string.github_repository, REPOSITORY_URL, context) }
+        item { LinkRow(R.string.release_page, "$REPOSITORY_URL/releases", context) }
+        item {
+            Button(
+                onClick = {
+                    Toast.makeText(context, supportNotice, Toast.LENGTH_SHORT).show()
+                    runCatching { uriHandler.openUri(SUPPORT_URL) }
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    .fillMaxWidth().heightIn(min = 56.dp),
+                border = BorderStroke(1.dp, Color(0xFF111111)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFDD00),
+                    contentColor = Color(0xFF111111),
+                ),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_coffee),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(stringResource(R.string.support_app))
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
 @Composable
-private fun SettingsPage(
+internal fun SettingsPage(
     @StringRes title: Int,
     onBack: () -> Unit,
-    content: @Composable () -> Unit,
+    listState: LazyListState? = null,
+    content: LazyListScope.() -> Unit,
 ) {
     val back = stringResource(R.string.back)
-    Column(
-        Modifier.fillMaxHeight().statusBarsPadding().navigationBarsPadding()
-            .verticalScroll(rememberScrollState()),
-    ) {
+    val fallbackListState = rememberLazyListState()
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -374,59 +446,173 @@ private fun SettingsPage(
                 modifier = Modifier.semantics { contentDescription = back },
                 onClick = onBack,
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_chevron_left_24),
-                    contentDescription = null,
-                )
+                Icon(painterResource(R.drawable.ic_chevron_left_24), contentDescription = null)
             }
             Text(stringResource(title), style = MaterialTheme.typography.titleLarge)
         }
         HorizontalDivider()
-        content()
-        Spacer(Modifier.height(24.dp))
+        LazyColumn(
+            modifier = Modifier.weight(1f).testTag("settings-list"),
+            state = listState ?: fallbackListState,
+            content = content,
+        )
     }
 }
 
 @Composable
-private fun SwitchRow(@StringRes label: Int, checked: Boolean, onChecked: (Boolean) -> Unit) {
+internal fun SettingsSectionTitle(@StringRes label: Int) {
+    Text(
+        text = stringResource(label),
+        modifier = Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp, bottom = 6.dp),
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun SettingsNavigationRow(
+    @StringRes label: Int,
+    @StringRes summary: Int,
+    @DrawableRes icon: Int? = null,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) {
     ListItem(
-        modifier = Modifier.clickable { onChecked(!checked) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .semantics { this.selected = selected }
+            .clickable(onClick = onClick),
         headlineContent = { Text(stringResource(label)) },
+        supportingContent = {
+            Text(stringResource(summary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        },
+        leadingContent = icon?.let { drawable ->
+            { Icon(painterResource(drawable), contentDescription = null) }
+        },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = onChecked)
+            Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
         },
     )
 }
 
 @Composable
-private fun ChoiceTitle(@StringRes label: Int) {
-    Text(
-        text = stringResource(label),
-        modifier = Modifier.padding(start = 24.dp, top = 20.dp, end = 24.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.titleSmall,
+internal fun SettingsSwitchRow(
+    @StringRes label: Int,
+    @StringRes summary: Int,
+    checked: Boolean,
+    onChecked: (Boolean) -> Unit,
+) {
+    ListItem(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { onChecked(!checked) },
+        headlineContent = { Text(stringResource(label)) },
+        supportingContent = { Text(stringResource(summary)) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = onChecked) },
     )
 }
 
 @Composable
-private fun ChoiceRow(@StringRes label: Int, selected: Boolean, onClick: () -> Unit) {
+internal fun SettingsChoiceRow(
+    @StringRes label: Int,
+    @StringRes currentValue: Int,
+    onClick: () -> Unit,
+) {
     ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick),
+        headlineContent = { Text(stringResource(label)) },
+        supportingContent = { Text(stringResource(currentValue)) },
+        trailingContent = {
+            Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
+        },
+    )
+}
+
+@Composable
+private fun SettingsInfoRow(@StringRes label: Int, @StringRes summary: Int) {
+    ListItem(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+        headlineContent = { Text(stringResource(label)) },
+        supportingContent = { Text(stringResource(summary)) },
+    )
+}
+
+@Composable
+private fun SettingsActionRow(
+    @StringRes label: Int,
+    @StringRes summary: Int,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick),
+        headlineContent = { Text(stringResource(label)) },
+        supportingContent = { Text(stringResource(summary)) },
+        trailingContent = {
+            Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
+        },
+    )
+}
+
+@Composable
+private fun SettingsRadioRow(@StringRes label: Int, selected: Boolean, onClick: () -> Unit) {
+    ListItem(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .semantics { this.selected = selected }
+            .clickable(onClick = onClick),
         headlineContent = { Text(stringResource(label)) },
         leadingContent = { RadioButton(selected = selected, onClick = onClick) },
     )
 }
 
 @Composable
+internal fun <T> SettingsChoiceDialog(
+    @StringRes title: Int,
+    selected: T,
+    options: List<Pair<T, Int>>,
+    onDismiss: () -> Unit,
+    onSelect: (T) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(title)) },
+        text = {
+            Column {
+                options.forEach { (value, label) ->
+                    SettingsRadioRow(label, value == selected) { onSelect(value) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
 private fun LinkRow(@StringRes label: Int, url: String, context: Context) {
     ListItem(
-        modifier = Modifier.clickable { openUrl(context, url) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { openUrl(context, url) },
         headlineContent = { Text(stringResource(label)) },
+        trailingContent = {
+            Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
+        },
     )
+}
+
+@StringRes
+private fun readerLayoutLabel(value: ReaderLayout): Int = when (value) {
+    ReaderLayout.SINGLE -> R.string.single_page
+    ReaderLayout.HALF -> R.string.half_page
+    ReaderLayout.TWO_PAGE -> R.string.two_pages
+}
+
+@StringRes
+private fun pageFitLabel(value: PageFit): Int = when (value) {
+    PageFit.PAGE -> R.string.fit_page
+    PageFit.WIDTH -> R.string.fit_width
 }
 
 private fun openUrl(context: Context, url: String) {
     runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
     }
 }
 

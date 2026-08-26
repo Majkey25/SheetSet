@@ -1,14 +1,13 @@
 package cz.teply.sheetset.data
 
 import cz.teply.sheetset.pdf.AnnotationJson
+import cz.teply.sheetset.pdf.AnnotationEditorSettingsJson
 import cz.teply.sheetset.settings.AnnotationTextSize
 import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.AppSettings
-import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderDefaultTool
 import cz.teply.sheetset.settings.ReaderLayout
-import cz.teply.sheetset.settings.ToolSize
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -236,10 +235,9 @@ private fun AppSettings.toJson(): JSONObject = JSONObject()
     .put("pageTurnSwipes", pageTurnSwipes)
     .put("autoHideControls", autoHideControls)
     .put("defaultTool", defaultTool.name)
-    .put("penWidth", penWidth.name)
-    .put("highlighterStrength", highlighterStrength.name)
     .put("textSize", textSize.name)
     .put("readerLayout", readerLayout.name)
+    .put("editor", JSONObject(AnnotationEditorSettingsJson.encode(editor)))
 
 private fun JSONObject.toSettings(version: Int): AppSettings = try {
     val defaults = AppSettings()
@@ -250,13 +248,16 @@ private fun JSONObject.toSettings(version: Int): AppSettings = try {
         pageTurnSwipes = getBoolean("pageTurnSwipes"),
         autoHideControls = getBoolean("autoHideControls"),
         defaultTool = ReaderDefaultTool.valueOf(getString("defaultTool")),
-        penWidth = ToolSize.valueOf(getString("penWidth")),
-        highlighterStrength = HighlightStrength.valueOf(getString("highlighterStrength")),
         textSize = AnnotationTextSize.valueOf(getString("textSize")),
         readerLayout = if (version >= 2) {
             ReaderLayout.valueOf(getString("readerLayout"))
         } else {
             defaults.readerLayout
+        },
+        editor = if (has("editor") && !isNull("editor")) {
+            AnnotationEditorSettingsJson.decode(getJSONObject("editor").toString())
+        } else {
+            defaults.editor
         },
     )
 } catch (error: Exception) {
