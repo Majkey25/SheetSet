@@ -7,6 +7,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -82,6 +83,11 @@ import kotlin.math.roundToInt
 
 internal const val COLOR_PANEL_SCROLL_TAG = "color-panel-scroll"
 
+private val EditorToolbarBackground = Color(0xFFF7F3F8)
+private val EditorToolbarContent = Color(0xFF211F24)
+private val EditorToolbarAccent = Color(0xFF67558D)
+private val EditorToolbarMuted = Color(0xFF79747E)
+
 internal data class AnnotationToolbarState(
     val group: AnnotationToolGroup,
     val tool: ReaderTool,
@@ -119,7 +125,7 @@ internal fun AnnotationToolbar(
     onNext: () -> Unit,
 ) {
     val hasSelection = state.selectedIds.isNotEmpty()
-    Surface(color = Color.Black.copy(alpha = 0.94f), contentColor = Color.White) {
+    Surface(color = EditorToolbarBackground, contentColor = EditorToolbarContent) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
             Row(
                 Modifier.fillMaxWidth().height(56.dp),
@@ -158,11 +164,13 @@ internal fun AnnotationToolbar(
                         )
                     }
                     CurrentColorControl(state.color, onColor)
-                    ToolbarControl(
-                        stringResource(R.string.eyedropper),
-                        R.drawable.ic_colorize_24,
-                        onClick = onEyedropper,
-                    )
+                    if (state.expanded) {
+                        ToolbarControl(
+                            stringResource(R.string.eyedropper),
+                            R.drawable.ic_colorize_24,
+                            onClick = onEyedropper,
+                        )
+                    }
                     if (hasSelection) {
                         if (state.selectedAnnotation is TextBoxAnnotation) {
                             ToolbarControl(
@@ -190,7 +198,7 @@ internal fun AnnotationToolbar(
                     onClick = onNext,
                 )
             }
-            HorizontalDivider(color = Color.White.copy(alpha = 0.14f))
+            HorizontalDivider(color = EditorToolbarContent.copy(alpha = 0.14f))
             Row(
                 Modifier.fillMaxWidth().height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -204,18 +212,27 @@ internal fun AnnotationToolbar(
                         painterResource(R.drawable.ic_drag_handle_24),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = Color.Gray,
+                        tint = EditorToolbarMuted,
                     )
+                    val targetGroup = if (state.group == AnnotationToolGroup.DRAW) {
+                        AnnotationToolGroup.OBJECTS
+                    } else {
+                        AnnotationToolGroup.DRAW
+                    }
                     ToolbarControl(
-                        stringResource(R.string.draw),
-                        R.drawable.ic_edit_24,
-                        selected = state.group == AnnotationToolGroup.DRAW,
-                    ) { onGroup(AnnotationToolGroup.DRAW) }
-                    ToolbarControl(
-                        stringResource(R.string.objects),
-                        R.drawable.ic_view_module_24,
-                        selected = state.group == AnnotationToolGroup.OBJECTS,
-                    ) { onGroup(AnnotationToolGroup.OBJECTS) }
+                        stringResource(
+                            if (targetGroup == AnnotationToolGroup.DRAW) {
+                                R.string.draw
+                            } else {
+                                R.string.objects
+                            },
+                        ),
+                        if (targetGroup == AnnotationToolGroup.DRAW) {
+                            R.drawable.ic_edit_24
+                        } else {
+                            R.drawable.ic_view_module_24
+                        },
+                    ) { onGroup(targetGroup) }
                     if (state.group == AnnotationToolGroup.DRAW) {
                         state.editor.drawOrder.mapNotNull { id ->
                             state.editor.presets.firstOrNull { it.id == id && it.visible }
@@ -240,35 +257,19 @@ internal fun AnnotationToolbar(
                             ) { onTool(definition.tool) }
                         }
                     }
-                    if (!state.expanded) {
-                        ToolbarControl(
-                            stringResource(R.string.undo),
-                            R.drawable.ic_undo_24,
-                            enabled = state.canUndo,
-                            onClick = onUndo,
-                        )
-                        ToolbarControl(
-                            stringResource(R.string.redo),
-                            R.drawable.ic_redo_24,
-                            enabled = state.canRedo,
-                            onClick = onRedo,
-                        )
-                    }
                 }
-                if (state.expanded) {
-                    ToolbarControl(
-                        stringResource(R.string.undo),
-                        R.drawable.ic_undo_24,
-                        enabled = state.canUndo,
-                        onClick = onUndo,
-                    )
-                    ToolbarControl(
-                        stringResource(R.string.redo),
-                        R.drawable.ic_redo_24,
-                        enabled = state.canRedo,
-                        onClick = onRedo,
-                    )
-                }
+                ToolbarControl(
+                    stringResource(R.string.undo),
+                    R.drawable.ic_undo_24,
+                    enabled = state.canUndo,
+                    onClick = onUndo,
+                )
+                ToolbarControl(
+                    stringResource(R.string.redo),
+                    R.drawable.ic_redo_24,
+                    enabled = state.canRedo,
+                    onClick = onRedo,
+                )
                 ToolbarControl(
                     stringResource(R.string.done),
                     R.drawable.ic_done_24,
@@ -294,6 +295,7 @@ internal fun ColorPanel(
     var saturation by remember(selected) { mutableFloatStateOf(initialHsv[1]) }
     var value by remember(selected) { mutableFloatStateOf(initialHsv[2]) }
     var alpha by remember(opacity) { mutableIntStateOf(opacity) }
+    var advanced by remember(selected) { mutableStateOf(false) }
     val preview = AnnotationColor(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val maxContentHeight = LocalConfiguration.current.screenHeightDp.dp * 0.8f
@@ -331,14 +333,6 @@ internal fun ColorPanel(
                     onColor = ::choose,
                 )
             }
-            Text(
-                stringResource(R.string.custom_color),
-                modifier = Modifier.padding(top = 12.dp),
-                style = MaterialTheme.typography.labelLarge,
-            )
-            ColorSlider(R.string.hue, hue, 0f..360f) { hue = it }
-            ColorSlider(R.string.saturation, saturation, 0f..1f) { saturation = it }
-            ColorSlider(R.string.brightness, value, 0f..1f) { value = it }
             LabeledSlider(
                 label = stringResource(R.string.opacity),
                 state = "${(alpha * 100f / 255f).roundToInt()}%",
@@ -346,13 +340,21 @@ internal fun ColorPanel(
                 range = 0f..255f,
                 onValue = { alpha = it.roundToInt() },
             )
+            TextButton(onClick = { advanced = !advanced }) {
+                Text(stringResource(R.string.custom_color))
+            }
+            if (advanced) {
+                ColorSlider(R.string.hue, hue, 0f..360f) { hue = it }
+                ColorSlider(R.string.saturation, saturation, 0f..1f) { saturation = it }
+                ColorSlider(R.string.brightness, value, 0f..1f) { value = it }
+            }
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ColorPreview(preview, alpha)
                 Text(
-                    preview.encoded(),
+                    if (advanced) preview.encoded() else annotationColorLabel(preview),
                     modifier = Modifier.padding(start = 12.dp).weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -395,6 +397,7 @@ internal fun TextAnnotationDialog(
     var color by remember(initial) { mutableStateOf(initial?.color ?: defaultColor) }
     var opacity by remember(initial) { mutableIntStateOf(initial?.opacity ?: defaultOpacity) }
     var colorOpen by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -416,20 +419,6 @@ internal fun TextAnnotationDialog(
                     label = { stringResource(it.label()) },
                     onSelect = { size = it },
                 )
-                LabeledSlider(
-                    label = stringResource(R.string.line_height),
-                    state = String.format(java.util.Locale.ROOT, "%.1f", lineHeight),
-                    value = lineHeight,
-                    range = 0.8f..2f,
-                    onValue = { lineHeight = it },
-                )
-                Text(stringResource(R.string.alignment), Modifier.padding(top = 8.dp))
-                ChoiceButtons(
-                    values = AnnotationTextAlignment.entries,
-                    selected = alignment,
-                    label = { stringResource(it.label()) },
-                    onSelect = { alignment = it },
-                )
                 Row(
                     Modifier.fillMaxWidth().padding(top = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -437,13 +426,25 @@ internal fun TextAnnotationDialog(
                     CurrentColorControl(color) { colorOpen = true }
                     Text(annotationColorLabel(color), Modifier.padding(start = 4.dp))
                 }
-                LabeledSlider(
-                    label = stringResource(R.string.opacity),
-                    state = "${(opacity * 100f / 255f).roundToInt()}%",
-                    value = opacity.toFloat(),
-                    range = 0f..255f,
-                    onValue = { opacity = it.roundToInt() },
-                )
+                TextButton(onClick = { moreOpen = !moreOpen }) {
+                    Text(stringResource(R.string.more_options))
+                }
+                if (moreOpen) {
+                    LabeledSlider(
+                        label = stringResource(R.string.line_height),
+                        state = String.format(java.util.Locale.ROOT, "%.1f", lineHeight),
+                        value = lineHeight,
+                        range = 0.8f..2f,
+                        onValue = { lineHeight = it },
+                    )
+                    Text(stringResource(R.string.alignment), Modifier.padding(top = 8.dp))
+                    ChoiceButtons(
+                        values = AnnotationTextAlignment.entries,
+                        selected = alignment,
+                        label = { stringResource(it.label()) },
+                        onSelect = { alignment = it },
+                    )
+                }
             }
         },
         confirmButton = {
@@ -543,6 +544,7 @@ private fun PresetControl(preset: DrawingPreset, selected: Boolean, onClick: () 
             R.drawable.ic_edit_24
         },
         selected = selected,
+        tint = Color(preset.color.argb).copy(alpha = (preset.opacity / 255f).coerceAtLeast(0.55f)),
         onClick = onClick,
     )
 }
@@ -552,14 +554,23 @@ private fun ToolbarControl(
     label: String,
     @DrawableRes icon: Int,
     selected: Boolean? = null,
+    tint: Color? = null,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     IconButton(
-        modifier = Modifier.size(48.dp).background(
-            if (selected == true) Color.White else Color.Transparent,
-            RoundedCornerShape(10.dp),
-        ).semantics {
+        modifier = Modifier.size(48.dp)
+            .background(
+                if (selected == true) Color.White else Color.Transparent,
+                RoundedCornerShape(10.dp),
+            )
+            .then(
+                if (selected == true) {
+                    Modifier.border(2.dp, EditorToolbarAccent, RoundedCornerShape(10.dp))
+                } else {
+                    Modifier
+                },
+            ).semantics {
             contentDescription = label
             selected?.let { this.selected = it }
         },
@@ -571,9 +582,9 @@ private fun ToolbarControl(
             contentDescription = null,
             modifier = Modifier.size(24.dp),
             tint = when {
-                !enabled -> Color.Gray
-                selected == true -> Color.Black
-                else -> Color.White
+                !enabled -> EditorToolbarMuted
+                tint != null -> tint
+                else -> EditorToolbarContent
             },
         )
     }
@@ -604,7 +615,7 @@ private fun CurrentColorControl(color: AnnotationColor, onClick: () -> Unit) {
     ) {
         Canvas(Modifier.size(32.dp)) {
             drawCircle(Color(color.argb), radius = 11.dp.toPx())
-            drawCircle(Color.White, radius = 14.dp.toPx(), style = Stroke(2.dp.toPx()))
+            drawCircle(EditorToolbarContent, radius = 14.dp.toPx(), style = Stroke(2.dp.toPx()))
         }
     }
 }
@@ -720,8 +731,20 @@ private fun <T> ChoiceButtons(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         values.forEach { value ->
             val text = label(value)
+            val isSelected = value == selected
             TextButton(
-                modifier = Modifier.weight(1f).semantics { this.selected = value == selected },
+                modifier = Modifier.weight(1f)
+                    .background(
+                        if (isSelected) EditorToolbarAccent.copy(alpha = 0.12f) else Color.Transparent,
+                        RoundedCornerShape(10.dp),
+                    )
+                    .then(
+                        if (isSelected) {
+                            Modifier.border(2.dp, EditorToolbarAccent, RoundedCornerShape(10.dp))
+                        } else {
+                            Modifier
+                        },
+                    ).semantics { this.selected = isSelected },
                 onClick = { onSelect(value) },
             ) { Text(text, maxLines = 1) }
         }

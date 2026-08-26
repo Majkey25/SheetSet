@@ -30,7 +30,7 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 - Backs up and safely restores PDFs, setlists, annotations, settings, and language in a validated ZIP.
 - Imports ScorePDF backup ZIPs as a non-destructive merge and shares SeliaLists backups through Android.
 - Uses English, Czech, Slovak, German, Polish, or the Android device language.
-- Opens an installed CeliaScan app from the import sheet and uses its Google Play listing when absent.
+- Opens an installed SeliaScan app from the import sheet and uses its Google Play listing when absent.
 
 ## Install
 
@@ -66,7 +66,7 @@ The app requests no runtime or sensitive platform permissions. Imported files st
 - Underline and strike-through use manual drag bounds. Scanned PDFs have no OCR.
 - Export rasterizes source pages at up to 144 dpi with a 12 MP memory cap.
 - Backup restore accepts archives up to 1 GiB. There is no cloud sync.
-- Scanning is delegated to the separate CeliaScan app; SeliaLists has no built-in camera scanner.
+- Scanning is delegated to the separate SeliaScan app; SeliaLists has no built-in camera scanner.
 - Common page-turn pedals work as keyboards; custom MIDI mappings, audio tools, and a metronome are not included.
 
 See the [adaptive editor specification](docs/superpowers/specs/2026-08-20-sheetset-editor-settings-adaptive-design.md) and [PDF editor plan](docs/superpowers/plans/2026-08-20-sheetset-pdf-editor.md).

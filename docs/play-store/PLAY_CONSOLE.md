@@ -1,6 +1,6 @@
 # Google Play Console publication worksheet
 
-Use these answers only for the verified SeliaLists `0.5.0-alpha.3` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
+Use these answers only for the verified SeliaLists `0.5.0-alpha.4` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
 
 ## App identity
 
@@ -8,8 +8,8 @@ Use these answers only for the verified SeliaLists `0.5.0-alpha.3` closed-test A
 |---|---|
 | App name | `SeliaLists` |
 | Package | `com.majkeylab.sheetset` |
-| Version code | `8` |
-| Version name | `0.5.0-alpha.3` |
+| Version code | `9` |
+| Version name | `0.5.0-alpha.4` |
 | Default language | English (United States) |
 | App or game | App |
 | Category | Music & Audio |
@@ -57,7 +57,7 @@ Use the verified legal name, address, phone, and account type already stored in 
 > - validated ZIP backup, restore, and sharing
 > - non-destructive import of compatible ScorePDF backup ZIPs
 >
-> SeliaLists works offline and has no account, ads, analytics, subscription, tracking SDK, cloud library, or app-owned Internet permission. Imported originals remain unchanged. Scanning is delegated to the separate CeliaScan app, which opens directly when installed or through its Google Play listing when absent.
+> SeliaLists works offline and has no account, ads, analytics, subscription, tracking SDK, cloud library, or app-owned Internet permission. Imported originals remain unchanged. Scanning is delegated to the separate SeliaScan app, which opens directly when installed or through its Google Play listing when absent.
 
 ## Czech listing
 
@@ -95,17 +95,17 @@ Use the verified legal name, address, phone, and account type already stored in 
 > - ověřená ZIP záloha, obnovení a sdílení
 > - nedestruktivní import kompatibilních ScorePDF záloh
 >
-> SeliaLists funguje offline a neobsahuje účet, reklamy, analytiku, předplatné, sledovací SDK, cloudovou knihovnu ani vlastní přístup k internetu. Importované originály zůstávají beze změny. Skenování je volitelně předáno samostatné aplikaci CeliaScan, která se otevře přímo po instalaci nebo přes svou stránku na Google Play.
+> SeliaLists funguje offline a neobsahuje účet, reklamy, analytiku, předplatné, sledovací SDK, cloudovou knihovnu ani vlastní přístup k internetu. Importované originály zůstávají beze změny. Skenování je volitelně předáno samostatné aplikaci SeliaScan, která se otevře přímo po instalaci nebo přes svou stránku na Google Play.
 
 ## Closed-test release notes
 
 ### English
 
-> Rebuilt the PDF editor with contextual Draw and Objects tools, custom colors, text and symbol editing, lasso selection, palm rejection, and safer annotation backups. Added CeliaScan sharing and clearer grouped settings.
+> Made PDF editing clearer with a compact two-row toolbar, colored pen and highlighter presets, pinned undo and redo, a simpler color picker, and cleaner text controls. Corrected the SeliaScan integration name.
 
 ### Čeština
 
-> Přepracován PDF editor s kontextovými nástroji Kreslení a Objekty, vlastními barvami, úpravou textu a symbolů, lasem, odmítnutím dlaně a bezpečnějšími zálohami anotací. Přidáno sdílení přes CeliaScan a přehlednější nastavení.
+> Zpřehledněna editace PDF pomocí kompaktní dvouřádkové lišty, barevných per a zvýrazňovačů, pevných tlačítek zpět a znovu, jednodušší volby barvy a čistší práce s textem. Opraven název integrace SeliaScan.
 
 ## App content
 
@@ -138,7 +138,7 @@ Reviewer note:
 | Is data encrypted in transit? | Not applicable; SeliaLists has no app-owned network transmission |
 | Can users request account deletion? | Not applicable; SeliaLists has no accounts |
 
-User-selected exports and shares are not developer collection. Android document providers, share recipients, browsers, Google Play, GitHub, CeliaScan, and Buy Me a Coffee operate under their own terms after the user explicitly chooses them.
+User-selected exports and shares are not developer collection. Android document providers, share recipients, browsers, Google Play, GitHub, SeliaScan, and Buy Me a Coffee operate under their own terms after the user explicitly chooses them.
 
 ## Payments and support
 

@@ -10,8 +10,8 @@
     <string name="create">Utwórz</string>
     <string name="files">Pliki</string>
     <string name="files_hint">Wybierz pliki PDF z tego urządzenia.</string>
-    <string name="scan_with_scanit">Skanuj w CeliaScan</string>
-    <string name="scan_with_scanit_hint">Otwiera zainstalowaną aplikację CeliaScan, a jeśli jej nie ma, Google Play.</string>
+    <string name="scan_with_scanit">Skanuj w SeliaScan</string>
+    <string name="scan_with_scanit_hint">Otwiera zainstalowaną aplikację SeliaScan, a jeśli jej nie ma, Google Play.</string>
     <string name="untitled_pdf_file">Bez nazwy.pdf</string>
     <string name="no_setlists">Brak setlist</string>
     <string name="setlist_hint">Utwórz setlistę na próbę lub koncert.</string>

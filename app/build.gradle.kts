@@ -20,8 +20,8 @@ android {
         applicationId = "com.majkeylab.sheetset"
         minSdk = 29
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.5.0-alpha.3"
+        versionCode = 9
+        versionName = "0.5.0-alpha.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -47,6 +47,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false

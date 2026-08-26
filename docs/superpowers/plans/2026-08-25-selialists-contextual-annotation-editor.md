@@ -22,7 +22,7 @@
 - Preserve version 1 and version 2 annotation data.
 - Do not add a navigation framework, settings framework, dependency-injection layer, cloud service, OCR, metronome, timed scrolling, page reordering, or annotation layers.
 - Preserve unrelated uncommitted changes in the worktree.
-- Do not modify the CeliaScan application or repository. Integrate only through package `com.majkeylab.scanit` and Android intents.
+- Do not modify the SeliaScan application or repository. Integrate only through package `com.majkeylab.scanit` and Android intents.
 - The existing SeliaLists rename modifies files that this plan also touches. Do not stage an overlapping file until the user approves the combined diff or the earlier change is committed separately.
 - Do not commit, push, open a PR, publish, or upload an artifact until the user gives explicit approval for that exact action. Commit steps below are review boundaries and run only after approval.
 
@@ -982,7 +982,7 @@ git add app/src/main/java/cz/teply/sheetset/SheetSetViewModel.kt app/src/main/ja
 git commit -m "fix: serialize annotation persistence"
 ```
 
-### Task 9: CeliaScan launch and Android PDF share intake
+### Task 9: SeliaScan launch and Android PDF share intake
 
 **Files:**
 
@@ -1097,32 +1097,32 @@ private fun handleIncomingPdfIntent(source: Intent) {
 
 Do not copy URI contents in the Activity. Keep the existing repository import boundary and error state.
 
-- [ ] **Step 6: Launch installed CeliaScan before Play fallback**
+- [ ] **Step 6: Launch installed SeliaScan before Play fallback**
 
-Replace `openScanIt` with `openCeliaScan`:
+Replace `openScanIt` with `openSeliaScan`:
 
 ```kotlin
-private const val CELIA_SCAN_PACKAGE = "com.majkeylab.scanit"
+private const val SELIA_SCAN_PACKAGE = "com.majkeylab.scanit"
 
-private fun openCeliaScan(context: Context) {
-    context.packageManager.getLaunchIntentForPackage(CELIA_SCAN_PACKAGE)?.let {
+private fun openSeliaScan(context: Context) {
+    context.packageManager.getLaunchIntentForPackage(SELIA_SCAN_PACKAGE)?.let {
         context.startActivity(it)
         return
     }
-    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$CELIA_SCAN_PACKAGE"))
+    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$SELIA_SCAN_PACKAGE"))
     val web = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("https://play.google.com/store/apps/details?id=$CELIA_SCAN_PACKAGE"),
+        Uri.parse("https://play.google.com/store/apps/details?id=$SELIA_SCAN_PACKAGE"),
     )
     runCatching { context.startActivity(market) }.getOrElse { context.startActivity(web) }
 }
 ```
 
-Rename the visible ScanIt strings to CeliaScan in every locale. The hint explains that an installed app opens directly and Google Play opens only when absent.
+Rename the visible ScanIt strings to SeliaScan in every locale. The hint explains that an installed app opens directly and Google Play opens only when absent.
 
 - [ ] **Step 7: Add focused activity and Compose tests**
 
-Extend `MainActivitySmokeTest` to launch an `ACTION_SEND` PDF intent and assert that the Activity remains active without crashing. Extend `SheetSetFlowTest` to assert that the Import PDF sheet shows Files and Scan with CeliaScan exactly once.
+Extend `MainActivitySmokeTest` to launch an `ACTION_SEND` PDF intent and assert that the Activity remains active without crashing. Extend `SheetSetFlowTest` to assert that the Import PDF sheet shows Files and Scan with SeliaScan exactly once.
 
 - [ ] **Step 8: Run focused checks**
 
@@ -1138,16 +1138,16 @@ If explicit commit approval exists:
 
 ```powershell
 git add app/src/main/AndroidManifest.xml app/src/main/java/cz/teply/sheetset/IncomingPdfIntent.kt app/src/main/java/cz/teply/sheetset/MainActivity.kt app/src/main/java/cz/teply/sheetset/ui/SheetSetApp.kt app/src/main/res/values/strings.xml app/src/main/res/values-cs/strings.xml app/src/main/res/values-sk/strings.xml app/src/main/res/values-de/strings.xml app/src/main/res/values-pl/strings.xml app/src/androidTest/java/cz/teply/sheetset/IncomingPdfIntentTest.kt app/src/androidTest/java/cz/teply/sheetset/MainActivitySmokeTest.kt app/src/androidTest/java/cz/teply/sheetset/SheetSetFlowTest.kt
-git commit -m "feat: connect CeliaScan PDF sharing"
+git commit -m "feat: connect SeliaScan PDF sharing"
 ```
 
-### Task 10: Copy the current CeliaScan launcher branding
+### Task 10: Copy the current SeliaScan launcher branding
 
-- Copy the first-party CeliaScan launcher vector byte-for-byte into all SeliaLists normal, round, and API 33 launcher resources.
+- Copy the first-party SeliaScan launcher vector byte-for-byte into all SeliaLists normal, round, and API 33 launcher resources.
 - Copy the first-party 512 px RGBA Play icon byte-for-byte into the SeliaLists Play asset.
 - Remove only the now-unreferenced SeliaLists foreground, monochrome, and icon-background resources.
 - Verify source and target hashes, Android 10/API 33 resource resolution, build, and lint.
-- Keep the CeliaScan repository and installed app read-only.
+- Keep the SeliaScan repository and installed app read-only.
 
 ### Task 11: Full verification and live acceptance
 
@@ -1238,20 +1238,20 @@ Use the synthetic PDF from `.reference/tmp/scorepdf-audit/emulator/test-pdfs/she
 7. Done returns to View without changing the page position.
 8. The rapid text-close, Done, and Tools sequence produces no ANR in logcat.
 9. Settings show Library, Reading, Data, and App sections with current-value summaries.
-10. Import PDF shows Files and Scan with CeliaScan.
-11. With a verified local CeliaScan APK installed, Scan with CeliaScan opens package `com.majkeylab.scanit`.
-12. Without CeliaScan installed, the same action opens its Google Play listing.
+10. Import PDF shows Files and Scan with SeliaScan.
+11. With a verified local SeliaScan APK installed, Scan with SeliaScan opens package `com.majkeylab.scanit`.
+12. Without SeliaScan installed, the same action opens its Google Play listing.
 13. `IncomingPdfIntentTest` imports unique single and multiple PDF streams and rejects wrong MIME or `file://` input.
 
 Capture one screenshot for Draw, Objects, selected object, color panel, and sectioned settings under `.reference/qa/selialists-editor/`.
 
-For the installed CeliaScan path, locate an existing first-party APK with:
+For the installed SeliaScan path, locate an existing first-party APK with:
 
 ```powershell
-rg --files 'C:\Users\mates\Documents\Codex' | rg '(?i)(scanit|celiascan).*\.apk$'
+rg --files 'C:\Users\mates\Documents\Codex' | rg '(?i)(scanit|seliascan).*\.apk$'
 ```
 
-Record its SHA-256, install it only on the dedicated QA emulator, and verify the focused package after tapping the scanner action. Do not build or edit CeliaScan and do not download an APK from a third-party mirror. If no first-party APK exists, use the official Google Play listing on a Play-enabled disposable AVD; if authentication blocks installation, report that exact live-path blocker while retaining parser, resolver, and missing-app evidence.
+Record its SHA-256, install it only on the dedicated QA emulator, and verify the focused package after tapping the scanner action. Do not build or edit SeliaScan and do not download an APK from a third-party mirror. If no first-party APK exists, use the official Google Play listing on a Play-enabled disposable AVD; if authentication blocks installation, report that exact live-path blocker while retaining parser, resolver, and missing-app evidence.
 
 - [ ] **Step 6: Review crash and ANR evidence**
 
