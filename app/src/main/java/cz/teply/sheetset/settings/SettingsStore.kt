@@ -29,6 +29,7 @@ class SettingsStore(private val preferences: SharedPreferences) {
             defaultTool = preferences.enum("default_tool", defaults.defaultTool),
             textSize = preferences.enum("text_size", defaults.textSize),
             readerLayout = preferences.enum("reader_layout", defaults.readerLayout),
+            themeMode = preferences.enum("theme_mode", defaults.themeMode),
             editor = editor,
         )
     }
@@ -45,6 +46,7 @@ class SettingsStore(private val preferences: SharedPreferences) {
             .remove("highlighter_strength")
             .putString("text_size", settings.textSize.name)
             .putString("reader_layout", settings.readerLayout.name)
+            .putString("theme_mode", settings.themeMode.name)
             .putString(EDITOR_JSON_KEY, AnnotationEditorSettingsJson.encode(settings.editor))
             .apply()
     }

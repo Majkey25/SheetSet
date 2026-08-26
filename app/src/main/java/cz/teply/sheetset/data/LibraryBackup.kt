@@ -8,6 +8,7 @@ import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderDefaultTool
 import cz.teply.sheetset.settings.ReaderLayout
+import cz.teply.sheetset.settings.ThemeMode
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -237,6 +238,7 @@ private fun AppSettings.toJson(): JSONObject = JSONObject()
     .put("defaultTool", defaultTool.name)
     .put("textSize", textSize.name)
     .put("readerLayout", readerLayout.name)
+    .put("themeMode", themeMode.name)
     .put("editor", JSONObject(AnnotationEditorSettingsJson.encode(editor)))
 
 private fun JSONObject.toSettings(version: Int): AppSettings = try {
@@ -253,6 +255,11 @@ private fun JSONObject.toSettings(version: Int): AppSettings = try {
             ReaderLayout.valueOf(getString("readerLayout"))
         } else {
             defaults.readerLayout
+        },
+        themeMode = if (has("themeMode")) {
+            ThemeMode.valueOf(getString("themeMode"))
+        } else {
+            defaults.themeMode
         },
         editor = if (has("editor") && !isNull("editor")) {
             AnnotationEditorSettingsJson.decode(getJSONObject("editor").toString())

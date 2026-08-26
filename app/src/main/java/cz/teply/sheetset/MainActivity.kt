@@ -8,10 +8,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cz.teply.sheetset.settings.AppLanguages
+import cz.teply.sheetset.settings.ThemeMode
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
@@ -26,7 +30,15 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
-            SheetSetTheme {
+            val view = LocalView.current
+            SideEffect {
+                val lightBars = state.settings.themeMode == ThemeMode.LIGHT
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = lightBars
+                    isAppearanceLightNavigationBars = lightBars
+                }
+            }
+            SheetSetTheme(state.settings.themeMode) {
                 BoxWithConstraints {
                     SheetSetApp(
                         state = state,

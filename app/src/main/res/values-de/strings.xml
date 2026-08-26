@@ -122,6 +122,15 @@
     <string name="backup_restore">Sichern und Wiederherstellen</string>
     <string name="backup_restore_summary">ZIP-Sicherung erstellen, teilen oder wiederherstellen</string>
     <string name="language_summary">App-Sprache auswählen</string>
+    <string name="appearance">Erscheinungsbild</string>
+    <string name="appearance_summary">Helles oder dunkles Design auswählen</string>
+    <string name="theme_light">Hell</string>
+    <string name="theme_dark">Dunkel</string>
+    <string name="reader_tab_bookmark">Lesezeichen</string>
+    <string name="reader_tab_page">Seite</string>
+    <string name="reader_tab_gesture">Gesten</string>
+    <string name="reader_tab_tools">Werkzeuge</string>
+    <string name="reader_tab_annotation">Anmerkung</string>
     <string name="app_details_summary">Version, Datenschutz, Unterstützung und Links</string>
     <string name="settings_layout">Layout</string>
     <string name="settings_page_turning">Blättern</string>

@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalConfiguration
@@ -83,10 +84,17 @@ import kotlin.math.roundToInt
 
 internal const val COLOR_PANEL_SCROLL_TAG = "color-panel-scroll"
 
-private val EditorToolbarBackground = Color(0xFFF7F3F8)
-private val EditorToolbarContent = Color(0xFF211F24)
 private val EditorToolbarAccent = Color(0xFF67558D)
-private val EditorToolbarMuted = Color(0xFF79747E)
+
+internal fun readablePresetIconColor(
+    presetColor: Color,
+    toolbarSurface: Color,
+    toolbarContent: Color,
+): Color = if (presetColor.luminance() < 0.12f && toolbarSurface.luminance() < 0.2f) {
+    toolbarContent
+} else {
+    presetColor
+}
 
 internal data class AnnotationToolbarState(
     val group: AnnotationToolGroup,
@@ -125,7 +133,10 @@ internal fun AnnotationToolbar(
     onNext: () -> Unit,
 ) {
     val hasSelection = state.selectedIds.isNotEmpty()
-    Surface(color = EditorToolbarBackground, contentColor = EditorToolbarContent) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
             Row(
                 Modifier.fillMaxWidth().height(56.dp),
@@ -198,7 +209,7 @@ internal fun AnnotationToolbar(
                     onClick = onNext,
                 )
             }
-            HorizontalDivider(color = EditorToolbarContent.copy(alpha = 0.14f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(
                 Modifier.fillMaxWidth().height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -212,7 +223,7 @@ internal fun AnnotationToolbar(
                         painterResource(R.drawable.ic_drag_handle_24),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = EditorToolbarMuted,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     val targetGroup = if (state.group == AnnotationToolGroup.DRAW) {
                         AnnotationToolGroup.OBJECTS
@@ -536,6 +547,12 @@ internal fun MusicalSymbolChooser(
 @Composable
 private fun PresetControl(preset: DrawingPreset, selected: Boolean, onClick: () -> Unit) {
     val label = stringResource(preset.label())
+    val presetColor = Color(preset.color.argb)
+    val iconColor = readablePresetIconColor(
+        presetColor,
+        MaterialTheme.colorScheme.surfaceContainerHigh,
+        MaterialTheme.colorScheme.onSurface,
+    )
     ToolbarControl(
         label = label,
         icon = if (preset.kind == DrawingPresetKind.HIGHLIGHTER) {
@@ -544,7 +561,7 @@ private fun PresetControl(preset: DrawingPreset, selected: Boolean, onClick: () 
             R.drawable.ic_edit_24
         },
         selected = selected,
-        tint = Color(preset.color.argb).copy(alpha = (preset.opacity / 255f).coerceAtLeast(0.55f)),
+        tint = iconColor.copy(alpha = (preset.opacity / 255f).coerceAtLeast(0.55f)),
         onClick = onClick,
     )
 }
@@ -561,7 +578,7 @@ private fun ToolbarControl(
     IconButton(
         modifier = Modifier.size(48.dp)
             .background(
-                if (selected == true) Color.White else Color.Transparent,
+                if (selected == true) MaterialTheme.colorScheme.surface else Color.Transparent,
                 RoundedCornerShape(10.dp),
             )
             .then(
@@ -582,9 +599,9 @@ private fun ToolbarControl(
             contentDescription = null,
             modifier = Modifier.size(24.dp),
             tint = when {
-                !enabled -> EditorToolbarMuted
+                !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                 tint != null -> tint
-                else -> EditorToolbarContent
+                else -> MaterialTheme.colorScheme.onSurface
             },
         )
     }
@@ -606,6 +623,7 @@ private fun WidthControl(width: Int) {
 private fun CurrentColorControl(color: AnnotationColor, onClick: () -> Unit) {
     val label = stringResource(R.string.color)
     val colorName = annotationColorDescription(color, includeEncoded = true)
+    val outline = MaterialTheme.colorScheme.onSurface
     IconButton(
         modifier = Modifier.size(48.dp).semantics {
             contentDescription = label
@@ -615,7 +633,7 @@ private fun CurrentColorControl(color: AnnotationColor, onClick: () -> Unit) {
     ) {
         Canvas(Modifier.size(32.dp)) {
             drawCircle(Color(color.argb), radius = 11.dp.toPx())
-            drawCircle(EditorToolbarContent, radius = 14.dp.toPx(), style = Stroke(2.dp.toPx()))
+            drawCircle(outline, radius = 14.dp.toPx(), style = Stroke(2.dp.toPx()))
         }
     }
 }

@@ -43,6 +43,7 @@ class SettingsStoreTest {
             defaultTool = ReaderDefaultTool.PEN,
             textSize = AnnotationTextSize.LARGE,
             readerLayout = ReaderLayout.HALF,
+            themeMode = ThemeMode.DARK,
         )
 
         val store = SettingsStore(preferences)

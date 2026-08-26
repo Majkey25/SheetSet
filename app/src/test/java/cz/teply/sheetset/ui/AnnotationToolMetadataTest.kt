@@ -1,10 +1,20 @@
 package cz.teply.sheetset.ui
 
+import androidx.compose.ui.graphics.Color
 import cz.teply.sheetset.pdf.PERSISTED_OBJECT_TOOLS
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AnnotationToolMetadataTest {
+    @Test
+    fun darkPresetIconUsesReadableContentColorOnlyWhenNeeded() {
+        val darkSurface = Color(0xFF292929)
+
+        assertEquals(Color.White, readablePresetIconColor(Color.Black, darkSurface, Color.White))
+        assertEquals(Color.Red, readablePresetIconColor(Color.Red, darkSurface, Color.White))
+        assertEquals(Color.Black, readablePresetIconColor(Color.Black, Color.White, Color.Black))
+    }
+
     @Test
     fun uiMetadataCoversEveryPersistedObjectToolExactlyOnce() {
         val persisted = PERSISTED_OBJECT_TOOLS.map { it.id to it.readerTool }

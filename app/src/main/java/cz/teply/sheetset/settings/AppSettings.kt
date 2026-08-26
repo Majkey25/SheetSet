@@ -8,6 +8,7 @@ enum class ToolSize { THIN, MEDIUM, THICK }
 enum class HighlightStrength { LIGHT, MEDIUM, STRONG }
 enum class AnnotationTextSize { SMALL, MEDIUM, LARGE }
 enum class ReaderLayout { SINGLE, HALF, TWO_PAGE }
+enum class ThemeMode { LIGHT, DARK }
 
 data class AppSettings(
     val keepScreenAwake: Boolean = true,
@@ -18,5 +19,6 @@ data class AppSettings(
     val defaultTool: ReaderDefaultTool = ReaderDefaultTool.VIEW,
     val textSize: AnnotationTextSize = AnnotationTextSize.MEDIUM,
     val readerLayout: ReaderLayout = ReaderLayout.SINGLE,
+    val themeMode: ThemeMode = ThemeMode.LIGHT,
     val editor: AnnotationEditorSettings = AnnotationEditorSettings.defaults(),
 )

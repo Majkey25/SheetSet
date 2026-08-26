@@ -73,6 +73,7 @@ import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderLayout
+import cz.teply.sheetset.settings.ThemeMode
 import kotlinx.coroutines.launch
 
 private enum class DrawerScreen {
@@ -82,6 +83,7 @@ private enum class DrawerScreen {
     GESTURES,
     ANNOTATIONS,
     BACKUP,
+    APPEARANCE,
     APP_DETAILS,
 }
 
@@ -151,6 +153,11 @@ fun SettingsDrawer(
                         onBackup = onBackup,
                         onShareBackup = onShareBackup,
                         onRestore = onRestore,
+                    )
+                    DrawerScreen.APPEARANCE -> AppearanceSettings(
+                        settings = settings,
+                        onBack = { screen = DrawerScreen.MENU },
+                        onSettings = onSettings,
                     )
                     DrawerScreen.APP_DETAILS -> AppDetailsSettings(
                         onBack = { screen = DrawerScreen.MENU },
@@ -227,11 +234,37 @@ private fun DrawerMenu(
             R.drawable.ic_language_24,
         ) { onScreen(DrawerScreen.LANGUAGE) }
         SettingsNavigationRow(
+            R.string.appearance,
+            R.string.appearance_summary,
+            R.drawable.ic_dark_mode_24,
+        ) { onScreen(DrawerScreen.APPEARANCE) }
+        SettingsNavigationRow(
             R.string.about,
             R.string.app_details_summary,
             R.drawable.ic_info_24,
         ) { onScreen(DrawerScreen.APP_DETAILS) }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun AppearanceSettings(
+    settings: AppSettings,
+    onBack: () -> Unit,
+    onSettings: (AppSettings) -> Unit,
+) {
+    SettingsPage(R.string.appearance, onBack) {
+        item { SettingsSectionTitle(R.string.appearance) }
+        item {
+            SettingsRadioRow(R.string.theme_light, settings.themeMode == ThemeMode.LIGHT) {
+                onSettings(settings.copy(themeMode = ThemeMode.LIGHT))
+            }
+        }
+        item {
+            SettingsRadioRow(R.string.theme_dark, settings.themeMode == ThemeMode.DARK) {
+                onSettings(settings.copy(themeMode = ThemeMode.DARK))
+            }
+        }
     }
 }
 

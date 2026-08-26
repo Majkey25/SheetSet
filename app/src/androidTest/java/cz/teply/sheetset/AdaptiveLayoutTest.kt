@@ -90,7 +90,7 @@ class AdaptiveLayoutTest {
 
         composeRule.onNodeWithContentDescription("Page 1").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Page 2").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Performance tools").performClick()
+        composeRule.onNodeWithContentDescription("Page").performClick()
         composeRule.onNodeWithText("Two pages").assertIsDisplayed()
     }
 }
