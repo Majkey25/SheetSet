@@ -126,6 +126,15 @@
     <string name="backup_restore">Záloha a obnovenie</string>
     <string name="backup_restore_summary">Vytvoriť, zdieľať alebo obnoviť zálohu ZIP</string>
     <string name="language_summary">Vyberte jazyk aplikácie</string>
+    <string name="appearance">Vzhľad</string>
+    <string name="appearance_summary">Vyberte svetlý alebo tmavý vzhľad</string>
+    <string name="theme_light">Svetlý</string>
+    <string name="theme_dark">Tmavý</string>
+    <string name="reader_tab_bookmark">Záložka</string>
+    <string name="reader_tab_page">Strana</string>
+    <string name="reader_tab_gesture">Gestá</string>
+    <string name="reader_tab_tools">Nástroje</string>
+    <string name="reader_tab_annotation">Anotácia</string>
     <string name="app_details_summary">Verzia, súkromie, podpora a odkazy</string>
     <string name="settings_layout">Rozloženie</string>
     <string name="settings_page_turning">Otáčanie strán</string>

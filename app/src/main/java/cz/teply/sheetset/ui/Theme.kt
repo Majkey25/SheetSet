@@ -4,6 +4,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -12,8 +13,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cz.teply.sheetset.settings.ThemeMode
 
-private val MonochromeColors = lightColorScheme(
+private val LightColors = lightColorScheme(
     primary = Color(0xFF111111),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFE7E7E7),
@@ -49,6 +51,42 @@ private val MonochromeColors = lightColorScheme(
     onError = Color.White,
     errorContainer = Color(0xFFE7E7E7),
     onErrorContainer = Color(0xFF111111),
+    scrim = Color.Black,
+)
+
+private val DarkColors = darkColorScheme(
+    primary = Color(0xFFF2F2F2),
+    onPrimary = Color(0xFF111111),
+    primaryContainer = Color(0xFF383838),
+    onPrimaryContainer = Color.White,
+    secondary = Color(0xFFD8D8D8),
+    onSecondary = Color(0xFF111111),
+    secondaryContainer = Color(0xFF353535),
+    onSecondaryContainer = Color.White,
+    tertiary = Color(0xFFBDBDBD),
+    onTertiary = Color(0xFF111111),
+    background = Color(0xFF101010),
+    onBackground = Color(0xFFF2F2F2),
+    surface = Color(0xFF181818),
+    onSurface = Color(0xFFF2F2F2),
+    surfaceVariant = Color(0xFF242424),
+    onSurfaceVariant = Color(0xFFD2D2D2),
+    surfaceTint = Color(0xFFF2F2F2),
+    inverseSurface = Color(0xFFF2F2F2),
+    inverseOnSurface = Color(0xFF181818),
+    surfaceBright = Color(0xFF363636),
+    surfaceDim = Color(0xFF101010),
+    surfaceContainer = Color(0xFF1D1D1D),
+    surfaceContainerHigh = Color(0xFF292929),
+    surfaceContainerHighest = Color(0xFF333333),
+    surfaceContainerLow = Color(0xFF171717),
+    surfaceContainerLowest = Color(0xFF0C0C0C),
+    outline = Color(0xFFA0A0A0),
+    outlineVariant = Color(0xFF484848),
+    error = Color(0xFFF2F2F2),
+    onError = Color(0xFF111111),
+    errorContainer = Color(0xFF383838),
+    onErrorContainer = Color.White,
     scrim = Color.Black,
 )
 
@@ -100,9 +138,12 @@ private val SheetTypography = Typography(
 )
 
 @Composable
-fun SheetSetTheme(content: @Composable () -> Unit) {
+fun SheetSetTheme(
+    themeMode: ThemeMode = ThemeMode.LIGHT,
+    content: @Composable () -> Unit,
+) {
     MaterialTheme(
-        colorScheme = MonochromeColors,
+        colorScheme = if (themeMode == ThemeMode.DARK) DarkColors else LightColors,
         typography = SheetTypography,
         shapes = MonochromeShapes,
         content = content,

@@ -22,10 +22,12 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 - Reads a setlist continuously across score boundaries.
 - Resumes the last page, stores searchable bookmarks, and jumps directly to bookmarked passages.
 - Offers Single, Half, and tablet Two-page layouts plus Bluetooth pedal and keyboard page turns.
+- Keeps Bookmark, Page, Gesture, Tools, and Annotation actions visible in the reader.
 - Organizes scores and setlists with labels, label search, and title/date sorting.
 - Supports colored pen, highlight, underline, strike-through, text boxes, lines, arrows, rectangles, and ellipses.
 - Selects, moves, resizes, deletes, erases, undoes, and redoes annotations.
 - Uses one compact editor on phones and tablets with direct core tools, one color control, and fixed undo, redo, and Done actions.
+- Supports persistent Light and Dark themes with readable neutral-gray reader and editor controls.
 - Preserves the imported original and exports a new annotated PDF.
 - Backs up and safely restores PDFs, setlists, annotations, settings, and language in a validated ZIP.
 - Imports ScorePDF backup ZIPs as a non-destructive merge and shares SeliaLists backups through Android.

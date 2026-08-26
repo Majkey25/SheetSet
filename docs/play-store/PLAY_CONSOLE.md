@@ -1,6 +1,6 @@
 # Google Play Console publication worksheet
 
-Use these answers only for the verified SeliaLists `0.5.0-alpha.4` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
+Use these answers only for the verified SeliaLists `0.5.0-alpha.5` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
 
 ## App identity
 
@@ -8,8 +8,8 @@ Use these answers only for the verified SeliaLists `0.5.0-alpha.4` closed-test A
 |---|---|
 | App name | `SeliaLists` |
 | Package | `com.majkeylab.sheetset` |
-| Version code | `9` |
-| Version name | `0.5.0-alpha.4` |
+| Version code | `10` |
+| Version name | `0.5.0-alpha.5` |
 | Default language | English (United States) |
 | App or game | App |
 | Category | Music & Audio |
@@ -101,11 +101,11 @@ Use the verified legal name, address, phone, and account type already stored in 
 
 ### English
 
-> Made PDF editing clearer with a compact two-row toolbar, colored pen and highlighter presets, pinned undo and redo, a simpler color picker, and cleaner text controls. Corrected the SeliaScan integration name.
+> Added clear Bookmark, Page, Gesture, Tools, and Annotation reader controls, a direct page slider, and persistent Light and Dark themes with readable neutral-gray PDF editing controls.
 
 ### Čeština
 
-> Zpřehledněna editace PDF pomocí kompaktní dvouřádkové lišty, barevných per a zvýrazňovačů, pevných tlačítek zpět a znovu, jednodušší volby barvy a čistší práce s textem. Opraven název integrace SeliaScan.
+> Přidány přehledné volby Záložka, Stránka, Gesta, Nástroje a Anotace, přímý posuvník stran a trvalé světlé i tmavé téma s dobře čitelnými šedými ovládacími prvky editoru PDF.
 
 ## App content
 
@@ -148,7 +148,7 @@ App details contains an optional external Buy Me a Coffee support link. It provi
 
 - `assets/icon.png`: 512 × 512 RGBA PNG, 32-bit with alpha, under 1,024 KB.
 - `assets/feature-graphic.png`: 1024 × 500 RGB PNG without alpha.
-- `assets/en-US/phone/01-library.png` through `06-reader-settings.png`: six 1080 × 2400 RGB PNG screenshots from the exact current emulator build.
+- `assets/en-US/phone/01-library.png` through `06-reader-settings.png`: six 1080-pixel-wide RGB PNG screenshots; the reader and annotation images are from the verified `alpha.5` Android 10 build.
 - The screenshots show only SeliaLists and the synthetic `SheetSet QA Score`; no private or copyrighted music is present.
 - No copyrighted scores, rankings, prices, Play badges, donation promotion, device frames, or unfinished features.
 

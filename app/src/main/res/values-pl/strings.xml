@@ -126,6 +126,15 @@
     <string name="backup_restore">Kopia i przywracanie</string>
     <string name="backup_restore_summary">Utwórz, udostępnij lub przywróć kopię ZIP</string>
     <string name="language_summary">Wybierz język aplikacji</string>
+    <string name="appearance">Wygląd</string>
+    <string name="appearance_summary">Wybierz jasny lub ciemny motyw</string>
+    <string name="theme_light">Jasny</string>
+    <string name="theme_dark">Ciemny</string>
+    <string name="reader_tab_bookmark">Zakładka</string>
+    <string name="reader_tab_page">Strona</string>
+    <string name="reader_tab_gesture">Gesty</string>
+    <string name="reader_tab_tools">Narzędzia</string>
+    <string name="reader_tab_annotation">Adnotacja</string>
     <string name="app_details_summary">Wersja, prywatność, wsparcie i linki</string>
     <string name="settings_layout">Układ</string>
     <string name="settings_page_turning">Zmiana stron</string>

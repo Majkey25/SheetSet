@@ -11,6 +11,7 @@ import cz.teply.sheetset.pdf.SymbolAnnotation
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderLayout
+import cz.teply.sheetset.settings.ThemeMode
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -79,6 +80,7 @@ class LibraryBackupTest {
                 pageFit = PageFit.WIDTH,
                 pageTurnTaps = false,
                 readerLayout = ReaderLayout.HALF,
+                themeMode = ThemeMode.DARK,
                 editor = expectedEditor,
             )
             val archive = ByteArrayOutputStream()
@@ -145,6 +147,7 @@ class LibraryBackupTest {
 
             val settings = requireNotNull(restored).settings
             assertEquals(ReaderLayout.SINGLE, settings.readerLayout)
+            assertEquals(ThemeMode.LIGHT, settings.themeMode)
             assertEquals(AnnotationEditorSettings.defaults(), settings.editor)
             pdf.delete()
         }
@@ -163,6 +166,8 @@ class LibraryBackupTest {
                             .remove("readerLayout")
                         manifest.getJSONObject("settings")
                             .remove("editor")
+                        manifest.getJSONObject("settings")
+                            .remove("themeMode")
                         zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
                     } else {
                         input.copyTo(zip)

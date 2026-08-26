@@ -23,6 +23,7 @@ import androidx.test.espresso.Espresso
 import cz.teply.sheetset.pdf.AnnotationEditorSettings
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.ReaderLayout
+import cz.teply.sheetset.settings.ThemeMode
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
@@ -54,7 +55,22 @@ class SettingsFlowTest {
             "Annotation tools",
             "Backup and restore",
         ).forEach { composeRule.onNodeWithText(it).assertIsDisplayed() }
+        composeRule.onNodeWithText("Appearance").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Share backup").assertCountEquals(0)
+    }
+
+    @Test
+    fun appearanceChoiceUpdatesThemeMode() {
+        var settings by mutableStateOf(AppSettings())
+        setSettingsContent(
+            settings = settings,
+            actions = SheetSetActions(updateSettings = { settings = it }),
+        )
+
+        openMenuPage("Appearance")
+        composeRule.onNodeWithText("Dark").performClick()
+
+        composeRule.runOnIdle { assertEquals(ThemeMode.DARK, settings.themeMode) }
     }
 
     @Test

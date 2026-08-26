@@ -9,9 +9,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,16 +23,20 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,7 +133,7 @@ fun ReaderScreen(
     var selectedSymbolId by remember { mutableStateOf("sharp") }
     var colorPanelOpen by remember { mutableStateOf(false) }
     var pageView by remember { mutableStateOf<PdfPageView?>(null) }
-    var performanceTools by remember { mutableStateOf(false) }
+    var readerPanel by remember { mutableStateOf<ReaderPanel?>(null) }
     var history by remember(reader.score.id, reader.pageIndex) {
         mutableStateOf(AnnotationHistory(reader.annotations.pages[reader.pageIndex].orEmpty()))
     }
@@ -275,7 +283,7 @@ fun ReaderScreen(
     }
 
     Box(
-        Modifier.fillMaxSize().background(Color.Black)
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)
             .focusRequester(readerFocusRequester).focusable().onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) {
                 false
@@ -405,9 +413,8 @@ fun ReaderScreen(
                     layout = effectiveLayout,
                     onPrevious = { actions.previousPage(effectiveLayout) },
                     onNext = { actions.nextPage(effectiveLayout) },
-                    onPerformanceTools = {
-                        performanceTools = true
-                    },
+                    onJump = actions.jumpToPage,
+                    onPanel = { readerPanel = it },
                 ) {
                     val restored = editor.resolveVisibleSelection(lastEditorTool, activePresetId)
                     lastEditorTool = restored.tool
@@ -519,8 +526,9 @@ fun ReaderScreen(
         }
     }
 
-    if (performanceTools) {
+    readerPanel?.let { panel ->
         PerformanceToolsSheet(
+            section = panel,
             reader = reader,
             settings = settings,
             windowLayout = windowLayout,
@@ -529,7 +537,13 @@ fun ReaderScreen(
             onAddBookmark = actions.addBookmark,
             onRenameBookmark = actions.renameBookmark,
             onDeleteBookmark = actions.deleteBookmark,
-            onDismiss = { performanceTools = false },
+            onExport = {
+                exportLauncher.launch(
+                    reader.score.title.replace(Regex("[\\/:*?\"<>|]"), "_")
+                        .take(100) + "-annotated.pdf",
+                )
+            },
+            onDismiss = { readerPanel = null },
         )
     }
 
@@ -674,7 +688,10 @@ private fun readerPositionText(reader: ReaderUiState, layout: ReaderLayout): Str
 
 @Composable
 private fun ReaderTopBar(title: String, onClose: () -> Unit, onExport: () -> Unit) {
-    Surface(color = Color.Black.copy(alpha = 0.9f), contentColor = Color.White) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -698,7 +715,8 @@ private fun ReaderNavigationBar(
     layout: ReaderLayout,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onPerformanceTools: () -> Unit,
+    onJump: (Int) -> Unit,
+    onPanel: (ReaderPanel) -> Unit,
     onAnnotate: () -> Unit,
 ) {
     val previousEnabled = reader.scoreIndex > 0 || reader.pageIndex > 0 ||
@@ -708,39 +726,102 @@ private fun ReaderNavigationBar(
         ReaderLayout.HALF -> reader.pagePart == 0 || reader.pageIndex < reader.score.pageCount - 1
         ReaderLayout.TWO_PAGE -> reader.pageIndex - reader.pageIndex % 2 + 2 < reader.score.pageCount
     }
-    Surface(color = Color.Black.copy(alpha = 0.9f), contentColor = Color.White) {
-        Row(
-            Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ReaderControl(
-                stringResource(R.string.previous),
-                R.drawable.ic_chevron_left_24,
-                enabled = previousEnabled,
-                onClick = onPrevious,
-            )
-            Text(
-                readerPositionText(reader, layout),
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-            )
-            ReaderControl(
-                stringResource(R.string.next),
-                R.drawable.ic_chevron_right_24,
-                enabled = nextEnabled,
-                onClick = onNext,
-            )
-            ReaderControl(
-                stringResource(R.string.performance_tools),
-                R.drawable.ic_view_module_24,
-                onClick = onPerformanceTools,
-            )
-            ReaderControl(
-                stringResource(R.string.annotate),
-                R.drawable.ic_edit_24,
-                onClick = onAnnotate,
-            )
+    val maxPage = (reader.score.pageCount - 1).coerceAtLeast(0)
+    var sliderValue by remember(reader.score.id, reader.pageIndex) {
+        mutableFloatStateOf(reader.pageIndex.toFloat())
+    }
+    val positionLabel = readerPositionText(reader, layout)
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+            Row(
+                Modifier.fillMaxWidth().height(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ReaderControl(
+                    stringResource(R.string.previous),
+                    R.drawable.ic_chevron_left_24,
+                    enabled = previousEnabled,
+                    onClick = onPrevious,
+                )
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    onValueChangeFinished = { onJump(sliderValue.roundToInt()) },
+                    valueRange = 0f..maxPage.coerceAtLeast(1).toFloat(),
+                    steps = (maxPage - 1).coerceAtLeast(0),
+                    enabled = maxPage > 0,
+                    modifier = Modifier.weight(1f).semantics {
+                        contentDescription = positionLabel
+                    },
+                )
+                Text(
+                    positionLabel,
+                    modifier = Modifier.width(72.dp),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                ReaderControl(
+                    stringResource(R.string.next),
+                    R.drawable.ic_chevron_right_24,
+                    enabled = nextEnabled,
+                    onClick = onNext,
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth().height(64.dp)) {
+                ReaderDestinationControl(
+                    stringResource(R.string.reader_tab_bookmark),
+                    R.drawable.ic_bookmark_24,
+                ) { onPanel(ReaderPanel.BOOKMARK) }
+                ReaderDestinationControl(
+                    stringResource(R.string.reader_tab_page),
+                    R.drawable.ic_pdf_24,
+                ) { onPanel(ReaderPanel.PAGE) }
+                ReaderDestinationControl(
+                    stringResource(R.string.reader_tab_gesture),
+                    R.drawable.ic_gesture_24,
+                ) { onPanel(ReaderPanel.GESTURE) }
+                ReaderDestinationControl(
+                    stringResource(R.string.reader_tab_tools),
+                    R.drawable.ic_view_module_24,
+                ) { onPanel(ReaderPanel.TOOLS) }
+                ReaderDestinationControl(
+                    stringResource(R.string.reader_tab_annotation),
+                    R.drawable.ic_edit_24,
+                    onClick = onAnnotate,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.ReaderDestinationControl(
+    label: String,
+    @DrawableRes icon: Int,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.weight(1f).fillMaxHeight().clickable(onClick = onClick)
+            .semantics { contentDescription = label },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            modifier = Modifier.size(26.dp),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -755,7 +836,7 @@ private fun ReaderControl(
     IconButton(
         modifier = Modifier.size(48.dp)
             .background(
-                if (selected == true) Color.White else Color.Transparent,
+                if (selected == true) MaterialTheme.colorScheme.surface else Color.Transparent,
                 RoundedCornerShape(12.dp),
             )
             .semantics {
@@ -770,9 +851,8 @@ private fun ReaderControl(
             contentDescription = null,
             modifier = Modifier.size(24.dp),
             tint = when {
-                !enabled -> Color.Gray
-                selected == true -> Color.Black
-                else -> Color.White
+                !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                else -> MaterialTheme.colorScheme.onSurface
             },
         )
     }

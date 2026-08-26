@@ -122,6 +122,15 @@
     <string name="backup_restore">Backup and restore</string>
     <string name="backup_restore_summary">Create, share, or restore a ZIP backup</string>
     <string name="language_summary">Choose the app language</string>
+    <string name="appearance">Appearance</string>
+    <string name="appearance_summary">Choose a light or dark theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="reader_tab_bookmark">Bookmark</string>
+    <string name="reader_tab_page">Page</string>
+    <string name="reader_tab_gesture">Gesture</string>
+    <string name="reader_tab_tools">Tools</string>
+    <string name="reader_tab_annotation">Annotation</string>
     <string name="app_details_summary">Version, privacy, support, and links</string>
     <string name="settings_layout">Layout</string>
     <string name="settings_page_turning">Page turning</string>

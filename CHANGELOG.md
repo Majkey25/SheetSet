@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.5] - 2026-08-26
+
+### Added
+
+- Added the ScorePDF-inspired Bookmark, Page, Gesture, Tools, and Annotation reader destinations with focused controls for each workflow.
+- Added persistent Light and Dark appearance choices, including backup and restore of the selected theme.
+
+### Changed
+
+- Replaced black reader and annotation chrome with theme-aware neutral gray surfaces so every icon stays readable in both themes.
+- Added a direct page slider while retaining Previous and Next actions for touch, keyboard, and pedal workflows.
+- Included the appearance setting in native backups without breaking format 1 or 2 restore compatibility.
+
 ## [0.5.0-alpha.4] - 2026-08-26
 
 ### Changed

@@ -49,6 +49,7 @@ import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
 import cz.teply.sheetset.ui.PerformanceToolsSheet
+import cz.teply.sheetset.ui.ReaderPanel
 import cz.teply.sheetset.ui.WindowLayout
 import org.junit.Rule
 import org.junit.Assert.assertEquals
@@ -441,7 +442,7 @@ class SheetSetFlowTest {
 
         composeRule.onNodeWithContentDescription("Close").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Export").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
 
         composeRule.onNodeWithContentDescription("Draw").performClick()
         composeRule.onNodeWithContentDescription("Objects").assertIsDisplayed()
@@ -474,7 +475,7 @@ class SheetSetFlowTest {
         val text = sampleText()
         setReaderContent(textAnnotation = text, file = onePagePdf())
 
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
         waitForPdfPage()
         composeRule.onNodeWithTag(PDF_PAGE_TEST_TAG).performTouchInput {
             click(center)
@@ -495,7 +496,7 @@ class SheetSetFlowTest {
     @Test
     fun compactToolbarShowsOnePersistentColorControl() {
         setReaderContent()
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
 
         assertToolbarHasOneColorControl()
     }
@@ -503,7 +504,7 @@ class SheetSetFlowTest {
     @Test
     fun expandedToolbarShowsOnePersistentColorControl() {
         setReaderContent(windowLayout = WindowLayout.EXPANDED)
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
 
         assertToolbarHasOneColorControl()
     }
@@ -511,12 +512,12 @@ class SheetSetFlowTest {
     @Test
     fun doneThenAnnotateRestoresTheLastEditorTool() {
         setReaderContent()
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
         composeRule.onNodeWithContentDescription("Draw").performClick()
         composeRule.onNodeWithContentDescription("Highlighter").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Done").performClick()
 
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
 
         composeRule.onNodeWithContentDescription("Objects").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Highlighter").assertIsSelected()
@@ -535,7 +536,7 @@ class SheetSetFlowTest {
                 }
             },
         )
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
         composeRule.onNodeWithContentDescription("Draw").performClick()
         composeRule.onNodeWithContentDescription("Pen 1").performClick()
 
@@ -557,10 +558,10 @@ class SheetSetFlowTest {
         events += "text-cancel"
         composeRule.onNodeWithContentDescription("Done").performClick()
         events += "done"
-        composeRule.onNodeWithContentDescription("Performance tools").performClick()
+        composeRule.onNodeWithContentDescription("Tools").performClick()
         events += "tools"
 
-        composeRule.onNodeWithText("Bookmarks").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Export").performScrollTo().assertIsDisplayed()
         composeRule.runOnIdle {
             assertEquals(
                 listOf(
@@ -591,7 +592,7 @@ class SheetSetFlowTest {
             ),
         )
 
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
 
         composeRule.onNodeWithContentDescription("Draw").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ellipse").assertIsSelected()
@@ -613,7 +614,7 @@ class SheetSetFlowTest {
             ),
         )
 
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
 
         composeRule.onNodeWithContentDescription("Objects").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Pen 2").assertIsSelected()
@@ -624,7 +625,7 @@ class SheetSetFlowTest {
     fun consecutivePresetUpdatesUseTheLatestEditorState() {
         val updates = mutableListOf<AppSettings>()
         setReaderContent(onSettings = updates::add)
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
         composeRule.onNodeWithContentDescription("Draw").performClick()
 
         composeRule.onNodeWithContentDescription("Increase stroke width").performClick()
@@ -711,11 +712,13 @@ class SheetSetFlowTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Performance tools").performClick()
-        composeRule.onNodeWithText("Bookmarks").performScrollTo().assertIsDisplayed()
+        listOf("Bookmark", "Page", "Gesture", "Tools", "Annotation").forEach {
+            composeRule.onNodeWithContentDescription(it).assertIsDisplayed()
+        }
+        composeRule.onNodeWithContentDescription("Bookmark").performClick()
         composeRule.onNodeWithText("Chorus").performScrollTo().performClick()
         composeRule.runOnIdle { assertEquals(2, jumpedTo) }
-        composeRule.onNodeWithContentDescription("Performance tools").performClick()
+        composeRule.onNodeWithContentDescription("Page").performClick()
         composeRule.onNodeWithText("Single page").assertIsDisplayed()
         composeRule.onNodeWithText("Half page").performClick()
         composeRule.runOnIdle { assertEquals(ReaderLayout.HALF, settings.readerLayout) }
@@ -743,7 +746,7 @@ class SheetSetFlowTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Performance tools").performClick()
+        composeRule.onNodeWithContentDescription("Bookmark").performClick()
         composeRule.onNodeWithText("Add bookmark").performClick()
         composeRule.onNodeWithText("Bookmark title").performTextInput("Verse")
         composeRule.onNodeWithText("Save").performClick()
@@ -765,6 +768,7 @@ class SheetSetFlowTest {
         composeRule.setContent {
             SheetSetTheme {
                 PerformanceToolsSheet(
+                    section = ReaderPanel.TOOLS,
                     reader = reader,
                     settings = AppSettings(),
                     windowLayout = WindowLayout.COMPACT,
@@ -773,6 +777,7 @@ class SheetSetFlowTest {
                     onAddBookmark = {},
                     onRenameBookmark = { _, _ -> },
                     onDeleteBookmark = {},
+                    onExport = {},
                     onDismiss = {},
                 )
             }
@@ -805,7 +810,7 @@ class SheetSetFlowTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Annotate").performClick()
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
 
         listOf("×", "⇩", "‹", "›", "✎", "▰", "⌫", "↶", "↷", "✓").forEach { glyph ->
             composeRule.onAllNodesWithText(glyph).assertCountEquals(0)
@@ -893,11 +898,11 @@ class SheetSetFlowTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Annotate").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Annotation").assertIsDisplayed()
         composeRule.onRoot().performTouchInput { click(center) }
-        composeRule.onAllNodesWithContentDescription("Annotate").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("Annotation").assertCountEquals(0)
         composeRule.onRoot().performTouchInput { click(center) }
-        composeRule.onNodeWithContentDescription("Annotate").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Annotation").assertIsDisplayed()
     }
 
     @Test
@@ -925,10 +930,10 @@ class SheetSetFlowTest {
 
         composeRule.onRoot().performTouchInput { click(center) }
         composeRule.onRoot().performTouchInput { click(center) }
-        composeRule.onNodeWithContentDescription("Annotate").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Annotation").assertIsDisplayed()
 
         composeRule.waitUntil(timeoutMillis = 4_000) {
-            composeRule.onAllNodesWithContentDescription("Annotate")
+            composeRule.onAllNodesWithContentDescription("Annotation")
                 .fetchSemanticsNodes().isEmpty()
         }
     }
