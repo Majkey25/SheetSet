@@ -1,4 +1,4 @@
-# SheetSet
+# SeliaLists
 
 Offline Android PDF organizer for musicians. Import scores, build unlimited setlists, write annotations, and export a marked-up copy. No account, ads, analytics, cloud service, or Internet permission.
 
@@ -9,9 +9,9 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 ![Offline only](https://img.shields.io/badge/offline-only-111111.svg)
 
 <p align="center">
-  <img src="site/assets/home.png" alt="SheetSet phone library with Menu and Import PDF actions" width="260">
-  <img src="site/assets/reader.png" alt="SheetSet phone PDF editor with compact annotation tools and one color control" width="260">
-  <img src="site/assets/tablet.png" alt="SheetSet tablet library with a left navigation rail" width="420">
+  <img src="site/assets/home.png" alt="SeliaLists phone library with Menu and Import PDF actions" width="260">
+  <img src="site/assets/reader.png" alt="SeliaLists phone PDF editor with compact annotation tools and one color control" width="260">
+  <img src="site/assets/tablet.png" alt="SeliaLists tablet library with a left navigation rail" width="420">
 </p>
 
 ## What it does
@@ -28,15 +28,15 @@ Offline Android PDF organizer for musicians. Import scores, build unlimited setl
 - Uses one compact editor on phones and tablets with direct core tools, one color control, and fixed undo, redo, and Done actions.
 - Preserves the imported original and exports a new annotated PDF.
 - Backs up and safely restores PDFs, setlists, annotations, settings, and language in a validated ZIP.
-- Imports ScorePDF backup ZIPs as a non-destructive merge and shares SheetSet backups through Android.
+- Imports ScorePDF backup ZIPs as a non-destructive merge and shares SeliaLists backups through Android.
 - Uses English, Czech, Slovak, German, Polish, or the Android device language.
-- Offers Scan with ScanIt from the import sheet and opens its Google Play listing.
+- Opens an installed CeliaScan app from the import sheet and uses its Google Play listing when absent.
 
 ## Install
 
-Download the preview APK from [GitHub Releases](https://github.com/Majkey25/SheetSet/releases). Preview builds are debug-signed and intended for testing. Google Play publishing is not part of this repository yet.
+Download test builds from [GitHub Releases](https://github.com/Majkey25/SheetSet/releases). Google Play closed-test builds use the same source and the Play Console preparation documented in this repository.
 
-SheetSet requires Android 10 or newer.
+SeliaLists requires Android 10 or newer.
 
 ## Build
 
@@ -55,7 +55,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Design
 
-SheetSet uses one Android application module, Jetpack Compose, and platform PDF APIs. `LibraryRepository` stores PDFs and an atomic JSON catalog. Versioned typed annotations migrate old pen and highlighter data. `PdfPageView` and `PdfExporter` share one renderer so the on-screen page matches the non-destructive exported copy. Restore validates the complete ZIP in staging before an atomic directory swap with rollback.
+SeliaLists uses one Android application module, Jetpack Compose, and platform PDF APIs. `LibraryRepository` stores PDFs and an atomic JSON catalog. Versioned typed annotations migrate old pen and highlighter data. `PdfPageView` and `PdfExporter` share one renderer so the on-screen page matches the non-destructive exported copy. Restore validates the complete ZIP in staging before an atomic directory swap with rollback.
 
 The app requests no runtime or sensitive platform permissions. Imported files stay in app-private storage. Export writes only to the location selected in the Android document picker.
 
@@ -66,7 +66,7 @@ The app requests no runtime or sensitive platform permissions. Imported files st
 - Underline and strike-through use manual drag bounds. Scanned PDFs have no OCR.
 - Export rasterizes source pages at up to 144 dpi with a 12 MP memory cap.
 - Backup restore accepts archives up to 1 GiB. There is no cloud sync.
-- Scanning is delegated to the separate ScanIt app; SheetSet has no built-in camera scanner.
+- Scanning is delegated to the separate CeliaScan app; SeliaLists has no built-in camera scanner.
 - Common page-turn pedals work as keyboards; custom MIDI mappings, audio tools, and a metronome are not included.
 
 See the [adaptive editor specification](docs/superpowers/specs/2026-08-20-sheetset-editor-settings-adaptive-design.md) and [PDF editor plan](docs/superpowers/plans/2026-08-20-sheetset-pdf-editor.md).

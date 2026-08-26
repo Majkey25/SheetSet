@@ -1,22 +1,16 @@
 package cz.teply.sheetset.ui
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,15 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -46,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.KeyEventType
@@ -57,8 +46,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,22 +55,42 @@ import androidx.compose.ui.viewinterop.AndroidView
 import cz.teply.sheetset.R
 import cz.teply.sheetset.ReaderUiState
 import cz.teply.sheetset.pdf.AnnotationColor
+import cz.teply.sheetset.pdf.AnnotationEditorSettings
 import cz.teply.sheetset.pdf.AnnotationHistory
-import cz.teply.sheetset.pdf.InkKind
+import cz.teply.sheetset.pdf.AnnotationToolGroup
+import cz.teply.sheetset.pdf.DrawingPreset
+import cz.teply.sheetset.pdf.InkAnnotation
 import cz.teply.sheetset.pdf.MarkupAnnotation
-import cz.teply.sheetset.pdf.MAX_TEXT_LENGTH
+import cz.teply.sheetset.pdf.NormalizedPoint
+import cz.teply.sheetset.pdf.NormalizedRect
 import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.pdf.PdfPageView
 import cz.teply.sheetset.pdf.ReaderTool
+import cz.teply.sheetset.pdf.ShapeAnnotation
+import cz.teply.sheetset.pdf.SymbolAnnotation
 import cz.teply.sheetset.pdf.TextBoxAnnotation
+import cz.teply.sheetset.pdf.canAppendAnnotations
+import cz.teply.sheetset.pdf.duplicateSelection
 import cz.teply.sheetset.pdf.manualMarkup
 import cz.teply.sheetset.settings.AppSettings
-import cz.teply.sheetset.settings.HighlightStrength
-import cz.teply.sheetset.settings.ReaderDefaultTool
 import cz.teply.sheetset.settings.ReaderLayout
-import cz.teply.sheetset.settings.ToolSize
 import java.util.UUID
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
+
+internal const val PDF_PAGE_TEST_TAG = "pdf-page"
+
+internal class EditorSettingsState(initial: AnnotationEditorSettings) {
+    var current by mutableStateOf(initial)
+        private set
+
+    fun replace(value: AnnotationEditorSettings) {
+        current = value
+    }
+
+    fun update(transform: (AnnotationEditorSettings) -> AnnotationEditorSettings): AnnotationEditorSettings =
+        transform(current).also { current = it }
+}
 
 @Composable
 fun ReaderScreen(
@@ -90,16 +99,32 @@ fun ReaderScreen(
     windowLayout: WindowLayout,
     actions: SheetSetActions,
 ) {
+    val initialSelection = settings.editor.resolveVisibleSelection(
+        settings.defaultTool.requestedReaderTool(),
+    )
+    val editorState = remember(reader.score.id) { EditorSettingsState(settings.editor) }
+    val editor = editorState.current
     var tool by remember(reader.score.id) { mutableStateOf(ReaderTool.VIEW) }
+    var lastEditorTool by remember(reader.score.id) { mutableStateOf(initialSelection.tool) }
     var controlsVisible by remember { mutableStateOf(true) }
     var autoHideRequest by remember { mutableIntStateOf(0) }
-    var selectedAnnotationId by remember(reader.score.id, reader.pageIndex) {
-        mutableStateOf<String?>(null)
+    var selectedAnnotationIds by remember(reader.score.id, reader.pageIndex) {
+        mutableStateOf(emptySet<String>())
     }
-    var color by remember { mutableStateOf(AnnotationColor.BLACK) }
+    var group by remember(reader.score.id) { mutableStateOf(AnnotationToolGroup.OBJECTS) }
+    var activePresetId by remember(reader.score.id) {
+        mutableStateOf(initialSelection.preset.id)
+    }
+    var objectColor by remember(reader.score.id) { mutableStateOf(AnnotationColor.BLACK) }
+    var objectOpacity by remember(reader.score.id) { mutableIntStateOf(255) }
+    var objectWidth by remember(reader.score.id) { mutableIntStateOf(20) }
     var straightLine by remember(reader.score.id) { mutableStateOf(false) }
-    var textBounds by remember { mutableStateOf<cz.teply.sheetset.pdf.NormalizedRect?>(null) }
-    var textDraft by remember { mutableStateOf("") }
+    var textBounds by remember { mutableStateOf<NormalizedRect?>(null) }
+    var editingText by remember { mutableStateOf<TextBoxAnnotation?>(null) }
+    var symbolPoint by remember { mutableStateOf<NormalizedPoint?>(null) }
+    var selectedSymbolId by remember { mutableStateOf("sharp") }
+    var colorPanelOpen by remember { mutableStateOf(false) }
+    var pageView by remember { mutableStateOf<PdfPageView?>(null) }
     var performanceTools by remember { mutableStateOf(false) }
     var history by remember(reader.score.id, reader.pageIndex) {
         mutableStateOf(AnnotationHistory(reader.annotations.pages[reader.pageIndex].orEmpty()))
@@ -114,14 +139,32 @@ fun ReaderScreen(
     } else {
         effectiveReaderLayout(settings.readerLayout, windowLayout != WindowLayout.COMPACT)
     }
+    val activePreset = editor.resolveVisibleSelection(lastEditorTool, activePresetId).preset
+    val selectedAnnotations = history.annotations.filter { it.id in selectedAnnotationIds }
+    val selectedAnnotation = selectedAnnotations.singleOrNull()
+    val currentColor = selectedAnnotations.firstOrNull()?.annotationColor()
+        ?: if (group == AnnotationToolGroup.DRAW) activePreset.color else objectColor
+    val currentOpacity = selectedAnnotations.firstOrNull()?.annotationOpacity()
+        ?: if (group == AnnotationToolGroup.DRAW) activePreset.opacity else objectOpacity
+    val currentWidth = selectedAnnotation?.toolbarWidth()
+        ?: if (group == AnnotationToolGroup.DRAW) activePreset.width else objectWidth
+    val pageDescription = stringResource(
+        R.string.pdf_page,
+        reader.pageIndex + 1,
+        reader.score.pageCount,
+    )
+    val actionFailed = stringResource(R.string.action_failed)
 
+    LaunchedEffect(settings.editor) {
+        editorState.replace(settings.editor)
+    }
     DisposableEffect(platformView, settings.keepScreenAwake) {
         val previous = platformView.keepScreenOn
         platformView.keepScreenOn = settings.keepScreenAwake
         onDispose { platformView.keepScreenOn = previous }
     }
     LaunchedEffect(reader.score.id, reader.pageIndex) {
-        selectedAnnotationId = null
+        selectedAnnotationIds = emptySet()
     }
     LaunchedEffect(reader.score.id) {
         readerFocusRequester.requestFocus()
@@ -134,12 +177,101 @@ fun ReaderScreen(
     }
 
     fun updateHistory(next: AnnotationHistory) {
+        if (next == history) return
         history = next
-        actions.saveAnnotations(next.annotations)
+        actions.saveAnnotations(
+            reader.score.id,
+            reader.pageIndex,
+            reader.annotations.withPage(reader.pageIndex, next.annotations),
+        )
     }
 
     fun addAnnotation(annotation: PageAnnotation) {
+        if (!canAppendAnnotations(history.annotations.size, 1)) {
+            Toast.makeText(platformView.context, actionFailed, Toast.LENGTH_SHORT).show()
+            return
+        }
         updateHistory(history.add(annotation))
+    }
+
+    fun updateEditor(transform: (AnnotationEditorSettings) -> AnnotationEditorSettings) {
+        val next = editorState.update(transform)
+        actions.updateSettings(settings.copy(editor = next))
+    }
+
+    fun updatePreset(transform: (DrawingPreset) -> DrawingPreset) = updateEditor { latest ->
+        latest.copy(
+            presets = latest.presets.map { preset ->
+                if (preset.id == activePresetId) transform(preset) else preset
+            },
+        )
+    }
+
+    fun saveRecentColor(color: AnnotationColor) {
+        if (color in editorState.current.quickColors) return
+        updateEditor { latest -> latest.copy(recentColors = latest.recentColors.withRecent(color)) }
+    }
+
+    fun applyAppearance(color: AnnotationColor, opacity: Int, addRecent: Boolean = false) {
+        if (selectedAnnotationIds.isNotEmpty()) {
+            val next = history.annotations.map { annotation ->
+                if (annotation.id in selectedAnnotationIds) {
+                    annotation.withAppearance(color, opacity)
+                } else {
+                    annotation
+                }
+            }
+            updateHistory(history.commit(next))
+            if (addRecent) {
+                saveRecentColor(color)
+            }
+        } else if (group == AnnotationToolGroup.DRAW) {
+            updateEditor { latest ->
+                latest.copy(
+                    presets = latest.presets.map { preset ->
+                        if (preset.id == activePresetId) {
+                        preset.copy(color = color, opacity = opacity)
+                        } else {
+                            preset
+                        }
+                    },
+                    recentColors = if (addRecent && color !in latest.quickColors) {
+                        latest.recentColors.withRecent(color)
+                    } else {
+                        latest.recentColors
+                    },
+                )
+            }
+        } else {
+            objectColor = color
+            objectOpacity = opacity
+            if (addRecent) saveRecentColor(color)
+        }
+    }
+
+    fun changeWidth(width: Int) {
+        if (selectedAnnotationIds.isNotEmpty()) {
+            val next = history.annotations.map { annotation ->
+                if (annotation.id in selectedAnnotationIds) annotation.withToolbarWidth(width) else annotation
+            }
+            updateHistory(history.commit(next))
+        } else if (group == AnnotationToolGroup.DRAW) {
+            updatePreset { it.copy(width = width) }
+        } else {
+            objectWidth = width
+        }
+    }
+
+    fun switchTool(next: ReaderTool) {
+        if (next == ReaderTool.VIEW) {
+            tool = next
+        } else {
+            val resolved = editorState.current.resolveVisibleSelection(next, activePresetId)
+            tool = resolved.tool
+            lastEditorTool = resolved.tool
+            activePresetId = resolved.preset.id
+        }
+        selectedAnnotationIds = emptySet()
     }
 
     Box(
@@ -174,24 +306,23 @@ fun ReaderScreen(
             )
         } else {
             AndroidView(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag(PDF_PAGE_TEST_TAG).semantics {
+                    contentDescription = pageDescription
+                },
                 factory = ::PdfPageView,
                 update = { view ->
-                view.contentDescription = view.context.getString(
-                    R.string.pdf_page,
-                    reader.pageIndex + 1,
-                    reader.score.pageCount,
-                )
+                if (pageView !== view) pageView = view
+                view.contentDescription = pageDescription
                 view.tool = tool
+                view.editorSettings = editor
+                view.activeDrawingPreset = activePreset
                 view.annotations = history.annotations
-                view.selectedAnnotationId = selectedAnnotationId
-                view.annotationColor = color
-                view.penWidth = settings.penWidth.normalizedWidth()
-                view.highlighterWidth = settings.penWidth.normalizedWidth() * 4f
-                view.shapeWidth = settings.penWidth.normalizedWidth()
+                view.selectedAnnotationIds = selectedAnnotationIds
+                view.annotationColor = currentColor
+                view.annotationOpacity = currentOpacity
+                view.shapeWidth = objectWidth.normalizedWidth()
                 view.straightLine = straightLine
                 view.textSize = settings.textSize
-                view.highlighterAlpha = settings.highlighterStrength.alpha()
                 view.pageFit = if (effectiveLayout == ReaderLayout.HALF) {
                     cz.teply.sheetset.settings.PageFit.WIDTH
                 } else {
@@ -212,16 +343,23 @@ fun ReaderScreen(
                         if (controlsVisible && settings.autoHideControls) autoHideRequest++
                     }
                 }
-                view.onSelectAnnotation = { selectedAnnotationId = it }
+                view.onSelectionChange = { selectedAnnotationIds = it }
                 view.onAddAnnotation = ::addAnnotation
-                view.onUpdateAnnotation = { updateHistory(history.update(it)) }
-                view.onDeleteAnnotation = { id ->
-                    if (selectedAnnotationId == id) selectedAnnotationId = null
-                    updateHistory(history.delete(id))
+                view.onUpdateAnnotations = { updateHistory(history.commit(it)) }
+                view.onDeleteAnnotations = { ids ->
+                    selectedAnnotationIds = selectedAnnotationIds - ids
+                    updateHistory(history.commit(history.annotations.filterNot { it.id in ids }))
                 }
                 view.onRequestText = { bounds ->
+                    editingText = null
                     textBounds = bounds
-                    textDraft = ""
+                }
+                view.onRequestSymbol = { point ->
+                    selectedSymbolId = "sharp"
+                    symbolPoint = point
+                }
+                view.onSampleColor = { sampled ->
+                    applyAppearance(sampled, currentOpacity, addRecent = true)
                 }
                 view.onRequestMarkup = { kind, start, end ->
                     addAnnotation(
@@ -229,7 +367,8 @@ fun ReaderScreen(
                             id = UUID.randomUUID().toString(),
                             kind = kind,
                             bounds = manualMarkup(start, end),
-                            color = color,
+                            color = currentColor,
+                            opacity = currentOpacity,
                         ),
                     )
                 }
@@ -270,50 +409,110 @@ fun ReaderScreen(
                         performanceTools = true
                     },
                 ) {
-                    val initialTool = settings.defaultTool.editorTool()
-                    tool = initialTool
-                    if (initialTool == ReaderTool.HIGHLIGHTER && color == AnnotationColor.BLACK) {
-                        color = AnnotationColor.YELLOW
+                    val restored = editor.resolveVisibleSelection(lastEditorTool, activePresetId)
+                    lastEditorTool = restored.tool
+                    activePresetId = restored.preset.id
+                    tool = restored.tool
+                    group = if (restored.tool in setOf(ReaderTool.PEN, ReaderTool.HIGHLIGHTER)) {
+                        AnnotationToolGroup.DRAW
+                    } else {
+                        AnnotationToolGroup.OBJECTS
                     }
                     controlsVisible = true
                 }
             } else {
-                AnnotationPalette(
-                    reader = reader,
-                    settings = settings,
-                    actions = actions,
-                    tool = tool,
-                    color = color,
-                    straightLine = straightLine,
-                    selectedAnnotationId = selectedAnnotationId,
-                    expandedLayout = windowLayout == WindowLayout.EXPANDED,
-                    onTool = {
-                        tool = it
-                        if (it == ReaderTool.HIGHLIGHTER && color == AnnotationColor.BLACK) {
-                            color = AnnotationColor.YELLOW
-                        }
-                        selectedAnnotationId = null
+                val previousEnabled = reader.pageIndex > 0 || reader.scoreIndex > 0
+                val nextEnabled = reader.pageIndex < reader.score.pageCount - 1 ||
+                    reader.scoreIndex < reader.scoreIds.lastIndex
+                AnnotationToolbar(
+                    state = AnnotationToolbarState(
+                        group = group,
+                        tool = tool,
+                        preset = activePreset,
+                        editor = editor,
+                        selectedIds = selectedAnnotationIds,
+                        selectedAnnotation = selectedAnnotation,
+                        canUndo = history.canUndo,
+                        canRedo = history.canRedo,
+                        previousEnabled = previousEnabled,
+                        nextEnabled = nextEnabled,
+                        expanded = windowLayout == WindowLayout.EXPANDED,
+                        straightLine = straightLine,
+                        width = currentWidth,
+                        color = currentColor,
+                    ),
+                    onGroup = { nextGroup ->
+                        group = nextGroup
+                        val resolved = editor.resolveVisibleSelection(
+                            preferredTool = if (nextGroup == AnnotationToolGroup.DRAW) {
+                                activePreset.readerTool()
+                            } else {
+                                ReaderTool.SELECT
+                            },
+                            preferredPresetId = activePresetId,
+                        )
+                        activePresetId = resolved.preset.id
+                        switchTool(resolved.tool)
                     },
-                    onColor = { color = it },
+                    onTool = { switchTool(it) },
+                    onPreset = { presetId ->
+                        activePresetId = presetId
+                        group = AnnotationToolGroup.DRAW
+                        switchTool(editor.preset(presetId).readerTool())
+                    },
+                    onWidth = ::changeWidth,
+                    onColor = { colorPanelOpen = true },
+                    onEyedropper = { pageView?.startEyedropper() },
                     onStraightLine = { straightLine = !straightLine },
+                    onEditText = {
+                        editingText = selectedAnnotation as? TextBoxAnnotation
+                        textBounds = editingText?.bounds
+                    },
+                    onDuplicate = duplicate@{
+                        val before = history.annotations
+                        val selectedCount = before.count { it.id in selectedAnnotationIds }
+                        if (!canAppendAnnotations(before.size, selectedCount)) {
+                            Toast.makeText(
+                                platformView.context,
+                                actionFailed,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                            return@duplicate
+                        }
+                        val duplicated = before.duplicateSelection(selectedAnnotationIds) {
+                            UUID.randomUUID().toString()
+                        }
+                        selectedAnnotationIds = duplicated.drop(before.size)
+                            .mapTo(mutableSetOf(), PageAnnotation::id)
+                        updateHistory(history.commit(duplicated))
+                    },
                     onDelete = {
-                        selectedAnnotationId?.let { id ->
-                            selectedAnnotationId = null
-                            updateHistory(history.delete(id))
+                        if (selectedAnnotationIds.isNotEmpty()) {
+                            val ids = selectedAnnotationIds
+                            selectedAnnotationIds = emptySet()
+                            updateHistory(history.commit(history.annotations.filterNot { it.id in ids }))
                         }
                     },
                     onUndo = {
-                        selectedAnnotationId = null
+                        selectedAnnotationIds = emptySet()
                         updateHistory(history.undo())
                     },
                     onRedo = {
-                        selectedAnnotationId = null
+                        selectedAnnotationIds = emptySet()
                         updateHistory(history.redo())
                     },
                     onDone = {
-                        selectedAnnotationId = null
+                        selectedAnnotationIds = emptySet()
                         tool = ReaderTool.VIEW
                         controlsVisible = true
+                    },
+                    onPrevious = {
+                        selectedAnnotationIds = emptySet()
+                        actions.previousPage(ReaderLayout.SINGLE)
+                    },
+                    onNext = {
+                        selectedAnnotationIds = emptySet()
+                        actions.nextPage(ReaderLayout.SINGLE)
                     },
                 )
             }
@@ -334,43 +533,72 @@ fun ReaderScreen(
         )
     }
 
-    textBounds?.let { bounds ->
-        AlertDialog(
-            onDismissRequest = { textBounds = null },
-            title = { Text(stringResource(R.string.text_box)) },
-            text = {
-                OutlinedTextField(
-                    value = textDraft,
-                    onValueChange = { textDraft = it.take(MAX_TEXT_LENGTH) },
-                    label = { Text(stringResource(R.string.text_box)) },
-                    minLines = 3,
-                    maxLines = 8,
+    if (colorPanelOpen) {
+        ColorPanel(
+            selected = currentColor,
+            opacity = currentOpacity,
+            quickColors = editor.quickColors,
+            recentColors = editor.recentColors,
+            onDismiss = { colorPanelOpen = false },
+            onEyedropper = {
+                colorPanelOpen = false
+                pageView?.startEyedropper()
+            },
+            onConfirm = { nextColor, nextOpacity ->
+                applyAppearance(
+                    nextColor,
+                    nextOpacity,
+                    addRecent = nextColor !in editor.quickColors,
                 )
+                colorPanelOpen = false
             },
-            confirmButton = {
-                TextButton(
-                    enabled = textDraft.isNotBlank(),
-                    onClick = {
-                        addAnnotation(
-                            TextBoxAnnotation(
-                                id = UUID.randomUUID().toString(),
-                                bounds = bounds,
-                                text = textDraft.trim(),
-                                size = settings.textSize,
-                                color = color,
-                            ),
-                        )
-                        textBounds = null
-                        textDraft = ""
-                    },
-                ) {
-                    Text(stringResource(R.string.save))
-                }
+        )
+    }
+
+    textBounds?.let { bounds ->
+        TextAnnotationDialog(
+            initial = editingText,
+            bounds = bounds,
+            defaultSize = settings.textSize,
+            defaultColor = objectColor,
+            defaultOpacity = objectOpacity,
+            quickColors = editor.quickColors,
+            recentColors = editor.recentColors,
+            onDismiss = {
+                textBounds = null
+                editingText = null
             },
-            dismissButton = {
-                TextButton(onClick = { textBounds = null }) {
-                    Text(stringResource(R.string.cancel))
+            onConfirm = { annotation ->
+                if (editingText == null) {
+                    addAnnotation(annotation)
+                } else {
+                    updateHistory(history.update(annotation))
                 }
+                saveRecentColor(annotation.color)
+                textBounds = null
+                editingText = null
+            },
+        )
+    }
+
+    symbolPoint?.let { point ->
+        MusicalSymbolChooser(
+            selected = selectedSymbolId,
+            onSelected = { selectedSymbolId = it },
+            onDismiss = { symbolPoint = null },
+            onConfirm = { symbolId ->
+                addAnnotation(
+                    SymbolAnnotation(
+                        id = UUID.randomUUID().toString(),
+                        symbolId = symbolId,
+                        center = point,
+                        size = (objectWidth / 250f).coerceIn(0.01f, 0.5f),
+                        rotationDegrees = 0f,
+                        color = objectColor,
+                        opacity = objectOpacity,
+                    ),
+                )
+                symbolPoint = null
             },
         )
     }
@@ -397,8 +625,7 @@ private fun TwoPageReader(
                 update = { view ->
                     view.tool = ReaderTool.VIEW
                     view.annotations = reader.annotations.pages[pageIndex].orEmpty()
-                    view.selectedAnnotationId = null
-                    view.highlighterAlpha = settings.highlighterStrength.alpha()
+                    view.selectedAnnotationIds = emptySet()
                     view.pageFit = cz.teply.sheetset.settings.PageFit.PAGE
                     view.setHalfPagePart(0)
                     view.pageTurnTaps = settings.pageTurnTaps
@@ -517,372 +744,6 @@ private fun ReaderNavigationBar(
     }
 }
 
-private data class ToolDefinition(
-    val tool: ReaderTool,
-    @param:StringRes val label: Int,
-    @param:DrawableRes val icon: Int,
-)
-
-private val drawTools = listOf(
-    ToolDefinition(ReaderTool.PEN, R.string.pen, R.drawable.ic_edit_24),
-    ToolDefinition(ReaderTool.HIGHLIGHTER, R.string.highlighter, R.drawable.ic_highlighter_24),
-    ToolDefinition(ReaderTool.ERASER, R.string.eraser, R.drawable.ic_eraser_24),
-)
-
-private val primaryTools = drawTools + ToolDefinition(
-    ReaderTool.SELECT,
-    R.string.select,
-    R.drawable.ic_select_24,
-)
-
-private val moreTools = listOf(
-    ToolDefinition(ReaderTool.UNDERLINE, R.string.underline, R.drawable.ic_underline_24),
-    ToolDefinition(ReaderTool.STRIKE_THROUGH, R.string.strike_through, R.drawable.ic_strikethrough_24),
-    ToolDefinition(ReaderTool.TEXT_BOX, R.string.text_box, R.drawable.ic_text_fields_24),
-    ToolDefinition(ReaderTool.LINE, R.string.line, R.drawable.ic_line_24),
-    ToolDefinition(ReaderTool.ARROW, R.string.arrow, R.drawable.ic_arrow_forward_24),
-    ToolDefinition(ReaderTool.RECTANGLE, R.string.rectangle, R.drawable.ic_rectangle_24),
-    ToolDefinition(ReaderTool.ELLIPSE, R.string.ellipse, R.drawable.ic_ellipse_24),
-)
-
-private val annotationColors = listOf(
-    AnnotationColor.BLACK to R.string.color_black,
-    AnnotationColor.RED to R.string.color_red,
-    AnnotationColor.ORANGE to R.string.color_orange,
-    AnnotationColor.YELLOW to R.string.color_yellow,
-    AnnotationColor.GREEN to R.string.color_green,
-    AnnotationColor.BLUE to R.string.color_blue,
-    AnnotationColor.PURPLE to R.string.color_purple,
-    AnnotationColor.PINK to R.string.color_pink,
-)
-
-@Composable
-private fun AnnotationPalette(
-    reader: ReaderUiState,
-    settings: AppSettings,
-    actions: SheetSetActions,
-    tool: ReaderTool,
-    color: AnnotationColor,
-    straightLine: Boolean,
-    selectedAnnotationId: String?,
-    expandedLayout: Boolean,
-    onTool: (ReaderTool) -> Unit,
-    onColor: (AnnotationColor) -> Unit,
-    onStraightLine: () -> Unit,
-    onDelete: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onDone: () -> Unit,
-) {
-    var colorPickerOpen by remember { mutableStateOf(false) }
-    var moreToolsOpen by remember { mutableStateOf(false) }
-    Surface(color = Color.Black.copy(alpha = 0.92f), contentColor = Color.White) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
-            val horizontalPadding = if (expandedLayout) 48.dp else 0.dp
-            AnnotationSettingsRow(
-                reader = reader,
-                settings = settings,
-                tool = tool,
-                color = color,
-                straightLine = straightLine,
-                horizontalPadding = horizontalPadding,
-                onPrevious = { actions.previousPage(ReaderLayout.SINGLE) },
-                onNext = { actions.nextPage(ReaderLayout.SINGLE) },
-                onWidth = { actions.updateSettings(settings.copy(penWidth = it)) },
-                onStraightLine = onStraightLine,
-                onColor = { colorPickerOpen = true },
-            )
-            HorizontalDivider(color = Color.White.copy(alpha = 0.14f))
-            AnnotationToolsRow(
-                tool = tool,
-                selectedAnnotationId = selectedAnnotationId,
-                horizontalPadding = horizontalPadding,
-                onTool = onTool,
-                onDelete = onDelete,
-                onUndo = onUndo,
-                onRedo = onRedo,
-                onDone = onDone,
-                onMoreTools = { moreToolsOpen = true },
-            )
-        }
-    }
-    if (colorPickerOpen) {
-        ColorPickerDialog(
-            selected = color,
-            onColor = {
-                onColor(it)
-                colorPickerOpen = false
-            },
-            onDismiss = { colorPickerOpen = false },
-        )
-    }
-    if (moreToolsOpen) {
-        MoreToolsDialog(
-            selected = tool,
-            onTool = {
-                onTool(it)
-                moreToolsOpen = false
-            },
-            onDismiss = { moreToolsOpen = false },
-        )
-    }
-}
-
-@Composable
-private fun AnnotationSettingsRow(
-    reader: ReaderUiState,
-    settings: AppSettings,
-    tool: ReaderTool,
-    color: AnnotationColor,
-    straightLine: Boolean,
-    horizontalPadding: androidx.compose.ui.unit.Dp,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onWidth: (ToolSize) -> Unit,
-    onStraightLine: () -> Unit,
-    onColor: () -> Unit,
-) {
-    val previousEnabled = reader.pageIndex > 0 || reader.scoreIndex > 0
-    val nextEnabled = reader.pageIndex < reader.score.pageCount - 1 ||
-        reader.scoreIndex < reader.scoreIds.lastIndex
-    val widthLabel = stringResource(R.string.stroke_width)
-    val widthState = stringResource(settings.penWidth.label())
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = horizontalPadding).height(56.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ReaderControl(
-            stringResource(R.string.previous),
-            R.drawable.ic_chevron_left_24,
-            enabled = previousEnabled,
-            onClick = onPrevious,
-        )
-        Row(
-            Modifier.weight(1f).padding(start = 4.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ReaderControl(
-                stringResource(R.string.decrease_stroke_width),
-                R.drawable.ic_remove_24,
-                enabled = settings.penWidth != ToolSize.THIN,
-            ) { onWidth(settings.penWidth.previous()) }
-            Box(
-                Modifier.size(48.dp).semantics {
-                    contentDescription = widthLabel
-                    stateDescription = widthState
-                },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text((settings.penWidth.ordinal + 1).toString())
-            }
-            ReaderControl(
-                stringResource(R.string.increase_stroke_width),
-                R.drawable.ic_add_24,
-                enabled = settings.penWidth != ToolSize.THICK,
-            ) { onWidth(settings.penWidth.next()) }
-            ReaderControl(
-                label = stringResource(R.string.straight_line),
-                icon = R.drawable.ic_straighten_24,
-                selected = straightLine,
-                enabled = tool == ReaderTool.PEN || tool == ReaderTool.HIGHLIGHTER,
-                onClick = onStraightLine,
-            )
-            CurrentColorControl(
-                color = color,
-                colorName = stringResource(annotationColors.first { it.first == color }.second),
-                onClick = onColor,
-            )
-        }
-        ReaderControl(
-            stringResource(R.string.next),
-            R.drawable.ic_chevron_right_24,
-            enabled = nextEnabled,
-            onClick = onNext,
-        )
-    }
-}
-
-@Composable
-private fun AnnotationToolsRow(
-    tool: ReaderTool,
-    selectedAnnotationId: String?,
-    horizontalPadding: androidx.compose.ui.unit.Dp,
-    onTool: (ReaderTool) -> Unit,
-    onDelete: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onDone: () -> Unit,
-    onMoreTools: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = horizontalPadding).height(56.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            Modifier.weight(1f).padding(start = 4.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            primaryTools.forEach { definition ->
-                ReaderControl(
-                    label = stringResource(definition.label),
-                    icon = definition.icon,
-                    selected = tool == definition.tool,
-                ) { onTool(definition.tool) }
-            }
-        }
-        if (selectedAnnotationId == null) {
-            ReaderControl(
-                stringResource(R.string.more_tools),
-                R.drawable.ic_more_vert_24,
-                selected = moreTools.any { it.tool == tool },
-                onClick = onMoreTools,
-            )
-        } else {
-            ReaderControl(
-                stringResource(R.string.delete_annotation),
-                R.drawable.ic_delete_24,
-                onClick = onDelete,
-            )
-        }
-        ReaderControl(stringResource(R.string.undo), R.drawable.ic_undo_24, onClick = onUndo)
-        ReaderControl(stringResource(R.string.redo), R.drawable.ic_redo_24, onClick = onRedo)
-        ReaderControl(stringResource(R.string.done), R.drawable.ic_done_24, onClick = onDone)
-    }
-}
-
-@Composable
-private fun CurrentColorControl(
-    color: AnnotationColor,
-    colorName: String,
-    onClick: () -> Unit,
-) {
-    val label = stringResource(R.string.color)
-    IconButton(
-        modifier = Modifier.size(48.dp).semantics {
-            contentDescription = label
-            stateDescription = colorName
-        },
-        onClick = onClick,
-    ) {
-        Canvas(Modifier.size(28.dp)) {
-            drawCircle(color.composeColor(), radius = 10.dp.toPx())
-            drawCircle(
-                Color.White,
-                radius = 13.dp.toPx(),
-                style = Stroke(width = 2.dp.toPx()),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ColorPickerDialog(
-    selected: AnnotationColor,
-    onColor: (AnnotationColor) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.color)) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                annotationColors.chunked(4).forEach { row ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        row.forEach { (color, label) ->
-                            ColorOption(
-                                color = color,
-                                label = stringResource(label),
-                                selected = selected == color,
-                                onClick = { onColor(color) },
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
-}
-
-@Composable
-private fun ColorOption(
-    color: AnnotationColor,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val selectedOutline = MaterialTheme.colorScheme.onSurface
-    IconButton(
-        modifier = Modifier.size(56.dp).semantics {
-            contentDescription = label
-            this.selected = selected
-        },
-        onClick = onClick,
-    ) {
-        Canvas(Modifier.size(36.dp)) {
-            drawCircle(color.composeColor(), radius = 13.dp.toPx())
-            drawCircle(
-                if (selected) selectedOutline else Color.Gray,
-                radius = if (selected) 17.dp.toPx() else 15.dp.toPx(),
-                style = Stroke(width = if (selected) 3.dp.toPx() else 1.dp.toPx()),
-            )
-        }
-    }
-}
-
-@Composable
-private fun MoreToolsDialog(
-    selected: ReaderTool,
-    onTool: (ReaderTool) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.more_tools)) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                moreTools.forEach { definition ->
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth().semantics {
-                            this.selected = selected == definition.tool
-                        },
-                        onClick = { onTool(definition.tool) },
-                    ) {
-                        Icon(
-                            painter = painterResource(definition.icon),
-                            contentDescription = stringResource(definition.label),
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Text(
-                            stringResource(definition.label),
-                            modifier = Modifier.weight(1f).padding(start = 16.dp),
-                            textAlign = TextAlign.Start,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
-}
-
-private fun AnnotationColor.composeColor(): Color = when (this) {
-    AnnotationColor.BLACK -> Color(0xFF111111)
-    AnnotationColor.RED -> Color(0xFFD32F2F)
-    AnnotationColor.ORANGE -> Color(0xFFF57C00)
-    AnnotationColor.YELLOW -> Color(0xFFFBC02D)
-    AnnotationColor.GREEN -> Color(0xFF388E3C)
-    AnnotationColor.BLUE -> Color(0xFF1976D2)
-    AnnotationColor.PURPLE -> Color(0xFF7B1FA2)
-    AnnotationColor.PINK -> Color(0xFFC2185B)
-}
-
 @Composable
 private fun ReaderControl(
     label: String,
@@ -917,31 +778,46 @@ private fun ReaderControl(
     }
 }
 
-private fun ReaderDefaultTool.editorTool(): ReaderTool = when (this) {
-    ReaderDefaultTool.VIEW -> ReaderTool.SELECT
-    ReaderDefaultTool.PEN -> ReaderTool.PEN
-    ReaderDefaultTool.HIGHLIGHTER -> ReaderTool.HIGHLIGHTER
+private fun List<AnnotationColor>.withRecent(color: AnnotationColor): List<AnnotationColor> =
+    (listOf(color) + filterNot { it == color }).take(4)
+
+private fun Int.normalizedWidth(): Float = coerceIn(1, 40) / 5_000f
+
+private fun PageAnnotation.annotationColor(): AnnotationColor = when (this) {
+    is InkAnnotation -> color
+    is MarkupAnnotation -> color
+    is TextBoxAnnotation -> color
+    is ShapeAnnotation -> color
+    is SymbolAnnotation -> color
 }
 
-private fun ToolSize.previous(): ToolSize = ToolSize.entries[(ordinal - 1).coerceAtLeast(0)]
-
-private fun ToolSize.next(): ToolSize =
-    ToolSize.entries[(ordinal + 1).coerceAtMost(ToolSize.entries.lastIndex)]
-
-private fun ToolSize.label(): Int = when (this) {
-    ToolSize.THIN -> R.string.thin
-    ToolSize.MEDIUM -> R.string.medium
-    ToolSize.THICK -> R.string.thick
+private fun PageAnnotation.annotationOpacity(): Int = when (this) {
+    is InkAnnotation -> opacity
+    is MarkupAnnotation -> opacity
+    is TextBoxAnnotation -> opacity
+    is ShapeAnnotation -> opacity
+    is SymbolAnnotation -> opacity
 }
 
-private fun ToolSize.normalizedWidth(): Float = when (this) {
-    ToolSize.THIN -> 0.0025f
-    ToolSize.MEDIUM -> 0.004f
-    ToolSize.THICK -> 0.007f
+private fun PageAnnotation.withAppearance(color: AnnotationColor, opacity: Int): PageAnnotation =
+    when (this) {
+        is InkAnnotation -> copy(color = color, opacity = opacity)
+        is MarkupAnnotation -> copy(color = color, opacity = opacity)
+        is TextBoxAnnotation -> copy(color = color, opacity = opacity)
+        is ShapeAnnotation -> copy(color = color, opacity = opacity)
+        is SymbolAnnotation -> copy(color = color, opacity = opacity)
+    }
+
+private fun PageAnnotation.toolbarWidth(): Int = when (this) {
+    is InkAnnotation -> (width * 5_000f).roundToInt().coerceIn(1, 40)
+    is ShapeAnnotation -> (width * 5_000f).roundToInt().coerceIn(1, 40)
+    is SymbolAnnotation -> (size * 250f).roundToInt().coerceIn(1, 40)
+    is MarkupAnnotation, is TextBoxAnnotation -> 20
 }
 
-private fun HighlightStrength.alpha(): Int = when (this) {
-    HighlightStrength.LIGHT -> 70
-    HighlightStrength.MEDIUM -> 105
-    HighlightStrength.STRONG -> 150
+private fun PageAnnotation.withToolbarWidth(width: Int): PageAnnotation = when (this) {
+    is InkAnnotation -> copy(width = width.normalizedWidth())
+    is ShapeAnnotation -> copy(width = width.normalizedWidth())
+    is SymbolAnnotation -> copy(size = (width / 250f).coerceIn(0.01f, 0.5f))
+    is MarkupAnnotation, is TextBoxAnnotation -> this
 }

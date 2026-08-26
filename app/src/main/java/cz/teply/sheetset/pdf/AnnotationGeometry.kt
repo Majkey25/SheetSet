@@ -1,13 +1,17 @@
 package cz.teply.sheetset.pdf
 
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sin
 
 private const val MIN_ANNOTATION_SIZE = 0.01f
+private const val DUPLICATE_OFFSET = 0.01f
 
-enum class AnnotationHandle { TOP_LEFT, TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT, START, END }
+enum class AnnotationHandle { TOP_LEFT, TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT, START, END, ROTATION }
 
 fun List<PageAnnotation>.topmostHit(
     point: NormalizedPoint,
@@ -26,18 +30,19 @@ fun PageAnnotation.hitTest(point: NormalizedPoint, radius: Float): Boolean {
 
         is MarkupAnnotation -> bounds.any { it.contains(point, radius) }
         is TextBoxAnnotation -> bounds.contains(point, radius)
+        is SymbolAnnotation -> normalizedBounds().contains(point, radius)
         is ShapeAnnotation -> when (kind) {
             ShapeKind.LINE, ShapeKind.ARROW ->
                 distanceToSegment(point, start, end) <= radius + width
 
-            ShapeKind.RECTANGLE -> annotationBounds().contains(point, radius)
+            ShapeKind.RECTANGLE -> normalizedBounds().contains(point, radius)
             ShapeKind.ELLIPSE -> ellipseContains(point, radius)
         }
     }
 }
 
 fun PageAnnotation.translated(dx: Float, dy: Float): PageAnnotation {
-    val bounds = annotationBounds()
+    val bounds = normalizedBounds()
     val safeDx = dx.coerceIn(-bounds.left, 1f - bounds.right)
     val safeDy = dy.coerceIn(-bounds.top, 1f - bounds.bottom)
     if (safeDx == 0f && safeDy == 0f) return this
@@ -45,11 +50,45 @@ fun PageAnnotation.translated(dx: Float, dy: Float): PageAnnotation {
         is InkAnnotation -> copy(points = points.map { it.translated(safeDx, safeDy) })
         is MarkupAnnotation -> copy(bounds = this.bounds.map { it.translated(safeDx, safeDy) })
         is TextBoxAnnotation -> copy(bounds = this.bounds.translated(safeDx, safeDy))
+        is SymbolAnnotation -> copy(center = center.translated(safeDx, safeDy))
         is ShapeAnnotation -> copy(
             start = start.translated(safeDx, safeDy),
             end = end.translated(safeDx, safeDy),
         )
     }
+}
+
+fun List<PageAnnotation>.lassoSelection(bounds: NormalizedRect): Set<String> =
+    filter { it.normalizedBounds().intersects(bounds) }.mapTo(mutableSetOf(), PageAnnotation::id)
+
+fun List<PageAnnotation>.translateSelection(
+    ids: Set<String>,
+    dx: Float,
+    dy: Float,
+): List<PageAnnotation> {
+    val selected = filter { it.id in ids }
+    if (selected.isEmpty()) return this
+    val bounds = selected.map(PageAnnotation::normalizedBounds).unionBounds()
+    val safeDx = dx.coerceIn(-bounds.left, 1f - bounds.right)
+    val safeDy = dy.coerceIn(-bounds.top, 1f - bounds.bottom)
+    return map { annotation ->
+        if (annotation.id in ids) annotation.translated(safeDx, safeDy) else annotation
+    }
+}
+
+fun List<PageAnnotation>.duplicateSelection(
+    ids: Set<String>,
+    idFactory: () -> String,
+): List<PageAnnotation> {
+    val selected = filter { it.id in ids }
+    if (selected.isEmpty()) return this
+    val bounds = selected.map(PageAnnotation::normalizedBounds).unionBounds()
+    val offset = if (bounds.right <= 1f - DUPLICATE_OFFSET && bounds.bottom <= 1f - DUPLICATE_OFFSET) {
+        DUPLICATE_OFFSET
+    } else {
+        0f
+    }
+    return this + selected.map { it.withId(idFactory()).translated(offset, offset) }
 }
 
 fun PageAnnotation.resized(start: NormalizedPoint, end: NormalizedPoint): PageAnnotation {
@@ -58,10 +97,17 @@ fun PageAnnotation.resized(start: NormalizedPoint, end: NormalizedPoint): PageAn
     return when (this) {
         is InkAnnotation -> this
         is MarkupAnnotation -> {
-            val source = annotationBounds()
+            val source = normalizedBounds()
             copy(bounds = bounds.map { it.scaled(source, target) })
         }
         is TextBoxAnnotation -> copy(bounds = target)
+        is SymbolAnnotation -> copy(
+            center = NormalizedPoint(
+                (target.left + target.right) / 2f,
+                (target.top + target.bottom) / 2f,
+            ),
+            size = max(target.width(), target.height()).coerceAtMost(0.5f),
+        )
         is ShapeAnnotation -> when (kind) {
             ShapeKind.LINE, ShapeKind.ARROW -> {
                 val line = minimumLine(start, end)
@@ -82,13 +128,25 @@ fun PageAnnotation.resizeHandles(): Map<AnnotationHandle, NormalizedPoint> = whe
             AnnotationHandle.START to start,
             AnnotationHandle.END to end,
         )
-        ShapeKind.RECTANGLE, ShapeKind.ELLIPSE -> annotationBounds().cornerHandles()
+        ShapeKind.RECTANGLE, ShapeKind.ELLIPSE -> normalizedBounds().cornerHandles()
     }
-    is MarkupAnnotation, is TextBoxAnnotation -> annotationBounds().cornerHandles()
+    is MarkupAnnotation, is TextBoxAnnotation ->
+        normalizedBounds().cornerHandles()
+    is SymbolAnnotation -> normalizedBounds().cornerHandles() +
+        (AnnotationHandle.ROTATION to rotationHandle())
 }
 
 fun PageAnnotation.resized(handle: AnnotationHandle, point: NormalizedPoint): PageAnnotation {
     if (this is InkAnnotation) return this
+    if (this is SymbolAnnotation && handle == AnnotationHandle.ROTATION) {
+        val dx = point.x - center.x
+        val dy = point.y - center.y
+        return if (dx == 0f && dy == 0f) {
+            this
+        } else {
+            rotated(Math.toDegrees(atan2(dy, dx).toDouble()).toFloat() + 90f)
+        }
+    }
     if (this is ShapeAnnotation && kind in setOf(ShapeKind.LINE, ShapeKind.ARROW)) {
         return when (handle) {
             AnnotationHandle.START -> {
@@ -102,7 +160,7 @@ fun PageAnnotation.resized(handle: AnnotationHandle, point: NormalizedPoint): Pa
             else -> this
         }
     }
-    val bounds = annotationBounds()
+    val bounds = normalizedBounds()
     val topLeft = NormalizedPoint(bounds.left, bounds.top)
     val topRight = NormalizedPoint(bounds.right, bounds.top)
     val bottomRight = NormalizedPoint(bounds.right, bounds.bottom)
@@ -112,7 +170,7 @@ fun PageAnnotation.resized(handle: AnnotationHandle, point: NormalizedPoint): Pa
         AnnotationHandle.TOP_RIGHT -> resized(bottomLeft, point)
         AnnotationHandle.BOTTOM_RIGHT -> resized(topLeft, point)
         AnnotationHandle.BOTTOM_LEFT -> resized(topRight, point)
-        AnnotationHandle.START, AnnotationHandle.END -> this
+        AnnotationHandle.START, AnnotationHandle.END, AnnotationHandle.ROTATION -> this
     }
 }
 
@@ -128,60 +186,78 @@ fun strokePoints(
     points
 }
 
-private data class Bounds(
-    val left: Float,
-    val top: Float,
-    val right: Float,
-    val bottom: Float,
-) {
-    val width: Float get() = right - left
-    val height: Float get() = bottom - top
-
-    fun contains(point: NormalizedPoint, radius: Float): Boolean =
-        point.x in (left - radius).coerceAtLeast(0f)..(right + radius).coerceAtMost(1f) &&
-            point.y in (top - radius).coerceAtLeast(0f)..(bottom + radius).coerceAtMost(1f)
-}
-
-private fun Bounds.cornerHandles(): Map<AnnotationHandle, NormalizedPoint> = mapOf(
+private fun NormalizedRect.cornerHandles(): Map<AnnotationHandle, NormalizedPoint> = mapOf(
     AnnotationHandle.TOP_LEFT to NormalizedPoint(left, top),
     AnnotationHandle.TOP_RIGHT to NormalizedPoint(right, top),
     AnnotationHandle.BOTTOM_RIGHT to NormalizedPoint(right, bottom),
     AnnotationHandle.BOTTOM_LEFT to NormalizedPoint(left, bottom),
 )
 
-private fun PageAnnotation.annotationBounds(): Bounds = when (this) {
+private fun SymbolAnnotation.rotationHandle(): NormalizedPoint {
+    val angle = Math.toRadians((rotationDegrees - 90f).toDouble())
+    val radius = size / 2f
+    return NormalizedPoint(
+        x = (center.x + cos(angle).toFloat() * radius).coerceIn(0f, 1f),
+        y = (center.y + sin(angle).toFloat() * radius).coerceIn(0f, 1f),
+    )
+}
+
+fun PageAnnotation.normalizedBounds(): NormalizedRect = when (this) {
     is InkAnnotation -> points.bounds()
-    is MarkupAnnotation -> Bounds(
+    is MarkupAnnotation -> NormalizedRect(
         left = bounds.minOf(NormalizedRect::left),
         top = bounds.minOf(NormalizedRect::top),
         right = bounds.maxOf(NormalizedRect::right),
         bottom = bounds.maxOf(NormalizedRect::bottom),
     )
-    is TextBoxAnnotation -> bounds.toBounds()
-    is ShapeAnnotation -> Bounds(
-        left = min(start.x, end.x),
-        top = min(start.y, end.y),
-        right = max(start.x, end.x),
-        bottom = max(start.y, end.y),
+    is TextBoxAnnotation -> bounds
+    is SymbolAnnotation -> minimumRect(
+        NormalizedPoint(
+            (center.x - size / 2f).coerceIn(0f, 1f),
+            (center.y - size / 2f).coerceIn(0f, 1f),
+        ),
+        NormalizedPoint(
+            (center.x + size / 2f).coerceIn(0f, 1f),
+            (center.y + size / 2f).coerceIn(0f, 1f),
+        ),
+    )
+    is ShapeAnnotation -> minimumRect(
+        NormalizedPoint(min(start.x, end.x), min(start.y, end.y)),
+        NormalizedPoint(max(start.x, end.x), max(start.y, end.y)),
     )
 }
 
-private fun List<NormalizedPoint>.bounds(): Bounds = Bounds(
-    left = minOf(NormalizedPoint::x),
-    top = minOf(NormalizedPoint::y),
-    right = maxOf(NormalizedPoint::x),
-    bottom = maxOf(NormalizedPoint::y),
+private fun List<NormalizedPoint>.bounds(): NormalizedRect = minimumRect(
+    NormalizedPoint(minOf(NormalizedPoint::x), minOf(NormalizedPoint::y)),
+    NormalizedPoint(maxOf(NormalizedPoint::x), maxOf(NormalizedPoint::y)),
 )
 
-private fun NormalizedRect.toBounds(): Bounds = Bounds(left, top, right, bottom)
-
 private fun NormalizedRect.contains(point: NormalizedPoint, radius: Float): Boolean =
-    toBounds().contains(point, radius)
+    point.x in (left - radius).coerceAtLeast(0f)..(right + radius).coerceAtMost(1f) &&
+        point.y in (top - radius).coerceAtLeast(0f)..(bottom + radius).coerceAtMost(1f)
+
+private fun NormalizedRect.intersects(other: NormalizedRect): Boolean =
+    left <= other.right && right >= other.left && top <= other.bottom && bottom >= other.top
+
+private fun List<NormalizedRect>.unionBounds(): NormalizedRect = NormalizedRect(
+    left = minOf(NormalizedRect::left),
+    top = minOf(NormalizedRect::top),
+    right = maxOf(NormalizedRect::right),
+    bottom = maxOf(NormalizedRect::bottom),
+)
+
+private fun PageAnnotation.withId(id: String): PageAnnotation = when (this) {
+    is InkAnnotation -> copy(id = id)
+    is MarkupAnnotation -> copy(id = id)
+    is TextBoxAnnotation -> copy(id = id)
+    is SymbolAnnotation -> copy(id = id)
+    is ShapeAnnotation -> copy(id = id)
+}
 
 private fun ShapeAnnotation.ellipseContains(point: NormalizedPoint, radius: Float): Boolean {
-    val bounds = annotationBounds()
-    val radiusX = bounds.width / 2f + radius
-    val radiusY = bounds.height / 2f + radius
+    val bounds = normalizedBounds()
+    val radiusX = bounds.width() / 2f + radius
+    val radiusY = bounds.height() / 2f + radius
     if (radiusX <= 0f || radiusY <= 0f) return false
     val centerX = (bounds.left + bounds.right) / 2f
     val centerY = (bounds.top + bounds.bottom) / 2f
@@ -201,9 +277,9 @@ private fun NormalizedRect.translated(dx: Float, dy: Float): NormalizedRect = No
     bottom = (bottom + dy).coerceIn(0f, 1f),
 )
 
-private fun NormalizedRect.scaled(source: Bounds, target: NormalizedRect): NormalizedRect {
-    val scaleX = target.width() / source.width
-    val scaleY = target.height() / source.height
+private fun NormalizedRect.scaled(source: NormalizedRect, target: NormalizedRect): NormalizedRect {
+    val scaleX = target.width() / source.width()
+    val scaleY = target.height() / source.height()
     return NormalizedRect(
         left = target.left + (left - source.left) * scaleX,
         top = target.top + (top - source.top) * scaleY,

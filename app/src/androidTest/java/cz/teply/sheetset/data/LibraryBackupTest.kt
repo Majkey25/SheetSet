@@ -4,10 +4,10 @@ import android.content.Context
 import android.graphics.pdf.PdfDocument
 import androidx.test.core.app.ApplicationProvider
 import cz.teply.sheetset.pdf.AnnotationColor
+import cz.teply.sheetset.pdf.AnnotationEditorSettings
 import cz.teply.sheetset.pdf.DocumentAnnotations
-import cz.teply.sheetset.pdf.InkAnnotation
-import cz.teply.sheetset.pdf.InkKind
 import cz.teply.sheetset.pdf.NormalizedPoint
+import cz.teply.sheetset.pdf.SymbolAnnotation
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.PageFit
 import cz.teply.sheetset.settings.ReaderLayout
@@ -16,6 +16,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.json.JSONObject
@@ -57,21 +58,28 @@ class LibraryBackupTest {
             val annotations = DocumentAnnotations(
                 mapOf(
                     0 to listOf(
-                        InkAnnotation(
-                            id = "ink",
-                            kind = InkKind.PEN,
-                            width = 0.004f,
-                            points = listOf(NormalizedPoint(0.2f, 0.3f)),
+                        SymbolAnnotation(
+                            id = "symbol",
+                            symbolId = "sharp",
+                            center = NormalizedPoint(0.2f, 0.3f),
+                            size = 0.08f,
+                            rotationDegrees = 15f,
                             color = AnnotationColor.RED,
+                            opacity = 180,
                         ),
                     ),
                 ),
             )
             source.saveAnnotations(score.id, annotations)
+            val expectedEditor = AnnotationEditorSettings.defaults().copy(
+                palmRejection = true,
+                quickColors = listOf(AnnotationColor.RED, AnnotationColor.BLUE),
+            )
             val settings = AppSettings(
                 pageFit = PageFit.WIDTH,
                 pageTurnTaps = false,
                 readerLayout = ReaderLayout.HALF,
+                editor = expectedEditor,
             )
             val archive = ByteArrayOutputStream()
             source.createBackup(archive, settings, "cs")
@@ -83,6 +91,8 @@ class LibraryBackupTest {
 
             assertEquals(source.load(), restored.load())
             assertEquals(annotations, restored.loadAnnotations(score.id))
+            assertEquals(expectedEditor, metadata.settings.editor)
+            assertTrue(restored.loadAnnotations(score.id).pages.getValue(0).single() is SymbolAnnotation)
             assertEquals(settings, metadata.settings)
             assertEquals("cs", metadata.languageTag)
             assertEquals(score.pageCount, restored.load().scores.single().pageCount)
@@ -133,7 +143,9 @@ class LibraryBackupTest {
                 ByteArrayInputStream(asVersionOne(archive.toByteArray())),
             )
 
-            assertEquals(ReaderLayout.SINGLE, requireNotNull(restored).settings.readerLayout)
+            val settings = requireNotNull(restored).settings
+            assertEquals(ReaderLayout.SINGLE, settings.readerLayout)
+            assertEquals(AnnotationEditorSettings.defaults(), settings.editor)
             pdf.delete()
         }
     }
@@ -149,6 +161,8 @@ class LibraryBackupTest {
                         manifest.put("version", 1)
                         manifest.getJSONObject("settings")
                             .remove("readerLayout")
+                        manifest.getJSONObject("settings")
+                            .remove("editor")
                         zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
                     } else {
                         input.copyTo(zip)

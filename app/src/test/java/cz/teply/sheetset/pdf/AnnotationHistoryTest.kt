@@ -1,6 +1,7 @@
 package cz.teply.sheetset.pdf
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import cz.teply.sheetset.settings.AnnotationTextSize
@@ -61,5 +62,20 @@ class AnnotationHistoryTest {
             (deleted.undo().annotations.single() as TextBoxAnnotation).text,
         )
         assertTrue(deleted.redo().annotations.isEmpty())
+    }
+
+    @Test
+    fun commitCreatesOneUndoStepForBatchChanges() {
+        val history = AnnotationHistory().add(first).commit(listOf(first, second))
+
+        assertEquals(listOf(first), history.undo().annotations)
+        assertEquals(listOf(first, second), history.undo().redo().annotations)
+    }
+
+    @Test
+    fun exactPageLimitRejectsAddAndOversizedDuplicateBeforeHistoryConstruction() {
+        assertFalse(canAppendAnnotations(MAX_ANNOTATIONS_PER_PAGE, 1))
+        assertTrue(canAppendAnnotations(MAX_ANNOTATIONS_PER_PAGE - 2, 2))
+        assertFalse(canAppendAnnotations(MAX_ANNOTATIONS_PER_PAGE - 2, 3))
     }
 }

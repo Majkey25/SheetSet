@@ -1,0 +1,799 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
+package cz.teply.sheetset.ui
+
+import android.graphics.Color as AndroidColor
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import cz.teply.sheetset.R
+import cz.teply.sheetset.pdf.AnnotationColor
+import cz.teply.sheetset.pdf.AnnotationEditorSettings
+import cz.teply.sheetset.pdf.AnnotationRenderer
+import cz.teply.sheetset.pdf.AnnotationTextAlignment
+import cz.teply.sheetset.pdf.AnnotationToolGroup
+import cz.teply.sheetset.pdf.DrawingPreset
+import cz.teply.sheetset.pdf.DrawingPresetKind
+import cz.teply.sheetset.pdf.InkAnnotation
+import cz.teply.sheetset.pdf.MAX_TEXT_LENGTH
+import cz.teply.sheetset.pdf.NormalizedRect
+import cz.teply.sheetset.pdf.PageAnnotation
+import cz.teply.sheetset.pdf.ReaderTool
+import cz.teply.sheetset.pdf.ShapeAnnotation
+import cz.teply.sheetset.pdf.SUPPORTED_SYMBOL_IDS
+import cz.teply.sheetset.pdf.SymbolAnnotation
+import cz.teply.sheetset.pdf.TextBoxAnnotation
+import cz.teply.sheetset.settings.AnnotationTextSize
+import java.util.UUID
+import kotlin.math.roundToInt
+
+internal const val COLOR_PANEL_SCROLL_TAG = "color-panel-scroll"
+
+internal data class AnnotationToolbarState(
+    val group: AnnotationToolGroup,
+    val tool: ReaderTool,
+    val preset: DrawingPreset,
+    val editor: AnnotationEditorSettings,
+    val selectedIds: Set<String>,
+    val selectedAnnotation: PageAnnotation?,
+    val canUndo: Boolean,
+    val canRedo: Boolean,
+    val previousEnabled: Boolean,
+    val nextEnabled: Boolean,
+    val expanded: Boolean,
+    val straightLine: Boolean,
+    val width: Int,
+    val color: AnnotationColor,
+)
+
+@Composable
+internal fun AnnotationToolbar(
+    state: AnnotationToolbarState,
+    onGroup: (AnnotationToolGroup) -> Unit,
+    onTool: (ReaderTool) -> Unit,
+    onPreset: (String) -> Unit,
+    onWidth: (Int) -> Unit,
+    onColor: () -> Unit,
+    onEyedropper: () -> Unit,
+    onStraightLine: () -> Unit,
+    onEditText: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onDone: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    val hasSelection = state.selectedIds.isNotEmpty()
+    Surface(color = Color.Black.copy(alpha = 0.94f), contentColor = Color.White) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+            Row(
+                Modifier.fillMaxWidth().height(56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ToolbarControl(
+                    stringResource(R.string.previous),
+                    R.drawable.ic_chevron_left_24,
+                    enabled = state.previousEnabled,
+                    onClick = onPrevious,
+                )
+                Row(
+                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showsWidth(state)) {
+                        ToolbarControl(
+                            stringResource(R.string.decrease_stroke_width),
+                            R.drawable.ic_remove_24,
+                            enabled = state.width > 1,
+                        ) { onWidth(state.width - 1) }
+                        WidthControl(state.width)
+                        ToolbarControl(
+                            stringResource(R.string.increase_stroke_width),
+                            R.drawable.ic_add_24,
+                            enabled = state.width < 40,
+                        ) { onWidth(state.width + 1) }
+                    }
+                    if (!hasSelection && state.tool in setOf(ReaderTool.PEN, ReaderTool.HIGHLIGHTER)) {
+                        ToolbarControl(
+                            stringResource(R.string.straight_line),
+                            R.drawable.ic_straighten_24,
+                            selected = state.straightLine,
+                            onClick = onStraightLine,
+                        )
+                    }
+                    CurrentColorControl(state.color, onColor)
+                    ToolbarControl(
+                        stringResource(R.string.eyedropper),
+                        R.drawable.ic_colorize_24,
+                        onClick = onEyedropper,
+                    )
+                    if (hasSelection) {
+                        if (state.selectedAnnotation is TextBoxAnnotation) {
+                            ToolbarControl(
+                                stringResource(R.string.edit_text),
+                                R.drawable.ic_text_fields_24,
+                                onClick = onEditText,
+                            )
+                        }
+                        ToolbarControl(
+                            stringResource(R.string.duplicate),
+                            R.drawable.ic_content_copy_24,
+                            onClick = onDuplicate,
+                        )
+                        ToolbarControl(
+                            stringResource(R.string.delete_annotation),
+                            R.drawable.ic_delete_24,
+                            onClick = onDelete,
+                        )
+                    }
+                }
+                ToolbarControl(
+                    stringResource(R.string.next),
+                    R.drawable.ic_chevron_right_24,
+                    enabled = state.nextEnabled,
+                    onClick = onNext,
+                )
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = 0.14f))
+            Row(
+                Modifier.fillMaxWidth().height(56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painterResource(R.drawable.ic_drag_handle_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.Gray,
+                    )
+                    ToolbarControl(
+                        stringResource(R.string.draw),
+                        R.drawable.ic_edit_24,
+                        selected = state.group == AnnotationToolGroup.DRAW,
+                    ) { onGroup(AnnotationToolGroup.DRAW) }
+                    ToolbarControl(
+                        stringResource(R.string.objects),
+                        R.drawable.ic_view_module_24,
+                        selected = state.group == AnnotationToolGroup.OBJECTS,
+                    ) { onGroup(AnnotationToolGroup.OBJECTS) }
+                    if (state.group == AnnotationToolGroup.DRAW) {
+                        state.editor.drawOrder.mapNotNull { id ->
+                            state.editor.presets.firstOrNull { it.id == id && it.visible }
+                        }.forEach { preset ->
+                            PresetControl(
+                                preset = preset,
+                                selected = state.tool != ReaderTool.ERASER && preset.id == state.preset.id,
+                                onClick = { onPreset(preset.id) },
+                            )
+                        }
+                        ToolbarControl(
+                            stringResource(R.string.eraser),
+                            R.drawable.ic_eraser_24,
+                            selected = state.tool == ReaderTool.ERASER,
+                        ) { onTool(ReaderTool.ERASER) }
+                    } else {
+                        orderedObjectTools(state.editor).forEach { definition ->
+                            ToolbarControl(
+                                stringResource(definition.label),
+                                definition.icon,
+                                selected = state.tool == definition.tool,
+                            ) { onTool(definition.tool) }
+                        }
+                    }
+                    if (!state.expanded) {
+                        ToolbarControl(
+                            stringResource(R.string.undo),
+                            R.drawable.ic_undo_24,
+                            enabled = state.canUndo,
+                            onClick = onUndo,
+                        )
+                        ToolbarControl(
+                            stringResource(R.string.redo),
+                            R.drawable.ic_redo_24,
+                            enabled = state.canRedo,
+                            onClick = onRedo,
+                        )
+                    }
+                }
+                if (state.expanded) {
+                    ToolbarControl(
+                        stringResource(R.string.undo),
+                        R.drawable.ic_undo_24,
+                        enabled = state.canUndo,
+                        onClick = onUndo,
+                    )
+                    ToolbarControl(
+                        stringResource(R.string.redo),
+                        R.drawable.ic_redo_24,
+                        enabled = state.canRedo,
+                        onClick = onRedo,
+                    )
+                }
+                ToolbarControl(
+                    stringResource(R.string.done),
+                    R.drawable.ic_done_24,
+                    onClick = onDone,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ColorPanel(
+    selected: AnnotationColor,
+    opacity: Int,
+    quickColors: List<AnnotationColor>,
+    recentColors: List<AnnotationColor>,
+    onDismiss: () -> Unit,
+    onEyedropper: (() -> Unit)?,
+    onConfirm: (AnnotationColor, Int) -> Unit,
+) {
+    val initialHsv = remember(selected) { selected.toHsv() }
+    var hue by remember(selected) { mutableFloatStateOf(initialHsv[0]) }
+    var saturation by remember(selected) { mutableFloatStateOf(initialHsv[1]) }
+    var value by remember(selected) { mutableFloatStateOf(initialHsv[2]) }
+    var alpha by remember(opacity) { mutableIntStateOf(opacity) }
+    val preview = AnnotationColor(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val maxContentHeight = LocalConfiguration.current.screenHeightDp.dp * 0.8f
+
+    fun choose(color: AnnotationColor) {
+        val hsv = color.toHsv()
+        hue = hsv[0]
+        saturation = hsv[1]
+        value = hsv[2]
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            Modifier.fillMaxWidth().heightIn(max = maxContentHeight)
+                .testTag(COLOR_PANEL_SCROLL_TAG).verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+        ) {
+            Text(stringResource(R.string.color), style = MaterialTheme.typography.headlineSmall)
+            Text(
+                stringResource(R.string.quick_colors),
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            SwatchRows(quickColors.take(8), preview, includeEncoded = false, onColor = ::choose)
+            if (recentColors.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.recent_colors),
+                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                SwatchRows(
+                    recentColors.take(4),
+                    preview,
+                    includeEncoded = true,
+                    onColor = ::choose,
+                )
+            }
+            Text(
+                stringResource(R.string.custom_color),
+                modifier = Modifier.padding(top = 12.dp),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            ColorSlider(R.string.hue, hue, 0f..360f) { hue = it }
+            ColorSlider(R.string.saturation, saturation, 0f..1f) { saturation = it }
+            ColorSlider(R.string.brightness, value, 0f..1f) { value = it }
+            LabeledSlider(
+                label = stringResource(R.string.opacity),
+                state = "${(alpha * 100f / 255f).roundToInt()}%",
+                value = alpha.toFloat(),
+                range = 0f..255f,
+                onValue = { alpha = it.roundToInt() },
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ColorPreview(preview, alpha)
+                Text(
+                    preview.encoded(),
+                    modifier = Modifier.padding(start = 12.dp).weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (onEyedropper != null) {
+                    TextButton(onClick = onEyedropper) {
+                        Icon(painterResource(R.drawable.ic_colorize_24), contentDescription = null)
+                        Text(stringResource(R.string.eyedropper), Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { onConfirm(preview, alpha) }) {
+                    Text(stringResource(R.string.apply))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+internal fun TextAnnotationDialog(
+    initial: TextBoxAnnotation?,
+    bounds: NormalizedRect,
+    defaultSize: AnnotationTextSize,
+    defaultColor: AnnotationColor,
+    defaultOpacity: Int,
+    quickColors: List<AnnotationColor>,
+    recentColors: List<AnnotationColor>,
+    onDismiss: () -> Unit,
+    onConfirm: (TextBoxAnnotation) -> Unit,
+) {
+    var text by remember(initial) { mutableStateOf(initial?.text.orEmpty()) }
+    var size by remember(initial) { mutableStateOf(initial?.size ?: defaultSize) }
+    var lineHeight by remember(initial) { mutableFloatStateOf(initial?.lineHeight ?: 1.2f) }
+    var alignment by remember(initial) {
+        mutableStateOf(initial?.alignment ?: AnnotationTextAlignment.START)
+    }
+    var color by remember(initial) { mutableStateOf(initial?.color ?: defaultColor) }
+    var opacity by remember(initial) { mutableIntStateOf(initial?.opacity ?: defaultOpacity) }
+    var colorOpen by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(if (initial == null) R.string.text_box else R.string.edit_text)) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(MAX_TEXT_LENGTH) },
+                    label = { Text(stringResource(R.string.text_box)) },
+                    supportingText = { Text("${text.length} / $MAX_TEXT_LENGTH") },
+                    minLines = 3,
+                    maxLines = 8,
+                )
+                Text(stringResource(R.string.text_size), Modifier.padding(top = 12.dp))
+                ChoiceButtons(
+                    values = AnnotationTextSize.entries,
+                    selected = size,
+                    label = { stringResource(it.label()) },
+                    onSelect = { size = it },
+                )
+                LabeledSlider(
+                    label = stringResource(R.string.line_height),
+                    state = String.format(java.util.Locale.ROOT, "%.1f", lineHeight),
+                    value = lineHeight,
+                    range = 0.8f..2f,
+                    onValue = { lineHeight = it },
+                )
+                Text(stringResource(R.string.alignment), Modifier.padding(top = 8.dp))
+                ChoiceButtons(
+                    values = AnnotationTextAlignment.entries,
+                    selected = alignment,
+                    label = { stringResource(it.label()) },
+                    onSelect = { alignment = it },
+                )
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CurrentColorControl(color) { colorOpen = true }
+                    Text(annotationColorLabel(color), Modifier.padding(start = 4.dp))
+                }
+                LabeledSlider(
+                    label = stringResource(R.string.opacity),
+                    state = "${(opacity * 100f / 255f).roundToInt()}%",
+                    value = opacity.toFloat(),
+                    range = 0f..255f,
+                    onValue = { opacity = it.roundToInt() },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = text.isNotBlank(),
+                onClick = {
+                    onConfirm(
+                        TextBoxAnnotation(
+                            id = initial?.id ?: UUID.randomUUID().toString(),
+                            bounds = initial?.bounds ?: bounds,
+                            text = text.trim(),
+                            size = size,
+                            lineHeight = lineHeight,
+                            alignment = alignment,
+                            color = color,
+                            opacity = opacity,
+                        ),
+                    )
+                },
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+    if (colorOpen) {
+        ColorPanel(
+            selected = color,
+            opacity = opacity,
+            quickColors = quickColors,
+            recentColors = recentColors,
+            onDismiss = { colorOpen = false },
+            onEyedropper = null,
+            onConfirm = { nextColor, nextOpacity ->
+                color = nextColor
+                opacity = nextOpacity
+                colorOpen = false
+            },
+        )
+    }
+}
+
+@Composable
+internal fun MusicalSymbolChooser(
+    selected: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val symbolFont = FontFamily(Font(R.font.noto_music_regular))
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.musical_symbol)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                SUPPORTED_SYMBOL_IDS.sorted().chunked(2).forEach { row ->
+                    Row(Modifier.fillMaxWidth()) {
+                        row.forEach { id ->
+                            val label = stringResource(symbolLabel(id))
+                            TextButton(
+                                modifier = Modifier.weight(1f).heightIn(min = 56.dp).semantics {
+                                    contentDescription = label
+                                    this.selected = id == selected
+                                },
+                                onClick = { onSelected(id) },
+                            ) {
+                                Text(
+                                    AnnotationRenderer.symbolGlyph(id),
+                                    fontFamily = symbolFont,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                )
+                                Text(label, Modifier.padding(start = 8.dp))
+                            }
+                        }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selected) }) { Text(stringResource(R.string.apply)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun PresetControl(preset: DrawingPreset, selected: Boolean, onClick: () -> Unit) {
+    val label = stringResource(preset.label())
+    ToolbarControl(
+        label = label,
+        icon = if (preset.kind == DrawingPresetKind.HIGHLIGHTER) {
+            R.drawable.ic_highlighter_24
+        } else {
+            R.drawable.ic_edit_24
+        },
+        selected = selected,
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun ToolbarControl(
+    label: String,
+    @DrawableRes icon: Int,
+    selected: Boolean? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        modifier = Modifier.size(48.dp).background(
+            if (selected == true) Color.White else Color.Transparent,
+            RoundedCornerShape(10.dp),
+        ).semantics {
+            contentDescription = label
+            selected?.let { this.selected = it }
+        },
+        enabled = enabled,
+        onClick = onClick,
+    ) {
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = when {
+                !enabled -> Color.Gray
+                selected == true -> Color.Black
+                else -> Color.White
+            },
+        )
+    }
+}
+
+@Composable
+private fun WidthControl(width: Int) {
+    val label = stringResource(R.string.stroke_width)
+    Box(
+        Modifier.size(48.dp).semantics {
+            contentDescription = label
+            stateDescription = width.toString()
+        },
+        contentAlignment = Alignment.Center,
+    ) { Text(width.toString()) }
+}
+
+@Composable
+private fun CurrentColorControl(color: AnnotationColor, onClick: () -> Unit) {
+    val label = stringResource(R.string.color)
+    val colorName = annotationColorDescription(color, includeEncoded = true)
+    IconButton(
+        modifier = Modifier.size(48.dp).semantics {
+            contentDescription = label
+            stateDescription = colorName
+        },
+        onClick = onClick,
+    ) {
+        Canvas(Modifier.size(32.dp)) {
+            drawCircle(Color(color.argb), radius = 11.dp.toPx())
+            drawCircle(Color.White, radius = 14.dp.toPx(), style = Stroke(2.dp.toPx()))
+        }
+    }
+}
+
+@Composable
+private fun ColorSwatch(
+    color: AnnotationColor,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val outline = MaterialTheme.colorScheme.onSurface
+    IconButton(
+        modifier = Modifier.size(48.dp).semantics {
+            contentDescription = label
+            this.selected = selected
+        },
+        onClick = onClick,
+    ) {
+        Canvas(Modifier.size(32.dp)) {
+            drawCircle(Color(color.argb), radius = 11.dp.toPx())
+            drawCircle(
+                if (selected) outline else Color.Gray,
+                radius = if (selected) 15.dp.toPx() else 13.dp.toPx(),
+                style = Stroke(if (selected) 3.dp.toPx() else 1.dp.toPx()),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SwatchRows(
+    colors: List<AnnotationColor>,
+    selected: AnnotationColor,
+    includeEncoded: Boolean,
+    onColor: (AnnotationColor) -> Unit,
+) {
+    colors.chunked(4).forEach { row ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            row.forEach { color ->
+                ColorSwatch(
+                    color = color,
+                    label = annotationColorDescription(color, includeEncoded),
+                    selected = color == selected,
+                    onClick = { onColor(color) },
+                )
+            }
+            repeat(4 - row.size) { Spacer(Modifier.size(48.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun ColorSlider(
+    @StringRes label: Int,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onValue: (Float) -> Unit,
+) {
+    LabeledSlider(
+        label = stringResource(label),
+        state = if (range.endInclusive == 360f) value.roundToInt().toString() else {
+            "${(value * 100f).roundToInt()}%"
+        },
+        value = value,
+        range = range,
+        onValue = onValue,
+    )
+}
+
+@Composable
+private fun LabeledSlider(
+    label: String,
+    state: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onValue: (Float) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium)
+        Slider(
+            value = value,
+            onValueChange = onValue,
+            valueRange = range,
+            modifier = Modifier.weight(1f).semantics {
+                contentDescription = label
+                stateDescription = state
+            },
+        )
+        Text(state, Modifier.width(48.dp), textAlign = TextAlign.End)
+    }
+}
+
+@Composable
+private fun ColorPreview(color: AnnotationColor, opacity: Int) {
+    val description = stringResource(R.string.current_color_preview)
+    Canvas(Modifier.size(48.dp).semantics { contentDescription = description }) {
+        drawCircle(Color(color.argb).copy(alpha = opacity / 255f), radius = 18.dp.toPx())
+        drawCircle(Color.Gray, radius = 20.dp.toPx(), style = Stroke(1.dp.toPx()))
+    }
+}
+
+@Composable
+private fun <T> ChoiceButtons(
+    values: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        values.forEach { value ->
+            val text = label(value)
+            TextButton(
+                modifier = Modifier.weight(1f).semantics { this.selected = value == selected },
+                onClick = { onSelect(value) },
+            ) { Text(text, maxLines = 1) }
+        }
+    }
+}
+
+private fun orderedObjectTools(editor: AnnotationEditorSettings): List<ObjectToolMetadata> =
+    editor.objectOrder.mapNotNull { id ->
+        objectToolMetadata(id)?.takeIf { id in editor.visibleObjectTools }
+    }
+
+private fun showsWidth(state: AnnotationToolbarState): Boolean = when {
+    state.selectedIds.isNotEmpty() ->
+        state.selectedAnnotation is InkAnnotation ||
+            state.selectedAnnotation is ShapeAnnotation ||
+            state.selectedAnnotation is SymbolAnnotation
+    else -> state.tool in setOf(
+        ReaderTool.PEN,
+        ReaderTool.HIGHLIGHTER,
+        ReaderTool.LINE,
+        ReaderTool.ARROW,
+        ReaderTool.RECTANGLE,
+        ReaderTool.ELLIPSE,
+    )
+}
+
+@Composable
+private fun annotationColorDescription(color: AnnotationColor, includeEncoded: Boolean): String {
+    val label = annotationColorLabel(color)
+    return if (includeEncoded) "$label ${color.encoded()}" else label
+}
+
+private fun AnnotationColor.toHsv(): FloatArray = FloatArray(3).also {
+    AndroidColor.colorToHSV(argb, it)
+}
+
+@StringRes
+private fun DrawingPreset.label(): Int = when (id) {
+    "pen-1" -> R.string.pen_1
+    "pen-2" -> R.string.pen_2
+    "marker" -> R.string.marker
+    "highlighter" -> R.string.highlighter
+    else -> R.string.pen
+}
+
+@StringRes
+private fun AnnotationTextSize.label(): Int = when (this) {
+    AnnotationTextSize.SMALL -> R.string.small
+    AnnotationTextSize.MEDIUM -> R.string.medium
+    AnnotationTextSize.LARGE -> R.string.large
+}
+
+@StringRes
+private fun AnnotationTextAlignment.label(): Int = when (this) {
+    AnnotationTextAlignment.START -> R.string.alignment_start
+    AnnotationTextAlignment.CENTER -> R.string.alignment_center
+    AnnotationTextAlignment.END -> R.string.alignment_end
+}
+
+@StringRes
+private fun symbolLabel(id: String): Int = when (id) {
+    "sharp" -> R.string.symbol_sharp
+    "flat" -> R.string.symbol_flat
+    "natural" -> R.string.symbol_natural
+    "fermata" -> R.string.symbol_fermata
+    "accent" -> R.string.symbol_accent
+    "breath" -> R.string.symbol_breath
+    "crescendo" -> R.string.symbol_crescendo
+    "decrescendo" -> R.string.symbol_decrescendo
+    "p" -> R.string.symbol_p
+    "mf" -> R.string.symbol_mf
+    "f" -> R.string.symbol_f
+    "ff" -> R.string.symbol_ff
+    else -> error("Unsupported symbol ID")
+}

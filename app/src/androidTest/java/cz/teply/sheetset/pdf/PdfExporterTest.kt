@@ -6,7 +6,9 @@ import android.graphics.Color
 import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import androidx.core.content.res.ResourcesCompat
 import androidx.test.core.app.ApplicationProvider
+import cz.teply.sheetset.R
 import cz.teply.sheetset.settings.AnnotationTextSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -33,12 +35,15 @@ class PdfExporterTest {
                             NormalizedPoint(0.05f, 0.08f),
                             NormalizedPoint(0.35f, 0.18f),
                         ),
+                        color = AnnotationColor.RED,
+                        opacity = 128,
                     ),
                     MarkupAnnotation(
                         id = "highlight",
                         kind = MarkupKind.HIGHLIGHT,
                         bounds = listOf(NormalizedRect(0.05f, 0.25f, 0.4f, 0.34f)),
-                        color = AnnotationColor.YELLOW,
+                        color = AnnotationColor.BLUE,
+                        opacity = 64,
                     ),
                     MarkupAnnotation(
                         id = "underline",
@@ -86,21 +91,56 @@ class PdfExporterTest {
                         end = NormalizedPoint(0.9f, 0.76f),
                         width = 0.008f,
                     ),
+                    SymbolAnnotation(
+                        id = "symbol",
+                        symbolId = "sharp",
+                        center = NormalizedPoint(0.75f, 0.88f),
+                        size = 0.15f,
+                        rotationDegrees = 0f,
+                        color = AnnotationColor.BLACK,
+                        opacity = 255,
+                    ),
                 ),
             ),
         )
 
         destination.outputStream().use { output ->
-            PdfExporter.export(source, output, annotations)
+            PdfExporter.export(
+                source,
+                output,
+                annotations,
+                requireNotNull(ResourcesCompat.getFont(context, R.font.noto_music_regular)),
+            )
         }
 
         assertEquals(beforeHash, source.sha256())
         assertEquals(2, pageCount(destination))
         assertTrue(darkPixels(destination) > darkPixels(source) + 500)
-        assertTrue(darkPixelsIn(destination, 0, 0, 140, 90) > 50)
-        assertTrue(yellowPixelsIn(destination, 0, 85, 140, 145) > 50)
+        assertTrue(
+            pixelsNearColorIn(
+                destination,
+                0,
+                0,
+                140,
+                90,
+                Color.rgb(233, 151, 151),
+                tolerance = 16,
+            ) > 50,
+        )
+        assertTrue(
+            pixelsNearColorIn(
+                destination,
+                0,
+                85,
+                140,
+                145,
+                Color.rgb(197, 221, 244),
+                tolerance = 16,
+            ) > 50,
+        )
         assertTrue(darkPixelsIn(destination, 0, 200, 150, 300) > 50)
         assertTrue(darkPixelsIn(destination, 150, 0, 300, 320) > 200)
+        assertTrue(darkPixelsIn(destination, 180, 320, 270, 400) > 20)
         source.delete()
         destination.delete()
     }
@@ -154,15 +194,18 @@ class PdfExporterTest {
         Color.red(color) < 128 && Color.green(color) < 128 && Color.blue(color) < 128
     }
 
-    private fun yellowPixelsIn(
+    private fun pixelsNearColorIn(
         file: File,
         left: Int,
         top: Int,
         right: Int,
         bottom: Int,
+        expected: Int,
+        tolerance: Int,
     ): Int = pixelsIn(file, left, top, right, bottom) { color ->
-        Color.red(color) > Color.blue(color) + 20 &&
-            Color.green(color) > Color.blue(color) + 10
+        Color.red(color) in Color.red(expected) - tolerance..Color.red(expected) + tolerance &&
+            Color.green(color) in Color.green(expected) - tolerance..Color.green(expected) + tolerance &&
+            Color.blue(color) in Color.blue(expected) - tolerance..Color.blue(expected) + tolerance
     }
 
     private fun pixelsIn(

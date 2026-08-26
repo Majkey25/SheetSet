@@ -5,18 +5,19 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
+import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cz.teply.sheetset.data.LibraryRepository
 import cz.teply.sheetset.data.Bookmark
 import cz.teply.sheetset.data.PdfImport
 import cz.teply.sheetset.data.Score
+import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.pdf.PdfExporter
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.AppLanguages
 import cz.teply.sheetset.settings.SettingsStore
-import cz.teply.sheetset.settings.HighlightStrength
 import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.ui.ReaderPosition
 import cz.teply.sheetset.ui.nextPosition
@@ -40,7 +41,15 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
     private val settingsStore = SettingsStore(
         application.getSharedPreferences("sheetset-settings", Context.MODE_PRIVATE),
     )
+    private val symbolTypeface = requireNotNull(
+        ResourcesCompat.getFont(application, R.font.noto_music_regular),
+    )
     private val annotationSaveMutex = Mutex()
+    private val annotationSaves = AnnotationSaveCoordinator(
+        scope = viewModelScope,
+        persistenceMutex = annotationSaveMutex,
+        persist = repository::saveAnnotations,
+    )
     private val readerPositionMutex = Mutex()
     private val mutableState = MutableStateFlow(
         LibraryUiState(loading = true, settings = settingsStore.load()),
@@ -61,7 +70,10 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         repository.renameScore(scoreId, title)
     }
 
-    fun deleteScore(scoreId: String) = launchAction { repository.deleteScore(scoreId) }
+    fun deleteScore(scoreId: String) = launchAction {
+        annotationSaves.discard(scoreId)
+        repository.deleteScore(scoreId)
+    }
 
     fun updateScoreLabels(scoreId: String, labels: List<String>) = launchAction {
         repository.updateScoreLabels(scoreId, labels)
@@ -210,18 +222,27 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
-    fun saveAnnotations(pageAnnotations: List<PageAnnotation>) {
-        val reader = state.value.reader ?: return
-        val annotations = reader.annotations.withPage(reader.pageIndex, pageAnnotations)
-        mutableState.update { it.copy(reader = reader.copy(annotations = annotations)) }
-        viewModelScope.launch {
-            annotationSaveMutex.withLock {
-                try {
-                    repository.saveAnnotations(reader.score.id, annotations)
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    mutableState.update { it.copy(error = true) }
+    fun saveAnnotations(
+        scoreId: String,
+        pageIndex: Int,
+        annotations: DocumentAnnotations,
+    ) {
+        val pageAnnotations = annotations.pages[pageIndex].orEmpty()
+        mutableState.update { current ->
+            current.mergePageAnnotations(scoreId, pageIndex, pageAnnotations)
+        }
+        val result = annotationSaves.enqueue(
+            scoreId,
+            pageIndex,
+            pageAnnotations,
+            annotations,
+        )
+        result.invokeOnCompletion { error ->
+            if (error != null && error !is CancellationException) {
+                viewModelScope.launch {
+                    if (annotationSaves.isLatest(scoreId, result)) {
+                        mutableState.update { it.copy(error = true) }
+                    }
                 }
             }
         }
@@ -239,7 +260,7 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                             reader.file,
                             output,
                             reader.annotations,
-                            state.value.settings.highlighterStrength.alpha(),
+                            symbolTypeface,
                         )
                     } ?: throw FileNotFoundException(uri.toString())
                 }
@@ -257,10 +278,14 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             mutableState.update { it.copy(loading = true, error = false) }
             try {
                 val application = getApplication<Application>()
+                annotationSaves.awaitLatest()
                 val languageTag = currentLanguageTag()
-                application.contentResolver.openOutputStream(uri, "w")?.use { output ->
-                    repository.createBackup(output, state.value.settings, languageTag)
-                } ?: throw FileNotFoundException(uri.toString())
+                val settings = state.value.settings
+                withContext(Dispatchers.IO) {
+                    application.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                        repository.createBackup(output, settings, languageTag)
+                    } ?: throw FileNotFoundException(uri.toString())
+                }
                 mutableState.update { it.copy(loading = false) }
             } catch (error: CancellationException) {
                 throw error
@@ -274,37 +299,19 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             mutableState.update { it.copy(loading = true, error = false) }
             val application = getApplication<Application>()
-            val directory = File(application.cacheDir, "shared-backups")
-            val temporary = File(directory, ".SheetSet-Backup.tmp")
             try {
-                if (!directory.exists() && !directory.mkdirs()) {
-                    throw IllegalStateException("Could not create share directory")
-                }
-                temporary.delete()
+                annotationSaves.awaitLatest()
                 val languageTag = currentLanguageTag()
-                FileOutputStream(temporary).use { output ->
-                    repository.createBackup(output, state.value.settings, languageTag)
+                val settings = state.value.settings
+                val uri = withContext(Dispatchers.IO) {
+                    createSharedBackupFile(application, settings, languageTag)
                 }
-                val destination = File(directory, "SheetSet-Backup.zip")
-                if (destination.exists() && !destination.delete()) {
-                    throw IllegalStateException("Could not replace shared backup")
-                }
-                if (!temporary.renameTo(destination)) {
-                    throw IllegalStateException("Could not prepare shared backup")
-                }
-                val uri = FileProvider.getUriForFile(
-                    application,
-                    "${application.packageName}.files",
-                    destination,
-                )
                 mutableState.update { it.copy(loading = false) }
                 onReady(uri)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
                 mutableState.update { it.copy(loading = false, error = true) }
-            } finally {
-                temporary.delete()
             }
         }
     }
@@ -314,9 +321,13 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             mutableState.update { it.copy(loading = true, error = false, reader = null) }
             try {
                 val application = getApplication<Application>()
-                val input = application.contentResolver.openInputStream(uri)
-                    ?: throw FileNotFoundException(uri.toString())
-                val metadata = input.use { backup -> repository.restoreBackup(backup) }
+                annotationSaves.awaitLatest()
+                val metadata = withContext(Dispatchers.IO) {
+                    val input = application.contentResolver.openInputStream(uri)
+                        ?: throw FileNotFoundException(uri.toString())
+                    input.use { backup -> repository.restoreBackup(backup) }
+                }
+                annotationSaves.discardAll()
                 mutableState.update {
                     it.copy(
                         catalog = repository.load(),
@@ -409,6 +420,38 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private suspend fun createSharedBackupFile(
+        application: Application,
+        settings: AppSettings,
+        languageTag: String?,
+    ): Uri {
+        val directory = File(application.cacheDir, "shared-backups")
+        val temporary = File(directory, ".SheetSet-Backup.tmp")
+        try {
+            if (!directory.exists() && !directory.mkdirs()) {
+                throw IllegalStateException("Could not create share directory")
+            }
+            temporary.delete()
+            FileOutputStream(temporary).use { output ->
+                repository.createBackup(output, settings, languageTag)
+            }
+            val destination = File(directory, "SheetSet-Backup.zip")
+            if (destination.exists() && !destination.delete()) {
+                throw IllegalStateException("Could not replace shared backup")
+            }
+            if (!temporary.renameTo(destination)) {
+                throw IllegalStateException("Could not prepare shared backup")
+            }
+            return FileProvider.getUriForFile(
+                application,
+                "${application.packageName}.files",
+                destination,
+            )
+        } finally {
+            temporary.delete()
+        }
+    }
+
     private suspend fun pdfImport(uri: Uri): PdfImport = withContext(Dispatchers.IO) {
         val resolver = getApplication<Application>().contentResolver
         val fallbackName = getApplication<Application>().getString(R.string.untitled_pdf_file)
@@ -437,9 +480,3 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
 
 private fun AndroidViewModel.currentLanguageTag(): String? =
     AppLanguages.currentTag(getApplication())
-
-private fun HighlightStrength.alpha(): Int = when (this) {
-    HighlightStrength.LIGHT -> 70
-    HighlightStrength.MEDIUM -> 105
-    HighlightStrength.STRONG -> 150
-}

@@ -11,7 +11,9 @@ import android.os.ParcelFileDescriptor
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.createBitmap
+import cz.teply.sheetset.R
 import cz.teply.sheetset.settings.AnnotationTextSize
 import cz.teply.sheetset.settings.PageFit
 import java.io.File
@@ -27,11 +29,13 @@ import kotlin.math.sqrt
 enum class ReaderTool {
     VIEW,
     SELECT,
+    LASSO,
     PEN,
     HIGHLIGHTER,
     UNDERLINE,
     STRIKE_THROUGH,
     TEXT_BOX,
+    SYMBOL,
     LINE,
     ARROW,
     RECTANGLE,
@@ -42,13 +46,28 @@ enum class ReaderTool {
 class PdfPageView(context: Context) : View(context) {
     private val executor = Executors.newSingleThreadExecutor()
     private val pagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val handleStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.DKGRAY
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    private val symbolTypeface = requireNotNull(
+        ResourcesCompat.getFont(context, R.font.noto_music_regular),
+    )
+    private var viewport = PdfViewport(zoom = 1f, panX = 0f, panY = 0f)
     private val scaleDetector = ScaleGestureDetector(
         context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                zoom = (zoom * detector.scaleFactor).coerceIn(1f, 5f)
-                clampPan()
-                invalidate()
+                viewport = viewport.scaledAndMoved(
+                    factor = detector.scaleFactor,
+                    previousFocusX = lastCentroidX,
+                    previousFocusY = lastCentroidY,
+                    focusX = detector.focusX - width / 2f,
+                    focusY = detector.focusY - height / 2f,
+                )
+                scaleAppliedForEvent = true
                 return true
             }
         },
@@ -59,9 +78,6 @@ class PdfPageView(context: Context) : View(context) {
     private var renderedPageIndex = -1
     private var bitmap: Bitmap? = null
     private var generation = 0
-    private var zoom = 1f
-    private var panX = 0f
-    private var panY = 0f
     private var halfPagePart = 0
     private var downX = 0f
     private var downY = 0f
@@ -74,9 +90,16 @@ class PdfPageView(context: Context) : View(context) {
     private var dragStart: NormalizedPoint? = null
     private var dragCurrent: NormalizedPoint? = null
     private var gestureOriginal: PageAnnotation? = null
-    private var gesturePreview: PageAnnotation? = null
+    private var gesturePreview: Map<String, PageAnnotation> = emptyMap()
     private var resizeHandle: AnnotationHandle? = null
     private val erasedIds = mutableSetOf<String>()
+    private val activeStylusPointerIds = mutableSetOf<Int>()
+    private var activeEditorPointerId: Int? = null
+    private var multiTouchActive = false
+    private var scaleAppliedForEvent = false
+    private var lastCentroidX = 0f
+    private var lastCentroidY = 0f
+    private var drawingOpacity = DEFAULT_ANNOTATION_OPACITY
 
     init {
         isClickable = true
@@ -84,21 +107,49 @@ class PdfPageView(context: Context) : View(context) {
 
     var tool = ReaderTool.VIEW
         set(value) {
+            if (field == value) return
             field = value
+            activeEditorPointerId = null
+            eyedropperActive = false
             resetGesture()
-            invalidate()
+        }
+    var editorSettings = AnnotationEditorSettings.defaults()
+    var activeDrawingPreset = editorSettings.presets.first()
+        set(value) {
+            field = value
+            annotationColor = value.color
+            drawingOpacity = value.opacity
+            when (value.kind) {
+                DrawingPresetKind.PEN, DrawingPresetKind.MARKER -> {
+                    penWidth = value.normalizedWidth()
+                }
+                DrawingPresetKind.HIGHLIGHTER -> {
+                    highlighterWidth = value.normalizedWidth()
+                    highlighterOpacity = value.opacity
+                }
+            }
         }
     var annotationColor = AnnotationColor.BLACK
+    var annotationOpacity = DEFAULT_ANNOTATION_OPACITY
+        set(value) {
+            require(value in 0..255) { "Invalid annotation opacity" }
+            field = value
+        }
     var penWidth = 0.004f
     var highlighterWidth = 0.016f
     var shapeWidth = 0.004f
     var straightLine = false
     var textSize = AnnotationTextSize.MEDIUM
-    var highlighterAlpha = 105
+    var highlighterOpacity = LEGACY_HIGHLIGHTER_OPACITY
+        set(value) {
+            require(value in 0..255) { "Invalid highlighter opacity" }
+            field = value
+        }
     var pageFit = PageFit.PAGE
         set(value) {
+            if (field == value) return
             field = value
-            applyHalfPagePart()
+            if (value == PageFit.WIDTH) applyHalfPagePart() else clampPan()
             invalidate()
         }
     var pageTurnTaps = true
@@ -108,19 +159,25 @@ class PdfPageView(context: Context) : View(context) {
             field = value
             invalidate()
         }
-    var selectedAnnotationId: String? = null
+    var selectedAnnotationIds: Set<String> = emptySet()
         set(value) {
-            field = value
+            require(value.size <= MAX_ANNOTATIONS_PER_PAGE) { "Too many selected annotations" }
+            field = value.toSet()
             invalidate()
         }
+    val currentViewport: PdfViewport get() = viewport
+    var eyedropperActive = false
+        private set
     var onPreviousPage: () -> Unit = {}
     var onNextPage: () -> Unit = {}
     var onPageClick: () -> Unit = {}
-    var onSelectAnnotation: (String?) -> Unit = {}
+    var onSelectionChange: (Set<String>) -> Unit = {}
     var onAddAnnotation: (PageAnnotation) -> Unit = {}
-    var onUpdateAnnotation: (PageAnnotation) -> Unit = {}
-    var onDeleteAnnotation: (String) -> Unit = {}
+    var onUpdateAnnotations: (List<PageAnnotation>) -> Unit = {}
+    var onDeleteAnnotations: (Set<String>) -> Unit = {}
+    var onSampleColor: (AnnotationColor) -> Unit = {}
     var onRequestText: (NormalizedRect) -> Unit = {}
+    var onRequestSymbol: (NormalizedPoint) -> Unit = {}
     var onRequestMarkup: (MarkupKind, NormalizedPoint, NormalizedPoint) -> Unit = { _, _, _ -> }
     var onRenderError: () -> Unit = {}
 
@@ -133,9 +190,22 @@ class PdfPageView(context: Context) : View(context) {
 
     fun setHalfPagePart(part: Int) {
         require(part in 0..1) { "Invalid half-page part" }
+        if (halfPagePart == part) return
         halfPagePart = part
-        applyHalfPagePart()
-        invalidate()
+        if (pageFit == PageFit.WIDTH) {
+            applyHalfPagePart()
+            invalidate()
+        }
+    }
+
+    fun startEyedropper() {
+        activeEditorPointerId = null
+        resetGesture()
+        eyedropperActive = true
+    }
+
+    fun cancelEyedropper() {
+        eyedropperActive = false
     }
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
@@ -150,36 +220,73 @@ class PdfPageView(context: Context) : View(context) {
         val bounds = pageBounds(page)
         canvas.drawBitmap(page, null, bounds, pagePaint)
         annotations.forEach { stored ->
-            val annotation = gesturePreview?.takeIf { it.id == stored.id } ?: stored
+            if (stored.id in erasedIds) return@forEach
+            val annotation = gesturePreview[stored.id] ?: stored
             AnnotationRenderer.draw(
                 canvas = canvas,
                 annotation = annotation,
                 page = bounds,
-                selected = annotation.id == selectedAnnotationId,
-                highlighterAlpha = highlighterAlpha,
+                symbolTypeface = symbolTypeface,
+                selected = annotation.id in selectedAnnotationIds,
             )
+            if (
+                annotation is SymbolAnnotation &&
+                selectedAnnotationIds.size == 1 &&
+                annotation.id in selectedAnnotationIds
+            ) {
+                drawRotationHandle(canvas, annotation, bounds)
+            }
         }
         previewAnnotation()?.let { preview ->
             AnnotationRenderer.draw(
                 canvas = canvas,
                 annotation = preview,
                 page = bounds,
-                highlighterAlpha = highlighterAlpha,
+                symbolTypeface = symbolTypeface,
             )
         }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        scaleDetector.onTouchEvent(event)
-        if (event.pointerCount > 1 || scaleDetector.isInProgress) {
-            resetGesture()
-            return true
+        trackStylusDown(event)
+        val fingerCount = event.fingerCount()
+        val ownerId = activeEditorPointerId
+        val ownerIndex = ownerId?.let(event::findPointerIndex) ?: -1
+        val ownerIsStylus = ownerId != null && ownerId in activeStylusPointerIds
+        val handled = when {
+            event.actionMasked == MotionEvent.ACTION_CANCEL -> {
+                scaleDetector.onTouchEvent(event)
+                cancelPointerGesture()
+                true
+            }
+            shouldStylusTakeOver(event, ownerId) -> {
+                cancelEditorPointer()
+                startEditorPointer(event, event.actionIndex)
+                true
+            }
+            multiTouchActive || fingerCount >= 2 -> {
+                scaleAppliedForEvent = false
+                scaleDetector.onTouchEvent(event)
+                handleMultiTouch(event)
+                true
+            }
+            ownerIsStylus && ownerIndex >= 0 && fingerCount > 0 -> handleEditorTouch(event)
+            editorSettings.palmRejection && ownerIsStylus && fingerCount > 0 -> true
+            else -> {
+                scaleAppliedForEvent = false
+                scaleDetector.onTouchEvent(event)
+                when {
+                    eyedropperActive -> handleEyedropperTouch(event)
+                    tool == ReaderTool.VIEW -> {
+                        if (handleViewTouch(event)) performClick()
+                        true
+                    }
+                    else -> handleEditorTouch(event)
+                }
+            }
         }
-        if (tool == ReaderTool.VIEW) {
-            if (handleViewTouch(event)) performClick()
-            return true
-        }
-        return handleEditorTouch(event)
+        trackStylusUp(event)
+        return handled
     }
 
     override fun performClick(): Boolean {
@@ -197,6 +304,127 @@ class PdfPageView(context: Context) : View(context) {
         super.onDetachedFromWindow()
     }
 
+    private fun handleMultiTouch(event: MotionEvent) {
+        val focus = fingerFocus(event) ?: return
+        val centroidX = focus.first
+        val centroidY = focus.second
+        if (!multiTouchActive || event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+            activeEditorPointerId = null
+            resetGesture()
+            eyedropperActive = false
+            multiTouchActive = true
+        } else if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+            if (!scaleAppliedForEvent) {
+                viewport = viewport.scaledAndMoved(
+                    factor = 1f,
+                    previousFocusX = lastCentroidX,
+                    previousFocusY = lastCentroidY,
+                    focusX = centroidX,
+                    focusY = centroidY,
+                )
+            }
+            clampPan()
+            invalidate()
+        } else if (event.actionMasked == MotionEvent.ACTION_UP) {
+            multiTouchActive = false
+        }
+        lastCentroidX = centroidX
+        lastCentroidY = centroidY
+    }
+
+    private fun fingerFocus(event: MotionEvent): Pair<Float, Float>? {
+        var count = 0
+        var x = 0f
+        var y = 0f
+        repeat(event.pointerCount) { index ->
+            if (
+                !(event.actionMasked == MotionEvent.ACTION_POINTER_UP && index == event.actionIndex) &&
+                event.getToolType(index) == MotionEvent.TOOL_TYPE_FINGER
+            ) {
+                count++
+                x += event.getX(index)
+                y += event.getY(index)
+            }
+        }
+        return if (count == 0) {
+            null
+        } else {
+            x / count - width / 2f to y / count - height / 2f
+        }
+    }
+
+    private fun MotionEvent.fingerCount(): Int = (0 until pointerCount).count { index ->
+        getToolType(index) == MotionEvent.TOOL_TYPE_FINGER
+    }
+
+    private fun cancelPointerGesture() {
+        activeEditorPointerId = null
+        multiTouchActive = false
+        eyedropperActive = false
+        resetGesture()
+    }
+
+    private fun drawRotationHandle(
+        canvas: Canvas,
+        annotation: SymbolAnnotation,
+        page: RectF,
+    ) {
+        val handle = annotation.resizeHandles().getValue(AnnotationHandle.ROTATION)
+        val x = page.left + handle.x * page.width()
+        val y = page.top + handle.y * page.height()
+        val radius = max(6f, min(page.width(), page.height()) * 0.007f)
+        canvas.drawCircle(x, y, radius, handlePaint)
+        canvas.drawCircle(x, y, radius, handleStroke)
+    }
+
+    private fun trackStylusDown(event: MotionEvent) {
+        if (
+            event.actionMasked != MotionEvent.ACTION_DOWN &&
+            event.actionMasked != MotionEvent.ACTION_POINTER_DOWN
+        ) {
+            return
+        }
+        val index = event.actionIndex
+        if (event.getToolType(index) in STYLUS_TOOL_TYPES) {
+            activeStylusPointerIds += event.getPointerId(index)
+        }
+    }
+
+    private fun trackStylusUp(event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                activeStylusPointerIds -= event.getPointerId(event.actionIndex)
+            }
+            MotionEvent.ACTION_CANCEL -> activeStylusPointerIds.clear()
+        }
+    }
+
+    private fun handleEyedropperTouch(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_UP -> sampleColor(event.x, event.y)
+            MotionEvent.ACTION_CANCEL -> cancelEyedropper()
+        }
+        return true
+    }
+
+    private fun sampleColor(x: Float, y: Float) {
+        val page = bitmap ?: return
+        val bounds = pageBounds(page)
+        val point = normalizePoint(
+            x,
+            y,
+            PageBounds(bounds.left, bounds.top, bounds.width(), bounds.height()),
+        ) ?: return
+        val pixel = page.getPixel(
+            (point.x * (page.width - 1)).roundToInt(),
+            (point.y * (page.height - 1)).roundToInt(),
+        )
+        eyedropperActive = false
+        onSampleColor(
+            AnnotationColor(Color.rgb(Color.red(pixel), Color.green(pixel), Color.blue(pixel))),
+        )
+    }
+
     private fun handleViewTouch(event: MotionEvent): Boolean {
         var clicked = false
         when (event.actionMasked) {
@@ -207,8 +435,10 @@ class PdfPageView(context: Context) : View(context) {
                 lastY = event.y
             }
             MotionEvent.ACTION_MOVE -> if (canPan()) {
-                panX += event.x - lastX
-                panY += event.y - lastY
+                viewport = viewport.copy(
+                    panX = viewport.panX + event.x - lastX,
+                    panY = viewport.panY + event.y - lastY,
+                )
                 lastX = event.x
                 lastY = event.y
                 clampPan()
@@ -224,7 +454,7 @@ class PdfPageView(context: Context) : View(context) {
         val dy = event.y - downY
         if (
             pageTurnSwipes &&
-            zoom == 1f &&
+            viewport.zoom == 1f &&
             abs(dx) > 80f &&
             abs(dx) > abs(dy) &&
             !canPanHorizontally()
@@ -235,13 +465,11 @@ class PdfPageView(context: Context) : View(context) {
         if (hypot(dx, dy) > 24f) return false
         val now = System.currentTimeMillis()
         if (
-            zoom > 1f &&
+            viewport.zoom > 1f &&
             now - lastTapAt < 300 &&
             hypot(event.x - lastTapX, event.y - lastTapY) < 60f
         ) {
-            zoom = 1f
-            panX = 0f
-            panY = 0f
+            viewport = PdfViewport(zoom = 1f, panX = 0f, panY = 0f)
             lastTapAt = 0L
             invalidate()
             return false
@@ -264,23 +492,80 @@ class PdfPageView(context: Context) : View(context) {
     }
 
     private fun handleEditorTouch(event: MotionEvent): Boolean {
-        val page = bitmap ?: return true
-        val bounds = pageBounds(page)
-        val point = normalizePoint(
-            event.x,
-            event.y,
-            PageBounds(bounds.left, bounds.top, bounds.width(), bounds.height()),
-        )
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> point?.let(::beginGesture)
-            MotionEvent.ACTION_MOVE -> point?.let(::updateGesture)
-            MotionEvent.ACTION_UP -> {
-                point?.let(::updateGesture)
-                finishGesture()
+            MotionEvent.ACTION_DOWN -> {
+                val index = event.actionIndex
+                if (isRejectedPalmPointer(event, index)) return true
+                startEditorPointer(event, index)
             }
-            MotionEvent.ACTION_CANCEL -> resetGesture()
+            MotionEvent.ACTION_MOVE -> {
+                val index = editorPointerIndex(event) ?: return true
+                if (dragStart != null) normalizedPoint(event, index)?.let(::updateGesture)
+            }
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
+                if (event.getPointerId(event.actionIndex) == activeEditorPointerId) {
+                    finishEditorPointer(event, event.actionIndex)
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> cancelEditorPointer()
         }
         return true
+    }
+
+    private fun shouldStylusTakeOver(event: MotionEvent, ownerId: Int?): Boolean =
+        editorSettings.palmRejection &&
+            ownerId != null &&
+            ownerId !in activeStylusPointerIds &&
+            event.actionMasked == MotionEvent.ACTION_POINTER_DOWN &&
+            event.getToolType(event.actionIndex) in STYLUS_TOOL_TYPES
+
+    private fun startEditorPointer(event: MotionEvent, index: Int) {
+        activeEditorPointerId = event.getPointerId(index)
+        val point = normalizedPoint(event, index)
+        if (point == null) {
+            activeEditorPointerId = null
+        } else {
+            beginGesture(point)
+        }
+    }
+
+    private fun editorPointerIndex(event: MotionEvent): Int? {
+        val pointerId = activeEditorPointerId ?: return null
+        val index = event.findPointerIndex(pointerId)
+        if (index >= 0) return index
+        cancelEditorPointer()
+        return null
+    }
+
+    private fun finishEditorPointer(event: MotionEvent, index: Int) {
+        val point = normalizedPoint(event, index)
+        if (dragStart == null || point == null) {
+            resetGesture()
+        } else {
+            updateGesture(point)
+            finishGesture()
+        }
+        activeEditorPointerId = null
+    }
+
+    private fun cancelEditorPointer() {
+        activeEditorPointerId = null
+        resetGesture()
+    }
+
+    private fun isRejectedPalmPointer(event: MotionEvent, index: Int): Boolean =
+        editorSettings.palmRejection &&
+            event.getToolType(index) == MotionEvent.TOOL_TYPE_FINGER &&
+            activeStylusPointerIds.isNotEmpty()
+
+    private fun normalizedPoint(event: MotionEvent, index: Int): NormalizedPoint? {
+        val page = bitmap ?: return null
+        val bounds = pageBounds(page)
+        return normalizePoint(
+            event.getX(index),
+            event.getY(index),
+            PageBounds(bounds.left, bounds.top, bounds.width(), bounds.height()),
+        )
     }
 
     private fun beginGesture(point: NormalizedPoint) {
@@ -288,19 +573,7 @@ class PdfPageView(context: Context) : View(context) {
         dragStart = point
         dragCurrent = point
         when (tool) {
-            ReaderTool.SELECT -> {
-                val selected = annotations.firstOrNull { it.id == selectedAnnotationId }
-                resizeHandle = selected?.handleAt(point, 0.04f / zoom)
-                val hit = if (resizeHandle != null) {
-                    selected
-                } else {
-                    annotations.topmostHit(point, 0.025f / zoom)
-                }
-                selectedAnnotationId = hit?.id
-                onSelectAnnotation(hit?.id)
-                gestureOriginal = hit
-                gesturePreview = hit
-            }
+            ReaderTool.SELECT -> beginSelection(point)
             ReaderTool.PEN, ReaderTool.HIGHLIGHTER -> previewPoints.add(point)
             ReaderTool.ERASER -> eraseAt(point)
             else -> Unit
@@ -311,12 +584,7 @@ class PdfPageView(context: Context) : View(context) {
     private fun updateGesture(point: NormalizedPoint) {
         dragCurrent = point
         when (tool) {
-            ReaderTool.SELECT -> {
-                val original = gestureOriginal ?: return
-                val start = dragStart ?: return
-                gesturePreview = resizeHandle?.let { original.resized(it, point) }
-                    ?: original.translated(point.x - start.x, point.y - start.y)
-            }
+            ReaderTool.SELECT -> updateSelectionGesture(point)
             ReaderTool.PEN, ReaderTool.HIGHLIGHTER -> {
                 val previous = previewPoints.lastOrNull()
                 if (previous == null || distance(previous, point) > 0.001f) {
@@ -333,12 +601,9 @@ class PdfPageView(context: Context) : View(context) {
         val start = dragStart
         val end = dragCurrent
         when (tool) {
-            ReaderTool.SELECT -> {
-                val original = gestureOriginal
-                val updated = gesturePreview
-                if (original != null && updated != null && updated != original) {
-                    onUpdateAnnotation(updated)
-                }
+            ReaderTool.SELECT -> finishSelectionGesture()
+            ReaderTool.LASSO -> if (start != null && end != null) {
+                updateSelection(annotations.lassoSelection(manualMarkup(start, end).single()))
             }
             ReaderTool.PEN -> addInk(InkKind.PEN, penWidth)
             ReaderTool.HIGHLIGHTER -> addInk(InkKind.HIGHLIGHTER, highlighterWidth)
@@ -347,13 +612,62 @@ class PdfPageView(context: Context) : View(context) {
             ReaderTool.TEXT_BOX -> if (start != null && end != null) {
                 onRequestText(manualMarkup(start, end).single())
             }
+            ReaderTool.SYMBOL -> end?.let(onRequestSymbol)
             ReaderTool.LINE -> addShape(ShapeKind.LINE, start, end)
             ReaderTool.ARROW -> addShape(ShapeKind.ARROW, start, end)
             ReaderTool.RECTANGLE -> addShape(ShapeKind.RECTANGLE, start, end)
             ReaderTool.ELLIPSE -> addShape(ShapeKind.ELLIPSE, start, end)
-            ReaderTool.VIEW, ReaderTool.ERASER -> Unit
+            ReaderTool.ERASER -> finishEraseGesture()
+            ReaderTool.VIEW -> Unit
         }
         resetGesture()
+    }
+
+    private fun beginSelection(point: NormalizedPoint) {
+        val selected = selectedAnnotationIds.singleOrNull()?.let { id ->
+            annotations.firstOrNull { it.id == id }
+        }
+        resizeHandle = selected?.handleAt(point, 0.04f / viewport.zoom)
+        val hit = if (resizeHandle != null) {
+            selected
+        } else {
+            annotations.topmostHit(point, 0.025f / viewport.zoom)
+        }
+        updateSelection(
+            when {
+                hit == null -> emptySet()
+                hit.id in selectedAnnotationIds -> selectedAnnotationIds
+                else -> setOf(hit.id)
+            },
+        )
+        gestureOriginal = hit
+    }
+
+    private fun updateSelectionGesture(point: NormalizedPoint) {
+        val original = gestureOriginal ?: return
+        val start = dragStart ?: return
+        val handle = resizeHandle
+        gesturePreview = if (handle == null) {
+            annotations.translateSelection(
+                selectedAnnotationIds,
+                point.x - start.x,
+                point.y - start.y,
+            ).filter { it.id in selectedAnnotationIds }.associateBy(PageAnnotation::id)
+        } else {
+            mapOf(original.id to original.resized(handle, point))
+        }
+    }
+
+    private fun finishSelectionGesture() {
+        if (gesturePreview.isEmpty()) return
+        val updated = annotations.map { gesturePreview[it.id] ?: it }
+        if (updated != annotations) onUpdateAnnotations(updated)
+    }
+
+    private fun updateSelection(ids: Set<String>) {
+        if (ids == selectedAnnotationIds) return
+        selectedAnnotationIds = ids
+        onSelectionChange(selectedAnnotationIds)
     }
 
     private fun requestMarkup(
@@ -373,6 +687,11 @@ class PdfPageView(context: Context) : View(context) {
                 width = width,
                 points = strokePoints(previewPoints.toList(), straightLine),
                 color = annotationColor,
+                opacity = if (kind == InkKind.HIGHLIGHTER) {
+                    highlighterOpacity
+                } else {
+                    drawingOpacity
+                },
             ),
         )
     }
@@ -390,6 +709,7 @@ class PdfPageView(context: Context) : View(context) {
             end = end,
             width = shapeWidth,
             color = annotationColor,
+            opacity = annotationOpacity,
         )
         add(raw.resized(start, end))
     }
@@ -399,14 +719,16 @@ class PdfPageView(context: Context) : View(context) {
     }
 
     private fun eraseAt(point: NormalizedPoint) {
-        val hit = annotations.topmostHit(point, 0.025f / zoom) ?: return
-        if (erasedIds.add(hit.id)) {
-            if (selectedAnnotationId == hit.id) {
-                selectedAnnotationId = null
-                onSelectAnnotation(null)
-            }
-            onDeleteAnnotation(hit.id)
-        }
+        val hit = annotations.asReversed().firstOrNull {
+            it.id !in erasedIds && it.hitTest(point, 0.025f / viewport.zoom)
+        } ?: return
+        erasedIds += hit.id
+    }
+
+    private fun finishEraseGesture() {
+        if (erasedIds.isEmpty()) return
+        updateSelection(selectedAnnotationIds - erasedIds)
+        onDeleteAnnotations(erasedIds.toSet())
     }
 
     private fun previewAnnotation(): PageAnnotation? {
@@ -420,12 +742,14 @@ class PdfPageView(context: Context) : View(context) {
                 kind = MarkupKind.UNDERLINE,
                 bounds = manualMarkup(start, end),
                 color = annotationColor,
+                opacity = annotationOpacity,
             )
             ReaderTool.STRIKE_THROUGH -> MarkupAnnotation(
                 id = "preview",
                 kind = MarkupKind.STRIKE_THROUGH,
                 bounds = manualMarkup(start, end),
                 color = annotationColor,
+                opacity = annotationOpacity,
             )
             ReaderTool.TEXT_BOX -> ShapeAnnotation(
                 id = "preview",
@@ -434,6 +758,16 @@ class PdfPageView(context: Context) : View(context) {
                 end = end,
                 width = shapeWidth,
                 color = annotationColor,
+                opacity = annotationOpacity,
+            ).resized(start, end)
+            ReaderTool.LASSO -> ShapeAnnotation(
+                id = "preview",
+                kind = ShapeKind.RECTANGLE,
+                start = start,
+                end = end,
+                width = 0.003f,
+                color = AnnotationColor.BLACK,
+                opacity = DEFAULT_ANNOTATION_OPACITY,
             ).resized(start, end)
             ReaderTool.LINE, ReaderTool.ARROW, ReaderTool.RECTANGLE, ReaderTool.ELLIPSE -> {
                 val kind = when (tool) {
@@ -450,6 +784,7 @@ class PdfPageView(context: Context) : View(context) {
                     end = end,
                     width = shapeWidth,
                     color = annotationColor,
+                    opacity = annotationOpacity,
                 ).resized(start, end)
             }
             else -> null
@@ -466,6 +801,11 @@ class PdfPageView(context: Context) : View(context) {
                 width = width,
                 points = strokePoints(previewPoints, straightLine),
                 color = annotationColor,
+                opacity = if (kind == InkKind.HIGHLIGHTER) {
+                    highlighterOpacity
+                } else {
+                    drawingOpacity
+                },
             )
         }
 
@@ -474,7 +814,7 @@ class PdfPageView(context: Context) : View(context) {
         dragStart = null
         dragCurrent = null
         gestureOriginal = null
-        gesturePreview = null
+        gesturePreview = emptyMap()
         resizeHandle = null
         erasedIds.clear()
         invalidate()
@@ -482,13 +822,13 @@ class PdfPageView(context: Context) : View(context) {
 
     private fun pageBounds(page: Bitmap): RectF {
         val fit = baseScale(page)
-        val drawWidth = page.width * fit * zoom
-        val drawHeight = page.height * fit * zoom
+        val drawWidth = page.width * fit * viewport.zoom
+        val drawHeight = page.height * fit * viewport.zoom
         return RectF(
-            (width - drawWidth) / 2f + panX,
-            (height - drawHeight) / 2f + panY,
-            (width + drawWidth) / 2f + panX,
-            (height + drawHeight) / 2f + panY,
+            (width - drawWidth) / 2f + viewport.panX,
+            (height - drawHeight) / 2f + viewport.panY,
+            (width + drawWidth) / 2f + viewport.panX,
+            (height + drawHeight) / 2f + viewport.panY,
         )
     }
 
@@ -509,21 +849,25 @@ class PdfPageView(context: Context) : View(context) {
 
     private fun clampPan() {
         val page = bitmap ?: return
-        panX = panX.coerceIn(-maxPanX(page), maxPanX(page))
-        panY = panY.coerceIn(-maxPanY(page), maxPanY(page))
+        viewport = viewport.copy(
+            panX = viewport.panX.coerceIn(-maxPanX(page), maxPanX(page)),
+            panY = viewport.panY.coerceIn(-maxPanY(page), maxPanY(page)),
+        )
     }
 
     private fun applyHalfPagePart() {
         val page = bitmap ?: return
-        panX = 0f
-        panY = halfPagePan(maxPanY(page), halfPagePart)
+        viewport = viewport.copy(
+            panX = 0f,
+            panY = halfPagePan(maxPanY(page), halfPagePart),
+        )
     }
 
     private fun maxPanX(page: Bitmap): Float =
-        max(0f, (page.width * baseScale(page) * zoom - width) / 2f)
+        max(0f, (page.width * baseScale(page) * viewport.zoom - width) / 2f)
 
     private fun maxPanY(page: Bitmap): Float =
-        max(0f, (page.height * baseScale(page) * zoom - height) / 2f)
+        max(0f, (page.height * baseScale(page) * viewport.zoom - height) / 2f)
 
     private fun renderPage() {
         val file = source ?: return
@@ -538,9 +882,10 @@ class PdfPageView(context: Context) : View(context) {
                         bitmap?.recycle()
                         bitmap = rendered
                         renderedPageIndex = requestedPage
-                        zoom = 1f
-                        panX = 0f
-                        panY = halfPagePan(maxPanY(rendered), halfPagePart)
+                        viewport = PdfViewport(zoom = 1f, panX = 0f, panY = 0f)
+                        viewport = viewport.copy(
+                            panY = halfPagePan(maxPanY(rendered), halfPagePart),
+                        )
                         invalidate()
                     } else {
                         rendered.recycle()
@@ -587,4 +932,10 @@ class PdfPageView(context: Context) : View(context) {
     ): AnnotationHandle? = resizeHandles().minByOrNull { (_, handlePoint) ->
         distance(point, handlePoint)
     }?.takeIf { (_, handlePoint) -> distance(point, handlePoint) <= radius }?.key
+
+    private fun DrawingPreset.normalizedWidth(): Float = width / 5_000f
+
+    private companion object {
+        val STYLUS_TOOL_TYPES = setOf(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER)
+    }
 }

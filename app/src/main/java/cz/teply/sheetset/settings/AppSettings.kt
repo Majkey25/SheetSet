@@ -1,5 +1,7 @@
 package cz.teply.sheetset.settings
 
+import cz.teply.sheetset.pdf.AnnotationEditorSettings
+
 enum class PageFit { PAGE, WIDTH }
 enum class ReaderDefaultTool { VIEW, PEN, HIGHLIGHTER }
 enum class ToolSize { THIN, MEDIUM, THICK }
@@ -14,8 +16,7 @@ data class AppSettings(
     val pageTurnSwipes: Boolean = true,
     val autoHideControls: Boolean = true,
     val defaultTool: ReaderDefaultTool = ReaderDefaultTool.VIEW,
-    val penWidth: ToolSize = ToolSize.MEDIUM,
-    val highlighterStrength: HighlightStrength = HighlightStrength.MEDIUM,
     val textSize: AnnotationTextSize = AnnotationTextSize.MEDIUM,
     val readerLayout: ReaderLayout = ReaderLayout.SINGLE,
+    val editor: AnnotationEditorSettings = AnnotationEditorSettings.defaults(),
 )

@@ -6,6 +6,7 @@ import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -18,19 +19,38 @@ import kotlin.math.min
 import kotlin.math.sin
 
 object AnnotationRenderer {
+    private val symbolGlyphs = mapOf(
+        "sharp" to "♯",
+        "flat" to "♭",
+        "natural" to "♮",
+        "fermata" to "𝄐",
+        "accent" to "𝆓",
+        "breath" to "𝄒",
+        "crescendo" to "<",
+        "decrescendo" to ">",
+        "p" to "p",
+        "mf" to "mf",
+        "f" to "f",
+        "ff" to "ff",
+    )
+
+    fun symbolGlyph(symbolId: String): String = requireNotNull(symbolGlyphs[symbolId]) {
+        "Unsupported symbol ID"
+    }
+
     fun draw(
         canvas: Canvas,
         annotation: PageAnnotation,
         page: RectF,
+        symbolTypeface: Typeface,
         selected: Boolean = false,
-        highlighterAlpha: Int = 105,
     ) {
-        require(highlighterAlpha in 0..255) { "Invalid highlighter alpha" }
         when (annotation) {
-            is InkAnnotation -> drawInk(canvas, annotation, page, highlighterAlpha)
-            is MarkupAnnotation -> drawMarkup(canvas, annotation, page, highlighterAlpha)
+            is InkAnnotation -> drawInk(canvas, annotation, page)
+            is MarkupAnnotation -> drawMarkup(canvas, annotation, page)
             is TextBoxAnnotation -> drawTextBox(canvas, annotation, page)
             is ShapeAnnotation -> drawShape(canvas, annotation, page)
+            is SymbolAnnotation -> drawSymbol(canvas, annotation, page, symbolTypeface)
         }
         if (selected) drawSelection(canvas, annotation, page)
     }
@@ -39,12 +59,11 @@ object AnnotationRenderer {
         canvas: Canvas,
         annotation: InkAnnotation,
         page: RectF,
-        highlighterAlpha: Int,
     ) {
         val paint = strokePaint(
-            annotation.color.argb(),
+            annotation.color.argb,
             annotation.width * min(page.width(), page.height()),
-            if (annotation.kind == InkKind.HIGHLIGHTER) highlighterAlpha else 255,
+            annotation.opacity,
         ).apply {
             if (annotation.kind == InkKind.HIGHLIGHTER) {
                 strokeCap = Paint.Cap.SQUARE
@@ -67,9 +86,8 @@ object AnnotationRenderer {
         canvas: Canvas,
         annotation: MarkupAnnotation,
         page: RectF,
-        highlighterAlpha: Int,
     ) {
-        val color = annotation.color.argb()
+        val color = annotation.color.argb
         annotation.bounds.forEach { normalized ->
             val bounds = normalized.toRectF(page)
             when (annotation.kind) {
@@ -78,7 +96,7 @@ object AnnotationRenderer {
                     Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.FILL
                         this.color = color
-                        alpha = highlighterAlpha
+                        alpha = annotation.opacity
                     },
                 )
                 MarkupKind.UNDERLINE -> canvas.drawLine(
@@ -86,14 +104,14 @@ object AnnotationRenderer {
                     bounds.bottom,
                     bounds.right,
                     bounds.bottom,
-                    strokePaint(color, max(2f, page.height() * 0.003f), 255),
+                    strokePaint(color, max(2f, page.height() * 0.003f), annotation.opacity),
                 )
                 MarkupKind.STRIKE_THROUGH -> canvas.drawLine(
                     bounds.left,
                     bounds.centerY(),
                     bounds.right,
                     bounds.centerY(),
-                    strokePaint(color, max(2f, page.height() * 0.003f), 255),
+                    strokePaint(color, max(2f, page.height() * 0.003f), annotation.opacity),
                 )
             }
         }
@@ -107,15 +125,16 @@ object AnnotationRenderer {
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 color = Color.WHITE
-                alpha = 235
+                alpha = min(235, annotation.opacity)
             },
         )
         canvas.drawRect(
             bounds,
-            strokePaint(annotation.color.argb(), max(1.5f, page.height() * 0.002f), 255),
+            strokePaint(annotation.color.argb, max(1.5f, page.height() * 0.002f), annotation.opacity),
         )
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = annotation.color.argb()
+            color = annotation.color.argb
+            alpha = annotation.opacity
             textSize = when (annotation.size) {
                 AnnotationTextSize.SMALL -> page.height() * 0.028f
                 AnnotationTextSize.MEDIUM -> page.height() * 0.036f
@@ -129,7 +148,14 @@ object AnnotationRenderer {
             textPaint,
             (bounds.width() - padding * 2f).toInt().coerceAtLeast(1),
         )
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setAlignment(
+                when (annotation.alignment) {
+                    AnnotationTextAlignment.START -> Layout.Alignment.ALIGN_NORMAL
+                    AnnotationTextAlignment.CENTER -> Layout.Alignment.ALIGN_CENTER
+                    AnnotationTextAlignment.END -> Layout.Alignment.ALIGN_OPPOSITE
+                },
+            )
+            .setLineSpacing(0f, annotation.lineHeight)
             .setIncludePad(false)
             .build()
         canvas.save()
@@ -145,9 +171,9 @@ object AnnotationRenderer {
         val endX = annotation.end.x(page)
         val endY = annotation.end.y(page)
         val paint = strokePaint(
-            annotation.color.argb(),
+            annotation.color.argb,
             annotation.width * min(page.width(), page.height()),
-            255,
+            annotation.opacity,
         )
         when (annotation.kind) {
             ShapeKind.LINE -> canvas.drawLine(startX, startY, endX, endY, paint)
@@ -175,6 +201,29 @@ object AnnotationRenderer {
             ShapeKind.RECTANGLE -> canvas.drawRect(shapeBounds(annotation, page), paint)
             ShapeKind.ELLIPSE -> canvas.drawOval(shapeBounds(annotation, page), paint)
         }
+    }
+
+    private fun drawSymbol(
+        canvas: Canvas,
+        annotation: SymbolAnnotation,
+        page: RectF,
+        symbolTypeface: Typeface,
+    ) {
+        val centerX = annotation.center.x(page)
+        val centerY = annotation.center.y(page)
+        val glyph = symbolGlyph(annotation.symbolId)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = annotation.color.argb
+            alpha = annotation.opacity
+            textAlign = Paint.Align.CENTER
+            textSize = annotation.size * min(page.width(), page.height())
+            typeface = symbolTypeface
+        }
+        val baseline = centerY - (paint.ascent() + paint.descent()) / 2f
+        canvas.save()
+        canvas.rotate(annotation.rotationDegrees, centerX, centerY)
+        canvas.drawText(glyph, centerX, baseline, paint)
+        canvas.restore()
     }
 
     private fun drawSelection(canvas: Canvas, annotation: PageAnnotation, page: RectF) {
@@ -218,6 +267,7 @@ object AnnotationRenderer {
             )
             is TextBoxAnnotation -> annotation.bounds.toRectF(page)
             is ShapeAnnotation -> shapeBounds(annotation, page)
+            is SymbolAnnotation -> annotation.normalizedBounds().toRectF(page)
         }
         if (result.width() < 2f) result.inset(-6f, 0f)
         if (result.height() < 2f) result.inset(0f, -6f)
@@ -237,7 +287,7 @@ object AnnotationRenderer {
             )
             ShapeKind.RECTANGLE, ShapeKind.ELLIPSE -> bounds.corners()
         }
-        is MarkupAnnotation, is TextBoxAnnotation -> bounds.corners()
+        is MarkupAnnotation, is TextBoxAnnotation, is SymbolAnnotation -> bounds.corners()
     }
 
     private fun RectF.corners(): List<Pair<Float, Float>> = listOf(
@@ -263,17 +313,6 @@ object AnnotationRenderer {
             this.alpha = alpha
             strokeWidth = width.coerceAtLeast(1f)
         }
-
-    private fun AnnotationColor.argb(): Int = when (this) {
-        AnnotationColor.BLACK -> Color.rgb(17, 17, 17)
-        AnnotationColor.RED -> Color.rgb(211, 47, 47)
-        AnnotationColor.ORANGE -> Color.rgb(245, 124, 0)
-        AnnotationColor.YELLOW -> Color.rgb(251, 192, 45)
-        AnnotationColor.GREEN -> Color.rgb(56, 142, 60)
-        AnnotationColor.BLUE -> Color.rgb(25, 118, 210)
-        AnnotationColor.PURPLE -> Color.rgb(123, 31, 162)
-        AnnotationColor.PINK -> Color.rgb(194, 24, 91)
-    }
 
     private fun NormalizedPoint.x(page: RectF): Float = x.normalizedX(page)
 

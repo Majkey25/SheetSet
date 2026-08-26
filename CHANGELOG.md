@@ -2,11 +2,32 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.3] - 2026-08-26
+
+### Added
+
+- Contextual Draw and Objects tool groups with reusable pen presets, lasso selection, musical symbols, text editing, duplicate/delete actions, and one compact color control.
+- Quick, recent, and custom HSV colors with opacity, live preview, and an eyedropper that samples the rendered PDF.
+- Persisted annotation-tool order and visibility, drag-handle customization, palm rejection, and accessible move actions.
+- Direct CeliaScan launch plus Android PDF share/open intake for validated content URI documents.
+- Version 3 annotation storage for per-object opacity, text alignment and line height, and musical symbols rendered consistently in the reader and exported PDF.
+
 ### Changed
 
-- Replaced the expanded color strip and Draw/Add mode switchers with one color control, direct core tools, and a compact More tools dialog.
+- Renamed the user-facing product to SeliaLists while preserving repository URLs and backup compatibility.
+- Changed the Google Play application ID to `com.majkeylab.sheetset`; the new package installs separately, so migrate an existing library with ZIP backup and restore.
+- Replaced the crowded annotation palette with a responsive two-row toolbar that keeps navigation and Done fixed while tools scroll.
+- Grouped settings into Library, Reading, Data, and App pages with current-value rows and bounded choice dialogs.
+- Replaced the SeliaLists launcher and Play Store artwork with the current first-party CeliaScan icon.
 - Added Single, Half, and Two-page defaults to the main Reader settings page.
 - Lowered the minimum version to Android 10 and moved per-app language handling to the AndroidX compatibility path.
+
+### Fixed
+
+- Preserved pinch focus, pan position, stylus ownership, and palm rejection across mixed-pointer editor gestures.
+- Serialized per-score annotation saves so stale or failed writes cannot overwrite newer pages or enter a backup.
+- Made native and shared backups wait for the latest successful annotation save and round-trip editor settings and version 3 annotations.
+- Kept Back inside the reader, settings page, or drawer before reaching the app root.
 
 ### Removed
 
@@ -30,7 +51,7 @@
 
 ### Fixed
 
-- Android Back closes the active reader, detail, settings page, or drawer before reaching the root screen; root Back no longer exits SheetSet.
+- Android Back closes the active reader, detail, settings page, or drawer before reaching the root screen; root Back no longer exits SeliaLists.
 - Automatic scrolling waits for the new PDF page to finish rendering before continuing.
 
 ## [0.3.0-alpha.2] - 2026-08-23
