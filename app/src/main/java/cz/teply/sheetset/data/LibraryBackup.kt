@@ -243,13 +243,24 @@ private fun AppSettings.toJson(): JSONObject = JSONObject()
 
 private fun JSONObject.toSettings(version: Int): AppSettings = try {
     val defaults = AppSettings()
+    val editorRaw = if (has("editor") && !isNull("editor")) {
+        getJSONObject("editor").toString()
+    } else {
+        null
+    }
+    val legacyEditorUi = editorRaw?.let(AnnotationEditorSettingsJson::isLegacy) ?: false
+    val defaultTool = ReaderDefaultTool.valueOf(getString("defaultTool"))
     AppSettings(
         keepScreenAwake = getBoolean("keepScreenAwake"),
         pageFit = PageFit.valueOf(getString("pageFit")),
         pageTurnTaps = getBoolean("pageTurnTaps"),
         pageTurnSwipes = getBoolean("pageTurnSwipes"),
         autoHideControls = getBoolean("autoHideControls"),
-        defaultTool = ReaderDefaultTool.valueOf(getString("defaultTool")),
+        defaultTool = if (legacyEditorUi && defaultTool == ReaderDefaultTool.VIEW) {
+            ReaderDefaultTool.PEN
+        } else {
+            defaultTool
+        },
         textSize = AnnotationTextSize.valueOf(getString("textSize")),
         readerLayout = if (version >= 2) {
             ReaderLayout.valueOf(getString("readerLayout"))
@@ -261,11 +272,7 @@ private fun JSONObject.toSettings(version: Int): AppSettings = try {
         } else {
             defaults.themeMode
         },
-        editor = if (has("editor") && !isNull("editor")) {
-            AnnotationEditorSettingsJson.decode(getJSONObject("editor").toString())
-        } else {
-            defaults.editor
-        },
+        editor = editorRaw?.let(AnnotationEditorSettingsJson::decode) ?: defaults.editor,
     )
 } catch (error: Exception) {
     throw BackupException("Backup settings are invalid", error)

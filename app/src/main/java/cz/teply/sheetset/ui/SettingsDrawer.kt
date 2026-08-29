@@ -298,18 +298,30 @@ private fun ReaderSettings(
     SettingsPage(R.string.reader_page, onBack) {
         item { SettingsSectionTitle(R.string.settings_layout) }
         item {
-            SettingsChoiceRow(R.string.page_layout, readerLayoutLabel(settings.readerLayout)) {
+            SettingsChoiceRow(
+                R.string.page_layout,
+                readerLayoutLabel(settings.readerLayout),
+                R.drawable.ic_view_module_24,
+            ) {
                 choice = ReaderChoice.LAYOUT
             }
         }
         item {
-            SettingsChoiceRow(R.string.page_fit, pageFitLabel(settings.pageFit)) {
+            SettingsChoiceRow(
+                R.string.page_fit,
+                pageFitLabel(settings.pageFit),
+                R.drawable.ic_straighten_24,
+            ) {
                 choice = ReaderChoice.PAGE_FIT
             }
         }
         item { SettingsSectionTitle(R.string.settings_page_turning) }
         item {
-            SettingsNavigationRow(R.string.gestures, R.string.page_turning_open_gestures) {
+            SettingsNavigationRow(
+                R.string.gestures,
+                R.string.page_turning_open_gestures,
+                R.drawable.ic_gesture_24,
+            ) {
                 onGestures()
             }
         }
@@ -382,7 +394,13 @@ private fun GestureSettings(
             ) { onSettings(settings.copy(pageTurnSwipes = it)) }
         }
         item { SettingsSectionTitle(R.string.settings_zoom) }
-        item { SettingsInfoRow(R.string.pinch_zoom, R.string.pinch_zoom_summary) }
+        item {
+            SettingsInfoRow(
+                R.string.pinch_zoom,
+                R.string.pinch_zoom_summary,
+                R.drawable.ic_search_24,
+            )
+        }
         item { SettingsSectionTitle(R.string.settings_input) }
         item {
             SettingsSwitchRow(
@@ -405,9 +423,30 @@ private fun BackupSettings(
 ) {
     SettingsPage(R.string.backup_restore, onBack) {
         item { SettingsSectionTitle(R.string.settings_backup_actions) }
-        item { SettingsActionRow(R.string.create_backup, R.string.create_backup_summary, onBackup) }
-        item { SettingsActionRow(R.string.share_backup, R.string.share_backup_summary, onShareBackup) }
-        item { SettingsActionRow(R.string.restore_backup, R.string.restore_backup_summary, onRestore) }
+        item {
+            SettingsActionRow(
+                R.string.create_backup,
+                R.string.create_backup_summary,
+                R.drawable.ic_download_24,
+                onBackup,
+            )
+        }
+        item {
+            SettingsActionRow(
+                R.string.share_backup,
+                R.string.share_backup_summary,
+                R.drawable.ic_share_24,
+                onShareBackup,
+            )
+        }
+        item {
+            SettingsActionRow(
+                R.string.restore_backup,
+                R.string.restore_backup_summary,
+                R.drawable.ic_upload_file_24,
+                onRestore,
+            )
+        }
     }
 }
 
@@ -426,14 +465,45 @@ private fun AppDetailsSettings(onBack: () -> Unit) {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.app_version)) },
                 supportingContent = { Text(version) },
+                leadingContent = {
+                    SettingsLeadingIcon(R.string.app_version, R.drawable.ic_info_24)
+                },
             )
         }
-        item { ListItem(headlineContent = { Text(stringResource(R.string.android_requirement)) }) }
-        item { ListItem(headlineContent = { Text(stringResource(R.string.privacy_offline)) }) }
-        item { LinkRow(R.string.privacy_policy, PRIVACY_URL, context) }
-        item { LinkRow(R.string.license, "$REPOSITORY_URL/blob/main/LICENSE", context) }
-        item { LinkRow(R.string.github_repository, REPOSITORY_URL, context) }
-        item { LinkRow(R.string.release_page, "$REPOSITORY_URL/releases", context) }
+        item {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.android_requirement)) },
+                leadingContent = {
+                    SettingsLeadingIcon(R.string.android_requirement, R.drawable.ic_done_24)
+                },
+            )
+        }
+        item {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.privacy_offline)) },
+                leadingContent = {
+                    SettingsLeadingIcon(R.string.privacy_offline, R.drawable.ic_done_24)
+                },
+            )
+        }
+        item { LinkRow(R.string.privacy_policy, R.drawable.ic_info_24, PRIVACY_URL, context) }
+        item {
+            LinkRow(
+                R.string.license,
+                R.drawable.ic_pdf_24,
+                "$REPOSITORY_URL/blob/main/LICENSE",
+                context,
+            )
+        }
+        item { LinkRow(R.string.github_repository, R.drawable.ic_share_24, REPOSITORY_URL, context) }
+        item {
+            LinkRow(
+                R.string.release_page,
+                R.drawable.ic_download_24,
+                "$REPOSITORY_URL/releases",
+                context,
+            )
+        }
         item {
             Button(
                 onClick = {
@@ -520,7 +590,7 @@ private fun SettingsNavigationRow(
             Text(stringResource(summary), maxLines = 2, overflow = TextOverflow.Ellipsis)
         },
         leadingContent = icon?.let { drawable ->
-            { Icon(painterResource(drawable), contentDescription = null) }
+            { SettingsLeadingIcon(label, drawable) }
         },
         trailingContent = {
             Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
@@ -547,12 +617,16 @@ internal fun SettingsSwitchRow(
 internal fun SettingsChoiceRow(
     @StringRes label: Int,
     @StringRes currentValue: Int,
+    @DrawableRes icon: Int? = null,
     onClick: () -> Unit,
 ) {
     ListItem(
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick),
         headlineContent = { Text(stringResource(label)) },
         supportingContent = { Text(stringResource(currentValue)) },
+        leadingContent = icon?.let { drawable ->
+            { SettingsLeadingIcon(label, drawable) }
+        },
         trailingContent = {
             Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
         },
@@ -560,11 +634,18 @@ internal fun SettingsChoiceRow(
 }
 
 @Composable
-private fun SettingsInfoRow(@StringRes label: Int, @StringRes summary: Int) {
+private fun SettingsInfoRow(
+    @StringRes label: Int,
+    @StringRes summary: Int,
+    @DrawableRes icon: Int? = null,
+) {
     ListItem(
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
         headlineContent = { Text(stringResource(label)) },
         supportingContent = { Text(stringResource(summary)) },
+        leadingContent = icon?.let { drawable ->
+            { SettingsLeadingIcon(label, drawable) }
+        },
     )
 }
 
@@ -572,12 +653,14 @@ private fun SettingsInfoRow(@StringRes label: Int, @StringRes summary: Int) {
 private fun SettingsActionRow(
     @StringRes label: Int,
     @StringRes summary: Int,
+    @DrawableRes icon: Int,
     onClick: () -> Unit,
 ) {
     ListItem(
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick),
         headlineContent = { Text(stringResource(label)) },
         supportingContent = { Text(stringResource(summary)) },
+        leadingContent = { SettingsLeadingIcon(label, icon) },
         trailingContent = {
             Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
         },
@@ -620,13 +703,29 @@ internal fun <T> SettingsChoiceDialog(
 }
 
 @Composable
-private fun LinkRow(@StringRes label: Int, url: String, context: Context) {
+private fun LinkRow(
+    @StringRes label: Int,
+    @DrawableRes icon: Int,
+    url: String,
+    context: Context,
+) {
     ListItem(
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { openUrl(context, url) },
         headlineContent = { Text(stringResource(label)) },
+        leadingContent = { SettingsLeadingIcon(label, icon) },
         trailingContent = {
             Icon(painterResource(R.drawable.ic_chevron_right_24), contentDescription = null)
         },
+    )
+}
+
+@Composable
+private fun SettingsLeadingIcon(@StringRes label: Int, @DrawableRes icon: Int) {
+    Icon(
+        painter = painterResource(icon),
+        contentDescription = null,
+        modifier = Modifier.size(24.dp).testTag("settings-icon:$label:$icon"),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 

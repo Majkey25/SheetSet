@@ -8,6 +8,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -46,9 +47,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalConfiguration
@@ -70,7 +75,9 @@ import cz.teply.sheetset.pdf.AnnotationToolGroup
 import cz.teply.sheetset.pdf.DrawingPreset
 import cz.teply.sheetset.pdf.DrawingPresetKind
 import cz.teply.sheetset.pdf.InkAnnotation
+import cz.teply.sheetset.pdf.MAX_ANNOTATION_WIDTH
 import cz.teply.sheetset.pdf.MAX_TEXT_LENGTH
+import cz.teply.sheetset.pdf.MIN_ANNOTATION_WIDTH
 import cz.teply.sheetset.pdf.NormalizedRect
 import cz.teply.sheetset.pdf.PageAnnotation
 import cz.teply.sheetset.pdf.ReaderTool
@@ -86,15 +93,17 @@ internal const val COLOR_PANEL_SCROLL_TAG = "color-panel-scroll"
 
 private val EditorToolbarAccent = Color(0xFF67558D)
 
-internal fun readablePresetIconColor(
-    presetColor: Color,
-    toolbarSurface: Color,
-    toolbarContent: Color,
-): Color = if (presetColor.luminance() < 0.12f && toolbarSurface.luminance() < 0.2f) {
-    toolbarContent
-} else {
-    presetColor
+internal fun presetIconColor(preset: DrawingPreset): Color = Color(preset.color.argb)
+
+internal fun parseHexAnnotationColor(raw: String): AnnotationColor? {
+    val digits = raw.trim().removePrefix("#")
+    if (digits.length != 6 || digits.any { it.digitToIntOrNull(16) == null }) return null
+    val rgb = digits.toIntOrNull(16) ?: return null
+    return AnnotationColor(0xFF000000.toInt() or rgb)
 }
+
+internal fun AnnotationColor.rgbHex(): String =
+    "#" + (argb and 0x00FFFFFF).toString(16).uppercase().padStart(6, '0')
 
 internal data class AnnotationToolbarState(
     val group: AnnotationToolGroup,
@@ -154,17 +163,7 @@ internal fun AnnotationToolbar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (showsWidth(state)) {
-                        ToolbarControl(
-                            stringResource(R.string.decrease_stroke_width),
-                            R.drawable.ic_remove_24,
-                            enabled = state.width > 1,
-                        ) { onWidth(state.width - 1) }
-                        WidthControl(state.width)
-                        ToolbarControl(
-                            stringResource(R.string.increase_stroke_width),
-                            R.drawable.ic_add_24,
-                            enabled = state.width < 40,
-                        ) { onWidth(state.width + 1) }
+                        WidthSliderControl(state.width, state.color, onWidth)
                     }
                     if (!hasSelection && state.tool in setOf(ReaderTool.PEN, ReaderTool.HIGHLIGHTER)) {
                         ToolbarControl(
@@ -174,13 +173,15 @@ internal fun AnnotationToolbar(
                             onClick = onStraightLine,
                         )
                     }
-                    CurrentColorControl(state.color, onColor)
-                    if (state.expanded) {
-                        ToolbarControl(
-                            stringResource(R.string.eyedropper),
-                            R.drawable.ic_colorize_24,
-                            onClick = onEyedropper,
-                        )
+                    if (state.tool != ReaderTool.ERASER) {
+                        CurrentColorControl(state.color, onColor)
+                        if (state.expanded) {
+                            ToolbarControl(
+                                stringResource(R.string.eyedropper),
+                                R.drawable.ic_colorize_24,
+                                onClick = onEyedropper,
+                            )
+                        }
                     }
                     if (hasSelection) {
                         if (state.selectedAnnotation is TextBoxAnnotation) {
@@ -307,7 +308,8 @@ internal fun ColorPanel(
     var value by remember(selected) { mutableFloatStateOf(initialHsv[2]) }
     var alpha by remember(opacity) { mutableIntStateOf(opacity) }
     var advanced by remember(selected) { mutableStateOf(false) }
-    val preview = AnnotationColor(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
+    var hexInput by remember(selected) { mutableStateOf(selected.rgbHex()) }
+    val preview = hsvAnnotationColor(hue, saturation, value)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val maxContentHeight = LocalConfiguration.current.screenHeightDp.dp * 0.8f
 
@@ -316,6 +318,7 @@ internal fun ColorPanel(
         hue = hsv[0]
         saturation = hsv[1]
         value = hsv[2]
+        hexInput = color.rgbHex()
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -355,9 +358,35 @@ internal fun ColorPanel(
                 Text(stringResource(R.string.custom_color))
             }
             if (advanced) {
-                ColorSlider(R.string.hue, hue, 0f..360f) { hue = it }
-                ColorSlider(R.string.saturation, saturation, 0f..1f) { saturation = it }
-                ColorSlider(R.string.brightness, value, 0f..1f) { value = it }
+                ColorSpectrum(
+                    hue = hue,
+                    saturation = saturation,
+                    value = value,
+                ) { nextSaturation, nextValue ->
+                    saturation = nextSaturation
+                    value = nextValue
+                    hexInput = hsvAnnotationColor(hue, nextSaturation, nextValue).rgbHex()
+                }
+                ColorSlider(R.string.hue, hue, 0f..360f) { nextHue ->
+                    hue = nextHue
+                    hexInput = hsvAnnotationColor(nextHue, saturation, value).rgbHex()
+                }
+                OutlinedTextField(
+                    value = hexInput,
+                    onValueChange = { input ->
+                        hexInput = input.uppercase().take(7)
+                        parseHexAnnotationColor(hexInput)?.let { color ->
+                            val hsv = color.toHsv()
+                            hue = hsv[0]
+                            saturation = hsv[1]
+                            value = hsv[2]
+                        }
+                    },
+                    label = { Text("HEX") },
+                    singleLine = true,
+                    isError = parseHexAnnotationColor(hexInput) == null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -365,7 +394,7 @@ internal fun ColorPanel(
             ) {
                 ColorPreview(preview, alpha)
                 Text(
-                    if (advanced) preview.encoded() else annotationColorLabel(preview),
+                    if (advanced) preview.rgbHex() else annotationColorLabel(preview),
                     modifier = Modifier.padding(start = 12.dp).weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -378,7 +407,10 @@ internal fun ColorPanel(
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                TextButton(onClick = { onConfirm(preview, alpha) }) {
+                TextButton(
+                    enabled = parseHexAnnotationColor(hexInput) != null,
+                    onClick = { onConfirm(preview, alpha) },
+                ) {
                     Text(stringResource(R.string.apply))
                 }
             }
@@ -547,12 +579,6 @@ internal fun MusicalSymbolChooser(
 @Composable
 private fun PresetControl(preset: DrawingPreset, selected: Boolean, onClick: () -> Unit) {
     val label = stringResource(preset.label())
-    val presetColor = Color(preset.color.argb)
-    val iconColor = readablePresetIconColor(
-        presetColor,
-        MaterialTheme.colorScheme.surfaceContainerHigh,
-        MaterialTheme.colorScheme.onSurface,
-    )
     ToolbarControl(
         label = label,
         icon = if (preset.kind == DrawingPresetKind.HIGHLIGHTER) {
@@ -561,7 +587,8 @@ private fun PresetControl(preset: DrawingPreset, selected: Boolean, onClick: () 
             R.drawable.ic_edit_24
         },
         selected = selected,
-        tint = iconColor.copy(alpha = (preset.opacity / 255f).coerceAtLeast(0.55f)),
+        tint = presetIconColor(preset),
+        state = preset.color.rgbHex(),
         onClick = onClick,
     )
 }
@@ -572,6 +599,7 @@ private fun ToolbarControl(
     @DrawableRes icon: Int,
     selected: Boolean? = null,
     tint: Color? = null,
+    state: String? = null,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
@@ -590,6 +618,7 @@ private fun ToolbarControl(
             ).semantics {
             contentDescription = label
             selected?.let { this.selected = it }
+            state?.let { stateDescription = it }
         },
         enabled = enabled,
         onClick = onClick,
@@ -608,15 +637,40 @@ private fun ToolbarControl(
 }
 
 @Composable
-private fun WidthControl(width: Int) {
+private fun WidthSliderControl(width: Int, color: AnnotationColor, onWidth: (Int) -> Unit) {
     val label = stringResource(R.string.stroke_width)
-    Box(
-        Modifier.size(48.dp).semantics {
-            contentDescription = label
-            stateDescription = width.toString()
-        },
-        contentAlignment = Alignment.Center,
-    ) { Text(width.toString()) }
+    val outline = MaterialTheme.colorScheme.onSurface
+    Row(
+        Modifier.width(220.dp).height(56.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.width(48.dp).height(32.dp).testTag("stroke-width-preview")) {
+            val strokeWidth = (1f + (width - MIN_ANNOTATION_WIDTH) * 2.6f).dp.toPx()
+            val start = Offset(6.dp.toPx(), size.height / 2f)
+            val end = Offset(size.width - 6.dp.toPx(), size.height / 2f)
+            drawLine(
+                outline,
+                start,
+                end,
+                strokeWidth + 2.dp.toPx(),
+                StrokeCap.Round,
+            )
+            drawLine(Color(color.argb), start, end, strokeWidth, StrokeCap.Round)
+        }
+        Slider(
+            value = width.toFloat(),
+            onValueChange = { value ->
+                val next = value.roundToInt().coerceIn(MIN_ANNOTATION_WIDTH, MAX_ANNOTATION_WIDTH)
+                if (next != width) onWidth(next)
+            },
+            valueRange = MIN_ANNOTATION_WIDTH.toFloat()..MAX_ANNOTATION_WIDTH.toFloat(),
+            steps = MAX_ANNOTATION_WIDTH - MIN_ANNOTATION_WIDTH - 1,
+            modifier = Modifier.width(172.dp).semantics {
+                contentDescription = label
+                stateDescription = "$width / $MAX_ANNOTATION_WIDTH"
+            },
+        )
+    }
 }
 
 @Composable
@@ -683,6 +737,47 @@ private fun SwatchRows(
             }
             repeat(4 - row.size) { Spacer(Modifier.size(48.dp)) }
         }
+    }
+}
+
+@Composable
+private fun ColorSpectrum(
+    hue: Float,
+    saturation: Float,
+    value: Float,
+    onChange: (Float, Float) -> Unit,
+) {
+    val label = stringResource(R.string.custom_color)
+    val hueColor = Color(AndroidColor.HSVToColor(floatArrayOf(hue, 1f, 1f)))
+    fun update(point: Offset, width: Float, height: Float) {
+        if (width <= 0f || height <= 0f) return
+        onChange(
+            (point.x / width).coerceIn(0f, 1f),
+            (1f - point.y / height).coerceIn(0f, 1f),
+        )
+    }
+    Canvas(
+        Modifier.fillMaxWidth().height(176.dp).clip(RoundedCornerShape(12.dp))
+            .testTag("color-spectrum")
+            .semantics {
+                contentDescription = label
+                stateDescription = hsvAnnotationColor(hue, saturation, value).rgbHex()
+            }
+            .pointerInput(hue) {
+                detectDragGestures(
+                    onDragStart = { point -> update(point, size.width.toFloat(), size.height.toFloat()) },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        update(change.position, size.width.toFloat(), size.height.toFloat())
+                    },
+                )
+            },
+    ) {
+        drawRect(Brush.horizontalGradient(listOf(Color.White, hueColor)))
+        drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+        val center = Offset(saturation * size.width, (1f - value) * size.height)
+        drawCircle(Color.Black, radius = 10.dp.toPx(), center = center, style = Stroke(4.dp.toPx()))
+        drawCircle(Color.White, radius = 8.dp.toPx(), center = center, style = Stroke(2.dp.toPx()))
     }
 }
 
@@ -792,16 +887,19 @@ private fun showsWidth(state: AnnotationToolbarState): Boolean = when {
 @Composable
 private fun annotationColorDescription(color: AnnotationColor, includeEncoded: Boolean): String {
     val label = annotationColorLabel(color)
-    return if (includeEncoded) "$label ${color.encoded()}" else label
+    return if (includeEncoded) "$label ${color.rgbHex()}" else label
 }
 
 private fun AnnotationColor.toHsv(): FloatArray = FloatArray(3).also {
     AndroidColor.colorToHSV(argb, it)
 }
 
+private fun hsvAnnotationColor(hue: Float, saturation: Float, value: Float): AnnotationColor =
+    AnnotationColor(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
+
 @StringRes
 private fun DrawingPreset.label(): Int = when (id) {
-    "pen-1" -> R.string.pen_1
+    "pen-1" -> R.string.pen
     "pen-2" -> R.string.pen_2
     "marker" -> R.string.marker
     "highlighter" -> R.string.highlighter

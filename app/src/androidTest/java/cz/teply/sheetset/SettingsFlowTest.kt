@@ -99,6 +99,9 @@ class SettingsFlowTest {
         }
 
         openMenuPage("Reader and page layout")
+        assertSettingsIcon(R.string.page_layout, R.drawable.ic_view_module_24)
+        assertSettingsIcon(R.string.page_fit, R.drawable.ic_straighten_24)
+        assertSettingsIcon(R.string.gestures, R.drawable.ic_gesture_24)
         scrollToText("Keep screen awake")
         composeRule.onNodeWithText("Keep screen awake").performClick()
         composeRule.runOnIdle { assertFalse(settings.keepScreenAwake) }
@@ -136,6 +139,10 @@ class SettingsFlowTest {
             }
         }
         composeRule.onNodeWithText("Backup and restore").performScrollTo().performClick()
+
+        assertSettingsIcon(R.string.create_backup, R.drawable.ic_download_24)
+        assertSettingsIcon(R.string.share_backup, R.drawable.ic_share_24)
+        assertSettingsIcon(R.string.restore_backup, R.drawable.ic_upload_file_24)
 
         composeRule.onNodeWithText("Create backup").performClick()
         composeRule.onNodeWithText("Share backup").performClick()
@@ -223,8 +230,12 @@ class SettingsFlowTest {
 
         scrollToText("Version")
         composeRule.onNodeWithText("Version").assertIsDisplayed()
+        assertSettingsIcon(R.string.app_version, R.drawable.ic_info_24)
         scrollToText("Privacy policy")
         composeRule.onNodeWithText("Privacy policy").assertIsDisplayed()
+        assertSettingsIcon(R.string.privacy_policy, R.drawable.ic_info_24)
+        scrollToText("GitHub repository")
+        assertSettingsIcon(R.string.github_repository, R.drawable.ic_share_24)
         scrollToText("Support this app → Buy Me a Coffee")
         composeRule.onNodeWithText("Support this app → Buy Me a Coffee")
             .assertIsDisplayed()
@@ -280,5 +291,10 @@ class SettingsFlowTest {
 
     private fun scrollToTag(tag: String) {
         composeRule.onNodeWithTag("settings-list").performScrollToNode(hasTestTag(tag))
+    }
+
+    private fun assertSettingsIcon(label: Int, icon: Int) {
+        composeRule.onNodeWithTag("settings-icon:$label:$icon", useUnmergedTree = true)
+            .assertIsDisplayed()
     }
 }

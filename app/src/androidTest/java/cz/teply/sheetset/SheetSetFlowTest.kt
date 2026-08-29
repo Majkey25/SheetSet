@@ -8,10 +8,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -24,10 +28,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.espresso.Espresso
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
@@ -156,7 +163,6 @@ class SheetSetFlowTest {
                 )
             }
         }
-
         composeRule.onNodeWithText("Setlists").performClick()
         composeRule.onNodeWithContentDescription("Search setlists").performClick()
         composeRule.onNodeWithText("Search setlists").performTextInput("saturday")
@@ -324,7 +330,7 @@ class SheetSetFlowTest {
     }
 
     @Test
-    fun pdfCanBeAddedInsideSetlistEditor() {
+    fun samePdfCanBeAddedToSetlistTwice() {
         val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
         var state by mutableStateOf(
             LibraryUiState(
@@ -350,14 +356,18 @@ class SheetSetFlowTest {
                 )
             }
         }
+        composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Setlists").performClick()
         composeRule.onNodeWithText("Show").performClick()
         composeRule.onNodeWithText("Add PDFs").performClick()
         composeRule.onNodeWithText("Song").performClick()
         composeRule.onNodeWithText("Add").performClick()
+        composeRule.onNodeWithText("Add PDFs").performClick()
+        composeRule.onAllNodesWithText("Song")[1].performClick()
+        composeRule.onNodeWithText("Add").performClick()
 
-        composeRule.onNodeWithText("Song").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Song").assertCountEquals(2)
     }
 
     @Test
@@ -444,12 +454,14 @@ class SheetSetFlowTest {
         composeRule.onNodeWithContentDescription("Export").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Annotation").performClick()
 
-        composeRule.onNodeWithContentDescription("Draw").performClick()
         composeRule.onNodeWithContentDescription("Objects").assertIsDisplayed()
-        listOf("Pen 1", "Pen 2", "Marker", "Highlighter", "Eraser", "Color", "Done")
+        listOf("Pen", "Highlighter", "Eraser", "Color", "Done")
             .forEach { label ->
                 composeRule.onAllNodesWithContentDescription(label).assertCountEquals(1)
             }
+        listOf("Pen 2", "Marker", "Select", "Lasso").forEach { label ->
+            composeRule.onAllNodesWithContentDescription(label).assertCountEquals(0)
+        }
         listOf(
             "Black",
             "Red",
@@ -463,11 +475,13 @@ class SheetSetFlowTest {
             composeRule.onAllNodesWithContentDescription(label).assertCountEquals(0)
         }
 
-        composeRule.onNodeWithContentDescription("Pen 1").performClick()
-        composeRule.onNodeWithContentDescription("Pen 1").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Pen").assertIsSelected()
         composeRule.onNodeWithContentDescription("Straight line").assertIsNotSelected()
         composeRule.onNodeWithContentDescription("Straight line").performClick()
         composeRule.onNodeWithContentDescription("Straight line").assertIsSelected()
+
+        composeRule.onNodeWithContentDescription("Eraser").performClick()
+        composeRule.onAllNodesWithContentDescription("Color").assertCountEquals(0)
     }
 
     @Test
@@ -476,6 +490,8 @@ class SheetSetFlowTest {
         setReaderContent(textAnnotation = text, file = onePagePdf())
 
         composeRule.onNodeWithContentDescription("Annotation").performClick()
+        composeRule.onNodeWithContentDescription("Objects").performClick()
+        composeRule.onNodeWithContentDescription("Select").assertIsSelected()
         waitForPdfPage()
         composeRule.onNodeWithTag(PDF_PAGE_TEST_TAG).performTouchInput {
             click(center)
@@ -513,7 +529,6 @@ class SheetSetFlowTest {
     fun doneThenAnnotateRestoresTheLastEditorTool() {
         setReaderContent()
         composeRule.onNodeWithContentDescription("Annotation").performClick()
-        composeRule.onNodeWithContentDescription("Draw").performClick()
         composeRule.onNodeWithContentDescription("Highlighter").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Done").performClick()
 
@@ -537,8 +552,7 @@ class SheetSetFlowTest {
             },
         )
         composeRule.onNodeWithContentDescription("Annotation").performClick()
-        composeRule.onNodeWithContentDescription("Draw").performClick()
-        composeRule.onNodeWithContentDescription("Pen 1").performClick()
+        composeRule.onNodeWithContentDescription("Pen").performClick()
 
         waitForPdfPage()
         composeRule.onNodeWithTag(PDF_PAGE_TEST_TAG).performTouchInput {
@@ -608,7 +622,7 @@ class SheetSetFlowTest {
                 editor = defaults.copy(
                     drawOrder = listOf("pen-2", "pen-1", "marker", "highlighter"),
                     presets = defaults.presets.map { preset ->
-                        preset.copy(visible = preset.id != "highlighter")
+                        preset.copy(visible = preset.id in setOf("pen-1", "pen-2"))
                     },
                 ),
             ),
@@ -622,17 +636,21 @@ class SheetSetFlowTest {
     }
 
     @Test
-    fun consecutivePresetUpdatesUseTheLatestEditorState() {
+    fun strokeWidthUsesOneSixStopSlider() {
         val updates = mutableListOf<AppSettings>()
         setReaderContent(onSettings = updates::add)
         composeRule.onNodeWithContentDescription("Annotation").performClick()
-        composeRule.onNodeWithContentDescription("Draw").performClick()
 
-        composeRule.onNodeWithContentDescription("Increase stroke width").performClick()
-        composeRule.onNodeWithContentDescription("Increase stroke width").performClick()
+        composeRule.onAllNodesWithContentDescription("Decrease stroke width").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("Increase stroke width").assertCountEquals(0)
+        composeRule.onNodeWithTag("stroke-width-preview").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Stroke width")
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(6f)
+            }
 
         composeRule.runOnIdle {
-            assertEquals(listOf(21, 22), updates.takeLast(2).map { it.editor.preset("pen-1").width })
+            assertEquals(6, updates.last().editor.preset("pen-1").width)
         }
     }
 
@@ -663,17 +681,26 @@ class SheetSetFlowTest {
 
         listOf("Black", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink")
             .forEach { composeRule.onAllNodesWithContentDescription(it).assertCountEquals(1) }
-        composeRule.onAllNodesWithContentDescription("Custom color #FF123456").assertCountEquals(1)
+        composeRule.onAllNodesWithContentDescription("Custom color #123456").assertCountEquals(1)
         listOf("Recent colors", "Custom color", "Opacity", "Eyedropper").forEach { label ->
             composeRule.onNodeWithTag(COLOR_PANEL_SCROLL_TAG).performScrollToNode(hasText(label))
             composeRule.onNodeWithText(label).assertIsDisplayed()
         }
         composeRule.onAllNodesWithText("Hue").assertCountEquals(0)
         composeRule.onNodeWithText("Custom color").performClick()
-        listOf("Hue", "Saturation", "Brightness").forEach { label ->
+        composeRule.onNodeWithTag(COLOR_PANEL_SCROLL_TAG).performScrollToNode(hasTestTag("color-spectrum"))
+        composeRule.onNodeWithTag("color-spectrum").assertIsDisplayed()
+        listOf("Hue", "HEX").forEach { label ->
             composeRule.onNodeWithTag(COLOR_PANEL_SCROLL_TAG).performScrollToNode(hasText(label))
             composeRule.onNodeWithText(label).assertIsDisplayed()
         }
+        composeRule.onNode(hasSetTextAction() and hasText("#111111")).assertIsDisplayed()
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("#12ABEF")
+        composeRule.onNode(hasSetTextAction()).assertTextContains("#12ABEF")
+        composeRule.onAllNodesWithText("#12ABEF").assertCountEquals(2)
+        composeRule.onNodeWithText("Apply").assertIsEnabled()
+        composeRule.onAllNodesWithText("Saturation").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Brightness").assertCountEquals(0)
     }
 
     @Test

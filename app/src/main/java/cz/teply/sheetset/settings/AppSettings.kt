@@ -16,7 +16,7 @@ data class AppSettings(
     val pageTurnTaps: Boolean = true,
     val pageTurnSwipes: Boolean = true,
     val autoHideControls: Boolean = true,
-    val defaultTool: ReaderDefaultTool = ReaderDefaultTool.VIEW,
+    val defaultTool: ReaderDefaultTool = ReaderDefaultTool.PEN,
     val textSize: AnnotationTextSize = AnnotationTextSize.MEDIUM,
     val readerLayout: ReaderLayout = ReaderLayout.SINGLE,
     val themeMode: ThemeMode = ThemeMode.LIGHT,

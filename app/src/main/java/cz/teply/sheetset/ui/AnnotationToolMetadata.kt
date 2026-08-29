@@ -23,7 +23,7 @@ internal data class ObjectToolMetadata(
 
 internal val objectToolMetadata = PERSISTED_OBJECT_TOOLS.map { persisted ->
     val (label, icon) = when (persisted.readerTool) {
-        ReaderTool.SELECT -> R.string.select to R.drawable.ic_select_24
+        ReaderTool.SELECT -> R.string.select to R.drawable.ic_gesture_24
         ReaderTool.LASSO -> R.string.lasso to R.drawable.ic_select_24
         ReaderTool.TEXT_BOX -> R.string.text_box to R.drawable.ic_text_fields_24
         ReaderTool.SYMBOL -> R.string.musical_symbol to R.drawable.ic_music_note_24

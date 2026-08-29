@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.9] - 2026-08-29
+
+### Changed
+
+- Replaced annotation width buttons with one six-step slider and a live thickness preview.
+- Unified pen, marker, shape, and highlighter widths from the thinnest pen stroke to the widest highlight.
+- Made dragged setlist rows scale as one unit and preserved stable identities for repeated PDFs.
+
+### Fixed
+
+- Reduced setlist reorder work to one moved row instead of rebuilding the full list at every crossed position.
+
+## [0.5.0-alpha.8] - 2026-08-29
+
+### Changed
+
+- Added consistent leading icons to Reader, Backup and restore, and App details settings so actions are faster to recognize without adding extra controls.
+- Added a touch color spectrum and exact six-digit HEX input for custom annotation colors.
+- Made pen and highlighter icons use their exact selected color.
+
+### Fixed
+
+- Fixed the crash when drawing with the widest highlighter setting.
+
+## [0.5.0-alpha.6] - 2026-08-28
+
+### Changed
+
+- Reduced the default drawing toolbar to one pen, one highlighter, and one eraser with a single color control.
+- Expanded the highlighter's ten width levels from a usable thin mark to a clearly broad text highlight while keeping pen widths precise.
+- Replaced the square launcher artwork with a transparent adaptive notebook icon and a rounded black fallback.
+
+### Fixed
+
+- Removed color controls while the eraser is active and replaced duplicate selection cursors with a clear hand tool.
+- Migrated older editor settings and backups to the compact tool layout without losing saved colors, order, or opacity.
+
 ## [0.5.0-alpha.5] - 2026-08-26
 
 ### Added

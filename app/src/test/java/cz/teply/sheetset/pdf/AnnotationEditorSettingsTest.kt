@@ -1,6 +1,7 @@
 package cz.teply.sheetset.pdf
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,6 +33,9 @@ class AnnotationEditorSettingsTest {
             settings.copy(presets = settings.presets.map { it.copy(width = 0) })
         }
         assertThrows(IllegalArgumentException::class.java) {
+            settings.copy(presets = settings.presets.map { it.copy(width = 7) })
+        }
+        assertThrows(IllegalArgumentException::class.java) {
             settings.copy(quickColors = List(9) { AnnotationColor.BLACK })
         }
         assertThrows(IllegalArgumentException::class.java) {
@@ -53,6 +57,81 @@ class AnnotationEditorSettingsTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             settings.copy(visibleObjectTools = emptySet())
+        }
+    }
+
+    @Test
+    fun defaultsExposeOnlyEssentialDrawingTools() {
+        val settings = AnnotationEditorSettings.defaults()
+
+        assertEquals(
+            listOf("pen-1", "highlighter"),
+            settings.drawOrder.filter { settings.preset(it).visible },
+        )
+        assertEquals(2, settings.preset("pen-1").width)
+        assertEquals(5, settings.preset("highlighter").width)
+        assertFalse("lasso" in settings.visibleObjectTools)
+    }
+
+    @Test
+    fun legacyEditorJsonMigratesWidthAndDuplicateTools() {
+        val root = JSONObject(AnnotationEditorSettingsJson.encode(AnnotationEditorSettings.defaults()))
+        root.remove("version")
+        val oldWidths = listOf(20, 20, 30, 40)
+        val presets = root.getJSONArray("presets")
+        repeat(presets.length()) { index ->
+            presets.getJSONObject(index)
+                .put("width", oldWidths[index])
+                .put("visible", true)
+        }
+        root.put("visibleObjectTools", JSONArray(DEFAULT_OBJECT_TOOL_ORDER))
+
+        val migrated = AnnotationEditorSettingsJson.decode(root.toString())
+
+        assertEquals(listOf(2, 2, 2, 5), migrated.presets.map(DrawingPreset::width))
+        assertEquals(
+            listOf("pen-1", "highlighter"),
+            migrated.drawOrder.filter { migrated.preset(it).visible },
+        )
+        assertFalse("lasso" in migrated.visibleObjectTools)
+    }
+
+    @Test
+    fun versionTwoWidthsMigrateToTheNearestSharedStop() {
+        val root = JSONObject(AnnotationEditorSettingsJson.encode(AnnotationEditorSettings.defaults()))
+        root.put("version", 2)
+        val widths = listOf(10, 1, 4, 5)
+        val presets = root.getJSONArray("presets")
+        repeat(presets.length()) { index ->
+            presets.getJSONObject(index).put("width", widths[index])
+        }
+
+        val migrated = AnnotationEditorSettingsJson.decode(root.toString())
+
+        assertFalse(AnnotationEditorSettingsJson.isLegacy(root.toString()))
+        assertEquals(listOf(3, 1, 2, 5), migrated.presets.map(DrawingPreset::width))
+    }
+
+    @Test
+    fun sixWidthLevelsShareThinAndWideBounds() {
+        assertEquals(0.002f, 1.normalizedAnnotationWidth(), 0f)
+        assertEquals(0.2f, 6.normalizedAnnotationWidth(), 0f)
+        assertEquals(1, 0.002f.annotationWidthLevel())
+        assertEquals(6, 0.2f.annotationWidthLevel())
+        assertEquals(0.002f, 1.normalizedHighlighterWidth(), 0.0001f)
+        assertEquals(0.2f, 6.normalizedHighlighterWidth(), 0.0001f)
+        assertEquals(1, 0.002f.highlighterWidthLevel())
+        assertEquals(6, 0.2f.highlighterWidthLevel())
+
+        val widestHighlight = InkAnnotation(
+            id = "wide-highlight",
+            kind = InkKind.HIGHLIGHTER,
+            width = 6.normalizedHighlighterWidth(),
+            points = listOf(NormalizedPoint(0.1f, 0.5f), NormalizedPoint(0.9f, 0.5f)),
+        )
+        assertEquals(0.2f, widestHighlight.width, 0.0001f)
+        assertThrows(IllegalArgumentException::class.java) {
+            widestHighlight.copy(width = 0.2001f)
         }
     }
 
