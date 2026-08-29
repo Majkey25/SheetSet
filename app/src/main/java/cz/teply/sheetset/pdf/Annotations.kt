@@ -102,7 +102,7 @@ data class InkAnnotation(
 ) : PageAnnotation {
     init {
         requireValidId(id)
-        require(width > 0f && width <= 0.1f) { "Invalid ink width" }
+        require(width > 0f && width <= 0.2f) { "Invalid ink width" }
         require(points.isNotEmpty() && points.size <= MAX_POINTS_PER_INK) {
             "Invalid ink point count"
         }

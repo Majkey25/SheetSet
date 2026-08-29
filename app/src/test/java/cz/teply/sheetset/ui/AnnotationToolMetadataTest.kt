@@ -1,18 +1,21 @@
 package cz.teply.sheetset.ui
 
 import androidx.compose.ui.graphics.Color
+import cz.teply.sheetset.pdf.AnnotationColor
+import cz.teply.sheetset.pdf.AnnotationEditorSettings
 import cz.teply.sheetset.pdf.PERSISTED_OBJECT_TOOLS
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class AnnotationToolMetadataTest {
     @Test
-    fun darkPresetIconUsesReadableContentColorOnlyWhenNeeded() {
-        val darkSurface = Color(0xFF292929)
+    fun selectionToolsUseDistinctIcons() {
+        val select = objectToolMetadata.single { it.id == "select" }
+        val lasso = objectToolMetadata.single { it.id == "lasso" }
 
-        assertEquals(Color.White, readablePresetIconColor(Color.Black, darkSurface, Color.White))
-        assertEquals(Color.Red, readablePresetIconColor(Color.Red, darkSurface, Color.White))
-        assertEquals(Color.Black, readablePresetIconColor(Color.Black, Color.White, Color.Black))
+        assertNotEquals(select.icon, lasso.icon)
     }
 
     @Test
@@ -30,5 +33,24 @@ class AnnotationToolMetadataTest {
         assertEquals(uiIds.size, uiIds.distinct().size)
         assertEquals(uiTools.size, uiTools.distinct().size)
         persistedIds.forEach { id -> assertEquals(1, uiIds.count { it == id }) }
+    }
+
+    @Test
+    fun presetIconUsesTheExactSelectedColor() {
+        val custom = AnnotationColor(0xFF123456.toInt())
+        val preset = AnnotationEditorSettings.defaults().preset("pen-1").copy(color = custom)
+
+        assertEquals(Color(custom.argb), presetIconColor(preset))
+    }
+
+    @Test
+    fun hexColorAcceptsRgbAndRejectsInvalidInput() {
+        val expected = AnnotationColor(0xFF12ABEF.toInt())
+
+        assertEquals(expected, parseHexAnnotationColor("#12ABEF"))
+        assertEquals(expected, parseHexAnnotationColor("12abef"))
+        assertEquals("#12ABEF", expected.rgbHex())
+        assertNull(parseHexAnnotationColor("#12ABEG"))
+        assertNull(parseHexAnnotationColor("#FF12ABEF"))
     }
 }

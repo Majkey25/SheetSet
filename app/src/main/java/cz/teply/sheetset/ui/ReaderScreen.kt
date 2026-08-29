@@ -68,6 +68,7 @@ import cz.teply.sheetset.pdf.AnnotationHistory
 import cz.teply.sheetset.pdf.AnnotationToolGroup
 import cz.teply.sheetset.pdf.DrawingPreset
 import cz.teply.sheetset.pdf.InkAnnotation
+import cz.teply.sheetset.pdf.InkKind
 import cz.teply.sheetset.pdf.MarkupAnnotation
 import cz.teply.sheetset.pdf.NormalizedPoint
 import cz.teply.sheetset.pdf.NormalizedRect
@@ -80,6 +81,10 @@ import cz.teply.sheetset.pdf.TextBoxAnnotation
 import cz.teply.sheetset.pdf.canAppendAnnotations
 import cz.teply.sheetset.pdf.duplicateSelection
 import cz.teply.sheetset.pdf.manualMarkup
+import cz.teply.sheetset.pdf.annotationWidthLevel
+import cz.teply.sheetset.pdf.highlighterWidthLevel
+import cz.teply.sheetset.pdf.normalizedAnnotationWidth
+import cz.teply.sheetset.pdf.normalizedHighlighterWidth
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.ReaderLayout
 import java.util.UUID
@@ -125,7 +130,7 @@ fun ReaderScreen(
     }
     var objectColor by remember(reader.score.id) { mutableStateOf(AnnotationColor.BLACK) }
     var objectOpacity by remember(reader.score.id) { mutableIntStateOf(255) }
-    var objectWidth by remember(reader.score.id) { mutableIntStateOf(20) }
+    var objectWidth by remember(reader.score.id) { mutableIntStateOf(2) }
     var straightLine by remember(reader.score.id) { mutableStateOf(false) }
     var textBounds by remember { mutableStateOf<NormalizedRect?>(null) }
     var editingText by remember { mutableStateOf<TextBoxAnnotation?>(null) }
@@ -328,7 +333,7 @@ fun ReaderScreen(
                 view.selectedAnnotationIds = selectedAnnotationIds
                 view.annotationColor = currentColor
                 view.annotationOpacity = currentOpacity
-                view.shapeWidth = objectWidth.normalizedWidth()
+                view.shapeWidth = objectWidth.normalizedAnnotationWidth()
                 view.straightLine = straightLine
                 view.textSize = settings.textSize
                 view.pageFit = if (effectiveLayout == ReaderLayout.HALF) {
@@ -606,7 +611,7 @@ fun ReaderScreen(
                         id = UUID.randomUUID().toString(),
                         symbolId = symbolId,
                         center = point,
-                        size = (objectWidth / 250f).coerceIn(0.01f, 0.5f),
+                        size = (objectWidth / 50f).coerceIn(0.01f, 0.5f),
                         rotationDegrees = 0f,
                         color = objectColor,
                         opacity = objectOpacity,
@@ -861,8 +866,6 @@ private fun ReaderControl(
 private fun List<AnnotationColor>.withRecent(color: AnnotationColor): List<AnnotationColor> =
     (listOf(color) + filterNot { it == color }).take(4)
 
-private fun Int.normalizedWidth(): Float = coerceIn(1, 40) / 5_000f
-
 private fun PageAnnotation.annotationColor(): AnnotationColor = when (this) {
     is InkAnnotation -> color
     is MarkupAnnotation -> color
@@ -889,15 +892,25 @@ private fun PageAnnotation.withAppearance(color: AnnotationColor, opacity: Int):
     }
 
 private fun PageAnnotation.toolbarWidth(): Int = when (this) {
-    is InkAnnotation -> (width * 5_000f).roundToInt().coerceIn(1, 40)
-    is ShapeAnnotation -> (width * 5_000f).roundToInt().coerceIn(1, 40)
-    is SymbolAnnotation -> (size * 250f).roundToInt().coerceIn(1, 40)
-    is MarkupAnnotation, is TextBoxAnnotation -> 20
+    is InkAnnotation -> if (kind == InkKind.HIGHLIGHTER) {
+        width.highlighterWidthLevel()
+    } else {
+        width.annotationWidthLevel()
+    }
+    is ShapeAnnotation -> width.annotationWidthLevel()
+    is SymbolAnnotation -> (size * 50f).roundToInt().coerceIn(1, 10)
+    is MarkupAnnotation, is TextBoxAnnotation -> 2
 }
 
 private fun PageAnnotation.withToolbarWidth(width: Int): PageAnnotation = when (this) {
-    is InkAnnotation -> copy(width = width.normalizedWidth())
-    is ShapeAnnotation -> copy(width = width.normalizedWidth())
-    is SymbolAnnotation -> copy(size = (width / 250f).coerceIn(0.01f, 0.5f))
+    is InkAnnotation -> copy(
+        width = if (kind == InkKind.HIGHLIGHTER) {
+            width.normalizedHighlighterWidth()
+        } else {
+            width.normalizedAnnotationWidth()
+        },
+    )
+    is ShapeAnnotation -> copy(width = width.normalizedAnnotationWidth())
+    is SymbolAnnotation -> copy(size = (width / 50f).coerceIn(0.01f, 0.5f))
     is MarkupAnnotation, is TextBoxAnnotation -> this
 }

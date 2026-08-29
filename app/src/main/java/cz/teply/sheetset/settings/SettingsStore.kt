@@ -10,8 +10,12 @@ private const val EDITOR_JSON_KEY = "annotation_editor_json"
 class SettingsStore(private val preferences: SharedPreferences) {
     fun load(): AppSettings {
         val defaults = AppSettings()
+        val editorRaw = preferences.getString(EDITOR_JSON_KEY, null)
+        val legacyEditorUi = editorRaw?.let { raw ->
+            runCatching { AnnotationEditorSettingsJson.isLegacy(raw) }.getOrDefault(false)
+        } ?: false
         val editor = if (preferences.contains(EDITOR_JSON_KEY)) {
-            preferences.getString(EDITOR_JSON_KEY, null)?.let { raw ->
+            editorRaw?.let { raw ->
                 runCatching { AnnotationEditorSettingsJson.decode(raw) }.getOrNull()
             } ?: AnnotationEditorSettings.defaults()
         } else {
@@ -26,7 +30,9 @@ class SettingsStore(private val preferences: SharedPreferences) {
             pageTurnTaps = preferences.getBoolean("page_turn_taps", defaults.pageTurnTaps),
             pageTurnSwipes = preferences.getBoolean("page_turn_swipes", defaults.pageTurnSwipes),
             autoHideControls = preferences.getBoolean("auto_hide_controls", defaults.autoHideControls),
-            defaultTool = preferences.enum("default_tool", defaults.defaultTool),
+            defaultTool = preferences.enum("default_tool", defaults.defaultTool).let { tool ->
+                if (legacyEditorUi && tool == ReaderDefaultTool.VIEW) ReaderDefaultTool.PEN else tool
+            },
             textSize = preferences.enum("text_size", defaults.textSize),
             readerLayout = preferences.enum("reader_layout", defaults.readerLayout),
             themeMode = preferences.enum("theme_mode", defaults.themeMode),
@@ -57,9 +63,9 @@ private fun legacyEditor(
     highlighterStrength: HighlightStrength,
 ): AnnotationEditorSettings {
     val width = when (penWidth) {
-        ToolSize.THIN -> 10
-        ToolSize.MEDIUM -> 20
-        ToolSize.THICK -> 40
+        ToolSize.THIN -> 1
+        ToolSize.MEDIUM -> 2
+        ToolSize.THICK -> 4
     }
     val opacity = when (highlighterStrength) {
         HighlightStrength.LIGHT -> 70
@@ -70,7 +76,7 @@ private fun legacyEditor(
     return defaults.copy(
         presets = defaults.presets.map { preset ->
             if (preset.kind == DrawingPresetKind.HIGHLIGHTER) {
-                preset.copy(width = (width * 4).coerceAtMost(40), opacity = opacity)
+                preset.copy(width = 5, opacity = opacity)
             } else if (preset.kind == DrawingPresetKind.PEN) {
                 preset.copy(width = width)
             } else {

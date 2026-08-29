@@ -1,5 +1,6 @@
 package cz.teply.sheetset.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -85,9 +86,19 @@ internal fun targetIndexForDrag(
     return (origin + (distance / rowHeight).roundToInt()).coerceIn(0, lastIndex)
 }
 
-private fun List<String>.toSetlistEntries(): List<SetlistScoreEntry> = mapIndexed { index, id ->
-    SetlistScoreEntry(key = "$id-$index", scoreId = id)
+internal fun setlistOccurrenceKeys(scoreIds: List<String>): List<String> {
+    val occurrences = mutableMapOf<String, Int>()
+    return scoreIds.map { id ->
+        val occurrence = occurrences.getOrDefault(id, 0)
+        occurrences[id] = occurrence + 1
+        "$id-$occurrence"
+    }
 }
+
+internal fun setlistDragScale(dragging: Boolean): Float = if (dragging) 0.96f else 1f
+
+private fun List<String>.toSetlistEntries(): List<SetlistScoreEntry> =
+    zip(setlistOccurrenceKeys(this)) { id, key -> SetlistScoreEntry(key, id) }
 
 private fun <T> List<T>.moved(fromIndex: Int, toIndex: Int): List<T> =
     toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
@@ -390,10 +401,10 @@ fun SetlistDetail(
             rowHeight = rowHeight,
             lastIndex = dragSource.lastIndex,
         )
-        if (target == draggedIndex) return
+        val current = draggedIndex
+        if (target == current) return
+        displayedScores.add(target, displayedScores.removeAt(current))
         draggedIndex = target
-        displayedScores.clear()
-        displayedScores.addAll(dragSource.moved(from, target))
     }
 
     fun stopAutoScroll() {
@@ -622,11 +633,14 @@ private fun SetlistScoreRow(
     val down = stringResource(R.string.move_down)
     val remove = stringResource(R.string.remove)
     val reorder = stringResource(R.string.reorder)
+    val dragScale by animateFloatAsState(setlistDragScale(dragging), label = "setlist-drag-scale")
     Row(
         Modifier.fillMaxWidth().height(SetlistRowHeight)
             .zIndex(if (dragging) 1f else 0f).graphicsLayer {
             translationY = if (dragging) dragOffset else 0f
             shadowElevation = if (dragging) 8.dp.toPx() else 0f
+            scaleX = dragScale
+            scaleY = dragScale
         }.clickable(enabled = !editing && enabled) {
             actions.openSetlistScore(setlist.id, index)
         }.padding(vertical = 10.dp),

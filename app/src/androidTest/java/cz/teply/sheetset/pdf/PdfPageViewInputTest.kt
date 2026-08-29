@@ -68,7 +68,61 @@ class PdfPageViewInputTest {
         val stroke = added.single() as InkAnnotation
         assertEquals(AnnotationColor.BLUE, stroke.color)
         assertEquals(255, stroke.opacity)
-        assertEquals(0.004f, stroke.width, 0.0001f)
+        assertEquals(0.005f, stroke.width, 0.0001f)
+    }
+
+    @Test
+    fun highlighterUsesReadableDefaultWidthAndOpacity() {
+        val added = mutableListOf<PageAnnotation>()
+        val settings = AnnotationEditorSettings.defaults()
+        scenario.onActivity {
+            view.editorSettings = settings
+            view.activeDrawingPreset = settings.preset("highlighter")
+            view.tool = ReaderTool.HIGHLIGHTER
+            view.onAddAnnotation = added::add
+        }
+
+        drag(pagePoint(0.2f, 0.5f), pagePoint(0.8f, 0.5f))
+
+        val stroke = added.single() as InkAnnotation
+        assertEquals(InkKind.HIGHLIGHTER, stroke.kind)
+        assertEquals(AnnotationColor.YELLOW, stroke.color)
+        assertEquals(105, stroke.opacity)
+        assertEquals(0.08f, stroke.width, 0.0001f)
+    }
+
+    @Test
+    fun widestHighlighterStrokeCommitsWithoutCrashing() {
+        val added = mutableListOf<PageAnnotation>()
+        val settings = AnnotationEditorSettings.defaults()
+        val highlighter = settings.preset("highlighter").copy(width = 6)
+        scenario.onActivity {
+            view.editorSettings = settings
+            view.activeDrawingPreset = highlighter
+            view.tool = ReaderTool.HIGHLIGHTER
+            view.onAddAnnotation = added::add
+        }
+
+        drag(pagePoint(0.2f, 0.5f), pagePoint(0.8f, 0.5f))
+
+        assertEquals(0.2f, (added.single() as InkAnnotation).width, 0.0001f)
+    }
+
+    @Test
+    fun widestPenMatchesHighlighterMaximum() {
+        val added = mutableListOf<PageAnnotation>()
+        val settings = AnnotationEditorSettings.defaults()
+        val pen = settings.preset("pen-1").copy(width = 6)
+        scenario.onActivity {
+            view.editorSettings = settings
+            view.activeDrawingPreset = pen
+            view.tool = ReaderTool.PEN
+            view.onAddAnnotation = added::add
+        }
+
+        drag(pagePoint(0.2f, 0.5f), pagePoint(0.8f, 0.5f))
+
+        assertEquals(0.2f, (added.single() as InkAnnotation).width, 0.0001f)
     }
 
     @Test

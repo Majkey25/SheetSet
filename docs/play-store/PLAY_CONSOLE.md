@@ -1,6 +1,6 @@
 # Google Play Console publication worksheet
 
-Use these answers only for the verified SeliaLists `0.5.0-alpha.5` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
+Use these answers only for the verified SeliaLists `0.5.0-alpha.9` closed-test AAB. Re-audit the artifact if the manifest, dependencies, external links, or data handling change.
 
 ## App identity
 
@@ -8,8 +8,8 @@ Use these answers only for the verified SeliaLists `0.5.0-alpha.5` closed-test A
 |---|---|
 | App name | `SeliaLists` |
 | Package | `com.majkeylab.sheetset` |
-| Version code | `10` |
-| Version name | `0.5.0-alpha.5` |
+| Version code | `14` |
+| Version name | `0.5.0-alpha.9` |
 | Default language | English (United States) |
 | App or game | App |
 | Category | Music & Audio |
@@ -45,7 +45,7 @@ Use the verified legal name, address, phone, and account type already stored in 
 >
 > Annotation features:
 > - pen, highlighter, eraser, and selection tools
-> - one compact color picker and three stroke widths
+> - one compact color picker and six clear stroke widths
 > - underline, strike-through, text, lines, arrows, rectangles, and ellipses
 > - move, resize, delete, undo, and redo
 > - export a separate PDF containing the visible annotations
@@ -83,7 +83,7 @@ Use the verified legal name, address, phone, and account type already stored in 
 >
 > Anotace:
 > - pero, zvýrazňovač, guma a výběr
-> - kompaktní volba barvy a tři tloušťky čáry
+> - kompaktní volba barvy a šest jasných úrovní tloušťky
 > - podtržení, přeškrtnutí, text, čáry, šipky, obdélníky a elipsy
 > - přesun, změna velikosti, smazání, krok zpět a znovu
 > - export samostatného PDF s viditelnými anotacemi
@@ -101,11 +101,11 @@ Use the verified legal name, address, phone, and account type already stored in 
 
 ### English
 
-> Added clear Bookmark, Page, Gesture, Tools, and Annotation reader controls, a direct page slider, and persistent Light and Dark themes with readable neutral-gray PDF editing controls.
+> Replaced annotation width buttons with a six-step slider and live preview. Drawing tools now share the full thin-to-wide range. Setlist dragging is smoother, scales the whole row consistently, and keeps repeated PDFs independently reorderable.
 
 ### Čeština
 
-> Přidány přehledné volby Záložka, Stránka, Gesta, Nástroje a Anotace, přímý posuvník stran a trvalé světlé i tmavé téma s dobře čitelnými šedými ovládacími prvky editoru PDF.
+> Tlačítka šířky anotací nahradil šestistupňový posuvník s živým náhledem. Kreslicí nástroje sdílejí celý rozsah od tenké po širokou stopu. Přesouvání skladeb v setlistu je plynulejší, škáluje celý řádek a umožňuje samostatně řadit opakovaná PDF.
 
 ## App content
 
@@ -148,7 +148,7 @@ App details contains an optional external Buy Me a Coffee support link. It provi
 
 - `assets/icon.png`: 512 × 512 RGBA PNG, 32-bit with alpha, under 1,024 KB.
 - `assets/feature-graphic.png`: 1024 × 500 RGB PNG without alpha.
-- `assets/en-US/phone/01-library.png` through `06-reader-settings.png`: six 1080-pixel-wide RGB PNG screenshots; the reader and annotation images are from the verified `alpha.5` Android 10 build.
+- `assets/en-US/phone/01-library.png` through `06-reader-settings.png`: six 1080-pixel-wide RGB PNG screenshots from Android 10 QA.
 - The screenshots show only SeliaLists and the synthetic `SheetSet QA Score`; no private or copyrighted music is present.
 - No copyrighted scores, rankings, prices, Play badges, donation promotion, device frames, or unfinished features.
 

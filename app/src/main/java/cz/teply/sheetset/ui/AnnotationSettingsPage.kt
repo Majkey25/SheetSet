@@ -61,6 +61,8 @@ import androidx.compose.ui.zIndex
 import cz.teply.sheetset.R
 import cz.teply.sheetset.pdf.AnnotationColor
 import cz.teply.sheetset.pdf.DrawingPreset
+import cz.teply.sheetset.pdf.MAX_ANNOTATION_WIDTH
+import cz.teply.sheetset.pdf.MIN_ANNOTATION_WIDTH
 import cz.teply.sheetset.settings.AnnotationTextSize
 import cz.teply.sheetset.settings.AppSettings
 import cz.teply.sheetset.settings.ReaderDefaultTool
@@ -574,8 +576,9 @@ private fun DrawingPresetDialog(
                 SettingsSlider(
                     stringResource(R.string.stroke_width),
                     width,
-                    1f..40f,
+                    MIN_ANNOTATION_WIDTH.toFloat()..MAX_ANNOTATION_WIDTH.toFloat(),
                     width.roundToInt().toString(),
+                    steps = MAX_ANNOTATION_WIDTH - MIN_ANNOTATION_WIDTH - 1,
                 ) { width = it }
                 SettingsSlider(
                     stringResource(R.string.opacity),
@@ -626,11 +629,12 @@ private fun SettingsSlider(
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     valueText: String,
+    steps: Int = 0,
     onValue: (Float) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(92.dp), style = MaterialTheme.typography.bodyMedium)
-        Slider(value, onValue, Modifier.weight(1f), valueRange = valueRange)
+        Slider(value, onValue, Modifier.weight(1f), valueRange = valueRange, steps = steps)
         Text(valueText, Modifier.width(48.dp), fontSize = 12.sp)
     }
 }
@@ -656,7 +660,7 @@ private fun textSizeLabel(value: AnnotationTextSize): Int = when (value) {
 
 @StringRes
 private fun presetLabel(id: String): Int = when (id) {
-    "pen-1" -> R.string.pen_1
+    "pen-1" -> R.string.pen
     "pen-2" -> R.string.pen_2
     "marker" -> R.string.marker
     "highlighter" -> R.string.highlighter

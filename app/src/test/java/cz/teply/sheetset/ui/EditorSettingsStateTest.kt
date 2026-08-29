@@ -22,7 +22,7 @@ class EditorSettingsStateTest {
 
         val result = state.update { editor -> editor.copy(recentColors = listOf(custom)) }
 
-        assertEquals(21, result.preset("pen-1").width)
+        assertEquals(3, result.preset("pen-1").width)
         assertEquals(listOf(custom), result.recentColors)
     }
 
@@ -46,7 +46,7 @@ class EditorSettingsStateTest {
         val editor = defaults.copy(
             drawOrder = listOf("pen-2", "pen-1", "marker", "highlighter"),
             presets = defaults.presets.map { preset ->
-                preset.copy(visible = preset.id != "highlighter")
+                preset.copy(visible = preset.id in setOf("pen-1", "pen-2"))
             },
         )
 

@@ -933,7 +933,10 @@ class PdfPageView(context: Context) : View(context) {
         distance(point, handlePoint)
     }?.takeIf { (_, handlePoint) -> distance(point, handlePoint) <= radius }?.key
 
-    private fun DrawingPreset.normalizedWidth(): Float = width / 5_000f
+    private fun DrawingPreset.normalizedWidth(): Float = when (kind) {
+        DrawingPresetKind.HIGHLIGHTER -> width.normalizedHighlighterWidth()
+        DrawingPresetKind.PEN, DrawingPresetKind.MARKER -> width.normalizedAnnotationWidth()
+    }
 
     private companion object {
         val STYLUS_TOOL_TYPES = setOf(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER)

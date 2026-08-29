@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import cz.teply.sheetset.pdf.AnnotationColor
 import cz.teply.sheetset.pdf.AnnotationEditorSettings
+import cz.teply.sheetset.pdf.AnnotationEditorSettingsJson
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
+import org.json.JSONObject
 
 class SettingsStoreTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
@@ -63,8 +65,23 @@ class SettingsStoreTest {
 
         val editor = SettingsStore(preferences).load().editor
 
-        assertEquals(40, editor.preset("pen-1").width)
+        assertEquals(4, editor.preset("pen-1").width)
         assertEquals(70, editor.preset("highlighter").opacity)
+    }
+
+    @Test
+    fun legacyEditorUiStartsWithPenInsteadOfSelectionCursor() {
+        val legacyEditor = JSONObject(
+            AnnotationEditorSettingsJson.encode(AnnotationEditorSettings.defaults()),
+        ).apply { remove("version") }.toString()
+        preferences.edit()
+            .putString("annotation_editor_json", legacyEditor)
+            .putString("default_tool", ReaderDefaultTool.VIEW.name)
+            .commit()
+
+        val settings = SettingsStore(preferences).load()
+
+        assertEquals(ReaderDefaultTool.PEN, settings.defaultTool)
     }
 
     @Test
