@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.11] - 2026-10-05
+
+### Fixed
+
+- Keep scores visible for retry when their private files cannot be deleted, and report the failed operation.
+- Include the Noto Music font's copyright and license in APK assets.
+
 ## [0.5.0-alpha.10] - 2026-09-22
 
 ### Fixed
