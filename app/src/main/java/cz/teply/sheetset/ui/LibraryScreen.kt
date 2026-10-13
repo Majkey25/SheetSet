@@ -62,9 +62,9 @@ fun LibraryScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var menuScoreId by remember { mutableStateOf<String?>(null) }
-    var renameScore by remember { mutableStateOf<Score?>(null) }
+    var renameScoreId by rememberSaveable { mutableStateOf<String?>(null) }
     var deleteScore by remember { mutableStateOf<Score?>(null) }
-    var labelScore by remember { mutableStateOf<Score?>(null) }
+    var labelScoreId by rememberSaveable { mutableStateOf<String?>(null) }
     var sort by rememberSaveable { mutableStateOf(LibrarySort.IMPORTED) }
     var direction by rememberSaveable { mutableStateOf(SortDirection.ASCENDING) }
     var sortMenu by remember { mutableStateOf(false) }
@@ -193,8 +193,8 @@ fun LibraryScreen(
                             onOpen = onOpen,
                             onMore = { menuScoreId = result.score.id },
                             onDismissMenu = { menuScoreId = null },
-                            onRename = { menuScoreId = null; renameScore = result.score },
-                            onLabels = { menuScoreId = null; labelScore = result.score },
+                            onRename = { menuScoreId = null; renameScoreId = result.score.id },
+                            onLabels = { menuScoreId = null; labelScoreId = result.score.id },
                             onDelete = { menuScoreId = null; deleteScore = result.score },
                         )
                         is LibraryResult.BookmarkResult -> BookmarkRow(
@@ -207,13 +207,13 @@ fun LibraryScreen(
             }
         }
     }
-    renameScore?.let { score ->
+    scores.firstOrNull { it.id == renameScoreId }?.let { score ->
         NameDialog(
             title = stringResource(R.string.rename_score),
             label = stringResource(R.string.name),
             initialValue = score.title,
-            onDismiss = { renameScore = null },
-            onSave = { onRename(score.id, it); renameScore = null },
+            onDismiss = { renameScoreId = null },
+            onSave = { onRename(score.id, it); renameScoreId = null },
         )
     }
     deleteScore?.let { score ->
@@ -224,11 +224,11 @@ fun LibraryScreen(
             onConfirm = { onDelete(score.id); deleteScore = null },
         )
     }
-    labelScore?.let { score ->
+    scores.firstOrNull { it.id == labelScoreId }?.let { score ->
         LabelsDialog(
             initialLabels = score.labels,
-            onDismiss = { labelScore = null },
-            onSave = { onLabels(score.id, it); labelScore = null },
+            onDismiss = { labelScoreId = null },
+            onSave = { onLabels(score.id, it); labelScoreId = null },
         )
     }
 }

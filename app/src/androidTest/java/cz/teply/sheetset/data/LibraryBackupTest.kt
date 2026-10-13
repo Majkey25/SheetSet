@@ -24,6 +24,7 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.RandomAccessFile
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -44,6 +45,8 @@ class LibraryBackupTest {
     fun tearDown() {
         sourceRoot.deleteRecursively()
         restoreRoot.deleteRecursively()
+        File(restoreRoot.parentFile, ".${restoreRoot.name}-previous").deleteRecursively()
+        File(restoreRoot.parentFile, ".${restoreRoot.name}-restore").deleteRecursively()
     }
 
     @Test
@@ -126,6 +129,146 @@ class LibraryBackupTest {
             assertFalse(File(restoreRoot.parentFile, "escape").exists())
             pdf.delete()
         }
+    }
+
+    @Test
+    fun interruptedRestoreRecoversCatalogPdfAndAnnotationsBeforeWriting() = runBlocking {
+        val repository = LibraryRepository(restoreRoot)
+        val pdf = createPdf(pages = 1)
+        try {
+            val score = repository.importPdf(PdfImport("Saved.pdf", "application/pdf", pdf.length(), pdf::inputStream))
+            val annotations = DocumentAnnotations(mapOf(0 to listOf(SymbolAnnotation(
+                "symbol", "sharp", NormalizedPoint(0.2f, 0.3f), 0.08f, 15f, AnnotationColor.RED, 180,
+            ))))
+            repository.saveAnnotations(score.id, annotations)
+            val previous = File(restoreRoot.parentFile, ".${restoreRoot.name}-previous")
+            val staging = File(restoreRoot.parentFile, ".${restoreRoot.name}-restore")
+            assertTrue(staging.mkdirs())
+            File(staging, "catalog.json").writeText("{")
+            assertTrue(restoreRoot.renameTo(previous))
+
+            val reopened = LibraryRepository(restoreRoot)
+            reopened.createSetlist("After restart")
+
+            assertEquals(listOf(score), reopened.load().scores)
+            assertEquals("After restart", reopened.load().setlists.single().name)
+            assertTrue(pdf.readBytes().contentEquals(reopened.pdfFile(score).readBytes()))
+            assertEquals(annotations, reopened.loadAnnotations(score.id))
+            assertFalse(previous.exists())
+            assertFalse(staging.exists())
+        } finally {
+            pdf.delete()
+        }
+    }
+
+    @Test
+    fun committedRestoreKeepsNewLibraryWhenPreviousStillExists() = runBlocking {
+        LibraryRepository(restoreRoot).createSetlist("Old")
+        val previous = File(restoreRoot.parentFile, ".${restoreRoot.name}-previous")
+        assertTrue(restoreRoot.renameTo(previous))
+        assertTrue(restoreRoot.mkdirs())
+        val committed = LibraryCatalog(setlists = listOf(Setlist("new", "Restored")))
+        File(restoreRoot, "catalog.json").writeText(CatalogJson.encode(committed))
+
+        assertEquals(committed, LibraryRepository(restoreRoot).load())
+        assertFalse(previous.exists())
+    }
+
+    @Test
+    fun directoryPayloadCannotReplaceExistingLibrary() = runBlocking {
+        val repository = LibraryRepository(restoreRoot)
+        repository.createSetlist("Keep")
+        val original = repository.load()
+        val emptyBackup = ByteArrayOutputStream()
+        LibraryRepository(sourceRoot).createBackup(emptyBackup, AppSettings(), null)
+        val archive = ByteArrayOutputStream().also { output ->
+            ZipOutputStream(output).use { zip ->
+                zip.putNextEntry(ZipEntry("scores/"))
+                zip.write(1)
+                zip.closeEntry()
+                ZipInputStream(ByteArrayInputStream(emptyBackup.toByteArray())).use { input ->
+                    while (true) {
+                        val entry = input.nextEntry ?: break
+                        zip.putNextEntry(ZipEntry(entry.name))
+                        input.copyTo(zip)
+                        zip.closeEntry()
+                    }
+                }
+            }
+        }
+
+        val error = assertThrows(BackupException::class.java) {
+            runBlocking { repository.restoreBackup(ByteArrayInputStream(archive.toByteArray())) }
+        }
+
+        assertEquals("Backup directory contains data", error.message)
+        assertEquals(original, repository.load())
+    }
+
+    @Test
+    fun backupRejectsOversizedLibraryBeforeWriting() = runBlocking {
+        val repository = LibraryRepository(sourceRoot)
+        val pdf = createPdf(pages = 1)
+        try {
+            repeat(5) {
+                val score = repository.importPdf(PdfImport("Score.pdf", "application/pdf", pdf.length(), pdf::inputStream))
+                // Sparse files exercise the total limit without allocating a GiB.
+                RandomAccessFile(repository.pdfFile(score), "rw").use { it.setLength(220L * 1024L * 1024L) }
+            }
+            val archive = ByteArrayOutputStream()
+
+            val error = assertThrows(BackupException::class.java) {
+                runBlocking { repository.createBackup(archive, AppSettings(), null) }
+            }
+
+            assertEquals("Backup is too large", error.message)
+            assertEquals(0, archive.size())
+        } finally {
+            pdf.delete()
+        }
+    }
+
+    @Test
+    fun backupRejectsOversizedPdfAndAnnotationsBeforeWriting() = runBlocking {
+        val repository = LibraryRepository(sourceRoot)
+        val pdf = createPdf(pages = 1)
+        try {
+            val score = repository.importPdf(PdfImport("Score.pdf", "application/pdf", pdf.length(), pdf::inputStream))
+            repository.saveAnnotations(score.id, DocumentAnnotations())
+            listOf(
+                repository.pdfFile(score) to MAX_PDF_BYTES,
+                File(sourceRoot, "annotations/${score.id}.json") to MAX_JSON_BYTES,
+            ).forEach { (file, limit) ->
+                val originalSize = file.length()
+                RandomAccessFile(file, "rw").use { it.setLength(limit + 1) }
+                val archive = ByteArrayOutputStream()
+
+                val error = assertThrows(BackupException::class.java) {
+                    runBlocking { repository.createBackup(archive, AppSettings(), null) }
+                }
+
+                assertEquals("Backup entry is too large", error.message)
+                assertEquals(0, archive.size())
+                RandomAccessFile(file, "rw").use { it.setLength(originalSize) }
+            }
+        } finally {
+            pdf.delete()
+        }
+    }
+
+    @Test
+    fun backupRejectsTooManyEntriesBeforeWriting() {
+        val scores = List(MAX_BACKUP_ENTRIES - 1) { index ->
+            Score("score-$index", "Score", "score-$index.pdf", 1, 0)
+        }
+        val archive = ByteArrayOutputStream()
+
+        val error = assertThrows(BackupException::class.java) {
+            writeLibraryBackup(sourceRoot, LibraryCatalog(scores), archive, AppSettings(), null)
+        }
+
+        assertEquals("Backup has too many entries", error.message)
+        assertEquals(0, archive.size())
     }
 
     @Test

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -35,6 +37,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.test.espresso.Espresso
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.state.ToggleableState
 import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.data.Setlist
@@ -54,6 +58,7 @@ import cz.teply.sheetset.ui.COLOR_PANEL_SCROLL_TAG
 import cz.teply.sheetset.ui.PDF_PAGE_TEST_TAG
 import cz.teply.sheetset.ui.SheetSetActions
 import cz.teply.sheetset.ui.SheetSetApp
+import cz.teply.sheetset.ui.SetlistDetail
 import cz.teply.sheetset.ui.SheetSetTheme
 import cz.teply.sheetset.ui.PerformanceToolsSheet
 import cz.teply.sheetset.ui.ReaderPanel
@@ -368,6 +373,130 @@ class SheetSetFlowTest {
         composeRule.onNodeWithText("Add").performClick()
 
         composeRule.onAllNodesWithText("Song").assertCountEquals(2)
+    }
+
+    @Test
+    fun movingIdenticalOccurrencesDoesNotWaitForPersistence() {
+        val score = Score("score-1", "Song", "score-1.pdf", 2, 1L)
+        val setlist = Setlist("set-1", "Show", listOf(score.id, score.id))
+        var reorderCount = 0
+        composeRule.setContent {
+            SheetSetTheme {
+                SetlistDetail(
+                    setlist = setlist,
+                    scores = listOf(score),
+                    actions = SheetSetActions(reorderScores = { _, _ -> reorderCount++ }),
+                    busy = false,
+                    onBack = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Edit order").performClick()
+        val moveDown = composeRule.onAllNodesWithContentDescription("Reorder", useUnmergedTree = true)[0]
+            .fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
+
+        composeRule.runOnIdle { assertTrue(moveDown.action()) }
+
+        composeRule.onNodeWithText("Add PDFs").assertIsEnabled()
+        composeRule.onNodeWithText("Done").assertIsEnabled()
+        composeRule.onAllNodesWithContentDescription("Reorder", useUnmergedTree = true)[0].performTouchInput {
+            down(center)
+            moveTo(center.copy(y = center.y + height * 1.5f))
+            up()
+        }
+
+        composeRule.runOnIdle { assertEquals(0, reorderCount) }
+        composeRule.onNodeWithText("Add PDFs").assertIsEnabled()
+        composeRule.onNodeWithText("Done").assertIsEnabled().performClick()
+        composeRule.onNodeWithText("Edit order").assertIsDisplayed()
+    }
+
+    @Test
+    fun dragUsesCurrentIndexAfterFastRemovalAndRepeatedReorder() {
+        val first = Score("score-1", "First song", "score-1.pdf", 2, 1L)
+        val second = Score("score-2", "Second song", "score-2.pdf", 2, 2L)
+        val third = Score("score-3", "Third song", "score-3.pdf", 2, 3L)
+        var catalog by mutableStateOf(
+            LibraryCatalog(
+                scores = listOf(first, second, third),
+                setlists = listOf(Setlist("set-1", "Show", listOf(first.id, second.id, third.id))),
+            ),
+        )
+        composeRule.setContent {
+            SheetSetTheme {
+                SetlistDetail(
+                    setlist = catalog.setlists.single(),
+                    scores = catalog.scores,
+                    actions = SheetSetActions(
+                        removeScore = { id, index -> catalog = catalog.removeScoreFromSetlist(id, index) },
+                        reorderScores = { id, ids -> catalog = catalog.reorderScores(id, ids) },
+                    ),
+                    busy = false,
+                    onBack = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Edit order").performClick()
+        // Start the handler before its row index changes.
+        composeRule.onAllNodesWithContentDescription("Reorder", useUnmergedTree = true)[1]
+            .performTouchInput { click(center) }
+        composeRule.onAllNodesWithContentDescription("Remove")[0].performClick()
+
+        composeRule.onAllNodesWithContentDescription("Reorder", useUnmergedTree = true)[0].performTouchInput {
+            down(center)
+            moveTo(center.copy(y = center.y + height * 1.5f))
+            up()
+        }
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(third.id, second.id), catalog.setlists.single().scoreIds)
+        }
+        composeRule.onAllNodesWithText("First song").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("Reorder", useUnmergedTree = true)[0].performTouchInput {
+            down(center)
+            moveTo(center.copy(y = center.y + height * 1.5f))
+            up()
+        }
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(second.id, third.id), catalog.setlists.single().scoreIds)
+        }
+        composeRule.onNodeWithText("Done").assertIsEnabled()
+    }
+
+    @Test
+    fun addPdfDialogRestoresSelectionAndExcludesDeletedScores() {
+        val restorationTester = StateRestorationTester(composeRule)
+        val first = Score("score-1", "First song", "score-1.pdf", 2, 1L)
+        val second = Score("score-2", "Second song", "score-2.pdf", 2, 2L)
+        var scores by mutableStateOf(listOf(first, second))
+        var added = emptyList<String>()
+        restorationTester.setContent {
+            SheetSetTheme {
+                SetlistDetail(
+                    setlist = Setlist("set-1", "Show"),
+                    scores = scores,
+                    actions = SheetSetActions(addScores = { _, ids -> added = ids }),
+                    busy = false,
+                    onBack = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Add PDFs").performClick()
+        composeRule.onNodeWithText("First song").performClick()
+        composeRule.onNodeWithText("Second song").performClick()
+
+        restorationTester.emulateSavedInstanceStateRestore()
+
+        composeRule.onAllNodes(
+            SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On),
+            useUnmergedTree = true,
+        ).assertCountEquals(2)
+        composeRule.onNodeWithText("Add").assertIsEnabled()
+        composeRule.runOnIdle { scores = listOf(first) }
+        composeRule.onAllNodesWithText("Second song").assertCountEquals(0)
+        composeRule.onNodeWithText("Add").assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals(listOf(first.id), added) }
     }
 
     @Test
@@ -955,13 +1084,20 @@ class SheetSetFlowTest {
             }
         }
 
-        composeRule.onRoot().performTouchInput { click(center) }
-        composeRule.onRoot().performTouchInput { click(center) }
-        composeRule.onNodeWithContentDescription("Annotation").assertIsDisplayed()
-
-        composeRule.waitUntil(timeoutMillis = 4_000) {
-            composeRule.onAllNodesWithContentDescription("Annotation")
-                .fetchSemanticsNodes().isEmpty()
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.onRoot().performTouchInput { click(center) }
+            composeRule.mainClock.advanceTimeBy(200)
+            composeRule.onAllNodesWithContentDescription("Annotation").assertCountEquals(0)
+            composeRule.onRoot().performTouchInput { click(center) }
+            composeRule.mainClock.advanceTimeBy(200)
+            composeRule.onNodeWithContentDescription("Annotation").assertIsDisplayed()
+            composeRule.mainClock.advanceTimeBy(1_200)
+            composeRule.onNodeWithContentDescription("Annotation").assertIsDisplayed()
+            composeRule.mainClock.advanceTimeBy(300)
+            composeRule.onAllNodesWithContentDescription("Annotation").assertCountEquals(0)
+        } finally {
+            composeRule.mainClock.autoAdvance = true
         }
     }
 

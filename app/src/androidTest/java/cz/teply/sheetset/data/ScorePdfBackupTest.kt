@@ -5,10 +5,12 @@ import android.graphics.pdf.PdfDocument
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -19,6 +21,7 @@ import java.nio.ByteOrder
 import java.util.UUID
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 class ScorePdfBackupTest {
@@ -95,6 +98,56 @@ class ScorePdfBackupTest {
             assertEquals(1, File(root, "scores").listFiles().orEmpty().size)
             existingPdf.delete()
             sharedPdf.delete()
+        }
+    }
+
+    @Test
+    fun underreportedPdfSizeRejectsImportAndCleansStaging() {
+        runBlocking {
+            val library = File(root, "library")
+            val repository = LibraryRepository(library)
+            val pdf = createPdf(1)
+            try {
+                val existing = repository.importPdf(
+                    PdfImport("Existing.pdf", "application/pdf", pdf.length(), pdf::inputStream),
+                )
+                val before = repository.load()
+                val archive = scorePdfArchive(
+                    pdf = pdf,
+                    scores = listOf(Triple(7, "Imported", "shared.pdf")),
+                    setlistKeys = listOf(7),
+                )
+                val headers = ByteBuffer.wrap(archive).order(ByteOrder.LITTLE_ENDIAN)
+                // The fixture writes shared.pdf as the final central-directory entry.
+                val pdfHeader = (archive.size - 46 downTo 0).first { offset ->
+                    headers.getInt(offset) == 0x02014b50
+                }
+                assertEquals(
+                    "shared.pdf",
+                    String(archive, pdfHeader + 46, headers.getShort(pdfHeader + 28).toInt(), Charsets.UTF_8),
+                )
+                assertEquals(pdf.length().toInt(), headers.getInt(pdfHeader + 24))
+                headers.putInt(pdfHeader + 24, 1)
+                val archiveFile = File(root, "underreported.zip").apply { writeBytes(archive) }
+                ZipFile(archiveFile).use { zip ->
+                    val entry = zip.getEntry("shared.pdf")
+                    assertEquals(1L, entry.size)
+                    val expanded = zip.getInputStream(entry).use { it.readBytes() }
+                    assertArrayEquals(pdf.readBytes(), expanded)
+                    assertTrue(expanded.size.toLong() > entry.size)
+                }
+
+                assertThrows(BackupException::class.java) {
+                    runBlocking { repository.restoreBackup(ByteArrayInputStream(archive)) }
+                }
+
+                assertEquals(before, repository.load())
+                assertArrayEquals(pdf.readBytes(), repository.pdfFile(existing).readBytes())
+                assertEquals(listOf(existing.fileName), File(library, "scores").list()!!.toList())
+                assertEquals(setOf("library", "underreported.zip"), root.list()!!.toSet())
+            } finally {
+                pdf.delete()
+            }
         }
     }
 

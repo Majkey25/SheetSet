@@ -13,13 +13,18 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 import java.util.zip.ZipFile
 
 const val MAX_PDF_BYTES = 250L * 1024L * 1024L
+// Recovery and file mutations must be exclusive across repository instances.
+private val libraryFilesLock = Any()
+private val deletionFileNames = setOf("annotations.json.bak", "annotations.json.new", "annotations.json", "score.pdf")
 
 class PdfImport(
     val displayName: String,
@@ -36,67 +41,57 @@ class LibraryRepository(private val root: File) {
     private val scoresDirectory = File(root, "scores")
     private val annotationsDirectory = File(root, "annotations")
 
-    suspend fun load(): LibraryCatalog = withContext(Dispatchers.IO) {
-        mutex.withLock { loadCatalog() }
-    }
+    suspend fun load(): LibraryCatalog = withStorageLock { loadCatalog() }
 
-    suspend fun importPdf(source: PdfImport): Score = withContext(Dispatchers.IO) {
-        mutex.withLock { importLocked(source) }
-    }
+    suspend fun importPdf(source: PdfImport): Score = withStorageLock { importLocked(source) }
 
-    fun pdfFile(score: Score): File {
+    fun pdfFile(score: Score): File = synchronized(libraryFilesLock) {
+        loadCatalog()
         require(score.fileName.matches(Regex("[A-Za-z0-9-]+\\.pdf"))) { "Invalid score file" }
         val file = File(scoresDirectory, score.fileName).canonicalFile
         require(file.parentFile == scoresDirectory.canonicalFile) { "Invalid score path" }
         require(file.isFile) { "Score file is missing" }
-        return file
+        file
     }
 
-    suspend fun loadAnnotations(scoreId: String): DocumentAnnotations = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val file = annotationFile(scoreId)
-            if (file.exists()) AnnotationJson.decode(file.readText()) else DocumentAnnotations()
-        }
+    suspend fun loadAnnotations(scoreId: String): DocumentAnnotations = withStorageLock {
+        loadCatalog()
+        val file = annotationFile(scoreId)
+        openAtomicFile(file)?.bufferedReader(Charsets.UTF_8)?.use { AnnotationJson.decode(it.readText()) }
+            ?: DocumentAnnotations()
     }
 
-    suspend fun saveAnnotations(scoreId: String, annotations: DocumentAnnotations) {
-        withContext(Dispatchers.IO) {
-            mutex.withLock {
-                annotationsDirectory.mkdirsOrThrow()
-                writeAtomic(annotationFile(scoreId), AnnotationJson.encode(annotations))
-            }
-        }
+    suspend fun saveAnnotations(scoreId: String, annotations: DocumentAnnotations) = withStorageLock {
+        loadCatalog()
+        annotationsDirectory.mkdirsOrThrow()
+        writeAtomic(annotationFile(scoreId), AnnotationJson.encode(annotations))
     }
 
     suspend fun createBackup(
         destination: OutputStream,
         settings: AppSettings,
         languageTag: String?,
-    ) = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            writeLibraryBackup(root, loadCatalog(), destination, settings, languageTag)
-        }
+    ) = withStorageLock {
+        writeLibraryBackup(root, loadCatalog(), destination, settings, languageTag)
     }
 
-    suspend fun restoreBackup(source: InputStream): BackupMetadata? = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val archive = stageBackup(source)
-            try {
-                if (isSheetSetBackup(archive)) {
-                    restoreLibraryBackup(root, archive.inputStream())
-                } else {
-                    val prepared = prepareScorePdfImport(root, loadCatalog(), archive)
-                    try {
-                        writeCatalog(prepared.catalog)
-                    } catch (error: Exception) {
-                        prepared.createdFiles.forEach(File::delete)
-                        throw error
-                    }
-                    null
+    suspend fun restoreBackup(source: InputStream): BackupMetadata? = withStorageLock {
+        val archive = stageBackup(source)
+        try {
+            if (isSheetSetBackup(archive)) {
+                restoreLibraryBackup(root, archive.inputStream())
+            } else {
+                val prepared = prepareScorePdfImport(root, loadCatalog(), archive)
+                try {
+                    writeCatalog(prepared.catalog)
+                } catch (error: Exception) {
+                    prepared.createdFiles.forEach(File::delete)
+                    throw error
                 }
-            } finally {
-                archive.delete()
+                null
             }
+        } finally {
+            archive.delete()
         }
     }
 
@@ -153,19 +148,34 @@ class LibraryRepository(private val root: File) {
         updateCatalog { it.reorderScores(setlistId, scoreIds) }
     }
 
-    suspend fun deleteScore(scoreId: String) {
-        withContext(Dispatchers.IO) {
-            mutex.withLock {
-                val catalog = loadCatalog()
-                val score = catalog.scores.firstOrNull { it.id == scoreId } ?: return@withLock
-                writeCatalog(catalog.deleteScore(scoreId))
-                File(scoresDirectory, score.fileName).delete()
-                annotationFile(scoreId).delete()
+    suspend fun deleteScore(scoreId: String): Unit = withStorageLock {
+        val catalog = loadCatalog()
+        val score = catalog.scores.firstOrNull { it.id == scoreId } ?: return@withStorageLock
+        val files = deletionFiles(score)
+        val staging = checkedLibraryFile(".deletions/${score.id}")
+        val updated = catalog.deleteScore(scoreId)
+        if (!staging.mkdirs()) throw IOException("Could not stage score deletion")
+        try {
+            files.forEach { (name, file) ->
+                if (file.exists() && (!file.isFile || !file.renameTo(File(staging, name)))) {
+                    throw IOException("Could not stage score file: ${file.name}")
+                }
             }
+            writeCatalog(updated)
+        } catch (error: Exception) {
+            try {
+                loadCatalog()
+            } catch (recoveryError: Exception) {
+                error.addSuppressed(recoveryError)
+            }
+            throw error
         }
+        // AtomicFile can log a failed commit without throwing; trust its recovered contents.
+        if (loadCatalog() != updated) throw IOException("Could not commit score deletion")
     }
 
     private fun importLocked(source: PdfImport): Score {
+        recoverLibraryBackup(root)
         if (source.mimeType != null && !source.mimeType.equals("application/pdf", ignoreCase = true)) {
             throw PdfImportException("Only PDF files are supported")
         }
@@ -209,10 +219,60 @@ class LibraryRepository(private val root: File) {
         }
     }
 
-    private fun loadCatalog(): LibraryCatalog = if (catalogFile.exists()) {
-        CatalogJson.decode(catalogFile.readText())
-    } else {
-        LibraryCatalog()
+    private fun loadCatalog(): LibraryCatalog {
+        recoverLibraryBackup(root)
+        val catalog = openAtomicFile(catalogFile)?.bufferedReader(Charsets.UTF_8)?.use {
+            CatalogJson.decode(it.readText())
+        }
+        val deletions = checkedLibraryFile(".deletions")
+        if (deletions.exists()) {
+            val pending = deletions.listFiles() ?: throw IOException("Could not read staged deletions")
+            if (pending.isNotEmpty() && catalog == null) throw IOException("Staged deletions have no catalog")
+            pending.forEach { staging ->
+                if (!staging.name.matches(Regex("[A-Za-z0-9-]+"))) {
+                    throw IOException("Invalid staged score ID")
+                }
+                recoverDeletion(
+                    checkedLibraryFile(".deletions/${staging.name}"),
+                    catalog?.scores?.firstOrNull { it.id == staging.name },
+                )
+            }
+        }
+        return catalog ?: LibraryCatalog()
+    }
+
+    private fun deletionFiles(score: Score): Map<String, File> {
+        require(score.id.matches(Regex("[A-Za-z0-9-]+"))) { "Invalid score ID" }
+        require(score.fileName.matches(Regex("[A-Za-z0-9-]+\\.pdf"))) { "Invalid score file" }
+        return listOf(".bak", ".new", "").associate { suffix ->
+            "annotations.json$suffix" to checkedLibraryFile("annotations/${score.id}.json$suffix")
+        } + ("score.pdf" to checkedLibraryFile("scores/${score.fileName}"))
+    }
+
+    private fun recoverDeletion(staging: File, score: Score?) {
+        val files = staging.listFiles() ?: throw IOException("Could not read staged score deletion")
+        if (files.any { it.name !in deletionFileNames || !it.isFile || it.canonicalFile != it }) {
+            throw IOException("Staged deletion contains unknown data")
+        }
+        val destinations = score?.let(::deletionFiles)
+        files.forEach { file ->
+            val destination = destinations?.getValue(file.name)
+            if (destination == null) {
+                if (!file.delete()) throw IOException("Could not delete staged score file: ${file.name}")
+            } else {
+                destination.parentFile?.mkdirsOrThrow()
+                if (destination.exists() || !file.renameTo(destination)) {
+                    throw IOException("Could not restore staged score file: ${file.name}")
+                }
+            }
+        }
+        if (!staging.delete()) throw IOException("Could not remove staged score deletion")
+    }
+
+    private fun checkedLibraryFile(path: String): File {
+        val file = File(root.canonicalFile, path)
+        if (file.canonicalFile != file) throw IOException("Unsafe library path")
+        return file
     }
 
     private fun writeCatalog(catalog: LibraryCatalog) {
@@ -253,10 +313,12 @@ class LibraryRepository(private val root: File) {
 
     private suspend fun updateCatalog(
         transform: (LibraryCatalog) -> LibraryCatalog,
-    ): LibraryCatalog = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            transform(loadCatalog()).also(::writeCatalog)
-        }
+    ): LibraryCatalog = withStorageLock {
+        transform(loadCatalog()).also(::writeCatalog)
+    }
+
+    private suspend fun <T> withStorageLock(block: () -> T): T = withContext(Dispatchers.IO) {
+        mutex.withLock { synchronized(libraryFilesLock) { block() } }
     }
 
     private fun annotationFile(scoreId: String): File {
@@ -302,6 +364,13 @@ class LibraryRepository(private val root: File) {
     private fun File.mkdirsOrThrow() {
         if (!exists() && !mkdirs()) throw IllegalStateException("Could not create ${name}")
     }
+}
+
+internal fun openAtomicFile(file: File): FileInputStream? = try {
+    AtomicFile(file).openRead()
+} catch (error: FileNotFoundException) {
+    if (file.exists() || File("${file.path}.bak").exists()) throw error
+    null
 }
 
 internal fun validatePdfFile(file: File): Int {

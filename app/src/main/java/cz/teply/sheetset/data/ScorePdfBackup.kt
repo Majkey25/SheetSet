@@ -50,7 +50,7 @@ internal fun prepareScorePdfImport(
             val stagedPdfs = linkedMapOf<String, Pair<File, Int>>()
             pdfEntries.toSortedMap().forEach { (name, entry) ->
                 val file = File(staging, "${stagedPdfs.size}.pdf")
-                zip.getInputStream(entry).use { input -> input.copyBounded(file, MAX_PDF_BYTES) }
+                zip.getInputStream(entry).use { input -> input.copyBounded(file, entry.size) }
                 stagedPdfs[name] = file to validatePdfFile(file)
             }
 
@@ -134,13 +134,11 @@ private fun validateEntries(zip: ZipFile): Map<String, ZipEntry> {
             name.endsWith(".lock", ignoreCase = true) -> MAX_LOCK_BYTES
             else -> throw BackupException("ScorePDF backup contains an unsupported entry")
         }
-        if (entry.size > limit) throw BackupException("Backup entry is too large")
-        if (entry.size >= 0) {
-            if (entry.size > MAX_BACKUP_BYTES - totalSize) {
-                throw BackupException("Backup is too large")
-            }
-            totalSize += entry.size
+        if (entry.size !in 0..limit) throw BackupException("Backup entry size is invalid")
+        if (entry.size > MAX_BACKUP_BYTES - totalSize) {
+            throw BackupException("Backup is too large")
         }
+        totalSize += entry.size
         entries[name] = entry
     }
     return entries
@@ -164,7 +162,7 @@ private fun validateFlatEntryName(name: String) {
 private fun ZipFile.readBounded(entry: ZipEntry, limit: Long): ByteArray =
     getInputStream(entry).use { input ->
         val output = ByteArrayOutputStream()
-        input.copyBounded(output::write, limit)
+        input.copyBounded(output::write, minOf(limit, entry.size))
         output.toByteArray()
     }
 

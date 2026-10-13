@@ -1,6 +1,7 @@
 package cz.teply.sheetset.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class CatalogJsonTest {
@@ -41,6 +42,73 @@ class CatalogJsonTest {
         )
 
         assertEquals(catalog, CatalogJson.decode(CatalogJson.encode(catalog)))
+    }
+
+    @Test
+    fun `legacy labels truncated at whitespace are recovered`() {
+        val label = "a".repeat(MAX_LABEL_LENGTH - 1)
+        val labels = listOf("$label ", label, "Band")
+        val score = Score("score-1", "Song", "score-1.pdf", 1, 1L, labels = labels)
+        val setlist = Setlist("set-1", "Show", labels = labels)
+
+        val decoded = CatalogJson.decode(CatalogJson.encode(LibraryCatalog(listOf(score), listOf(setlist))))
+
+        assertEquals(listOf(label, "Band"), decoded.scores.single().labels)
+        assertEquals(listOf(label, "Band"), decoded.setlists.single().labels)
+        assertEquals(decoded, CatalogJson.decode(CatalogJson.encode(decoded)))
+    }
+
+    @Test
+    fun `legacy label recovery preserves validation of malformed labels`() {
+        val score = Score("score-1", "Song", "score-1.pdf", 1, 1L)
+        val setlist = Setlist("set-1", "Show")
+        val legacyLabel = "a".repeat(MAX_LABEL_LENGTH - 1) + " "
+        val invalidLabels = listOf(
+            listOf(""),
+            listOf(" leading"),
+            listOf("trailing "),
+            listOf("a".repeat(MAX_LABEL_LENGTH) + " "),
+            listOf("a".repeat(MAX_LABEL_LENGTH + 1)),
+            listOf(" ".repeat(MAX_LABEL_LENGTH)),
+            listOf(" " + "a".repeat(MAX_LABEL_LENGTH - 2) + " "),
+            listOf("duplicate", "duplicate"),
+            listOf(legacyLabel, legacyLabel),
+            listOf(legacyLabel, " leading"),
+            (1..(MAX_LABELS + 1)).map { "Label $it" },
+        )
+
+        invalidLabels.forEach { labels ->
+            val catalogs = listOf(
+                LibraryCatalog(scores = listOf(score.copy(labels = labels))),
+                LibraryCatalog(setlists = listOf(setlist.copy(labels = labels))),
+            )
+            catalogs.forEach { catalog ->
+                assertThrows(IllegalArgumentException::class.java) {
+                    CatalogJson.decode(CatalogJson.encode(catalog))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `scores cannot share a PDF file`() {
+        val first = Score("score-1", "First", "shared.pdf", 1, 1L)
+        val second = first.copy(id = "score-2", title = "Second")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            CatalogJson.decode(CatalogJson.encode(LibraryCatalog(scores = listOf(first, second))))
+        }
+    }
+
+    @Test
+    fun `score IDs must be safe annotation file names`() {
+        listOf("", " ", "bad_id", "bad/id", "bad\\id", "..", "žluťoučký").forEach { id ->
+            val score = Score(id, "Song", "score-1.pdf", 1, 1L)
+
+            assertThrows(IllegalArgumentException::class.java) {
+                CatalogJson.decode(CatalogJson.encode(LibraryCatalog(scores = listOf(score))))
+            }
+        }
     }
 
     @Test

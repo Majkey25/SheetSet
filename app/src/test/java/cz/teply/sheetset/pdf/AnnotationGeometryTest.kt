@@ -1,7 +1,9 @@
 package cz.teply.sheetset.pdf
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -39,6 +41,191 @@ class AnnotationGeometryTest {
 
         assertTrue(annotations.withPage(1, emptyList()).pages.isEmpty())
         assertEquals(listOf(stroke), DocumentAnnotations().withPage(2, listOf(stroke)).pages[2])
+    }
+
+    @Test
+    fun thickInkHitsUsePhysicalPageAxesAndRemainStableAcrossScale() {
+        val horizontal = stroke.copy(
+            width = 0.125f,
+            points = listOf(NormalizedPoint(0.25f, 0.5f), NormalizedPoint(0.75f, 0.5f)),
+        )
+        val vertical = horizontal.copy(
+            points = listOf(NormalizedPoint(0.5f, 0.25f), NormalizedPoint(0.5f, 0.75f)),
+        )
+
+        for (scale in listOf(1f, 2f)) {
+            assertTrue(horizontal.hitTest(NormalizedPoint(0.5f, 0.53125f), 0f, 1000f * scale, 2000f * scale))
+            assertFalse(horizontal.hitTest(NormalizedPoint(0.5f, 0.54f), 0f, 1000f * scale, 2000f * scale))
+            assertTrue(vertical.hitTest(NormalizedPoint(0.53125f, 0.5f), 0f, 2000f * scale, 1000f * scale))
+            assertFalse(vertical.hitTest(NormalizedPoint(0.54f, 0.5f), 0f, 2000f * scale, 1000f * scale))
+        }
+    }
+
+    @Test
+    fun diagonalInkUsesDistancePerpendicularToRenderedSegment() {
+        val diagonal = stroke.copy(width = 0.125f)
+
+        assertTrue(diagonal.hitTest(NormalizedPoint(0.55f, 0.4875f), 0f, 1000f, 2000f))
+        assertFalse(diagonal.hitTest(NormalizedPoint(0.5625f, 0.484375f), 0f, 1000f, 2000f))
+        assertTrue(diagonal.hitTest(NormalizedPoint(0.4875f, 0.55f), 0f, 2000f, 1000f))
+        assertFalse(diagonal.hitTest(NormalizedPoint(0.484375f, 0.5625f), 0f, 2000f, 1000f))
+    }
+
+    @Test
+    fun inkDotsRespectRoundAndSquareCapsAndHitTolerance() {
+        val pen = stroke.copy(width = 0.125f, points = listOf(NormalizedPoint(0.5f, 0.5f)))
+        val highlighter = pen.copy(kind = InkKind.HIGHLIGHTER)
+
+        assertTrue(pen.hitTest(NormalizedPoint(0.5625f, 0.5f), 0f, 1000f, 2000f))
+        assertFalse(pen.hitTest(NormalizedPoint(0.5625f, 0.53125f), 0f, 1000f, 2000f))
+        assertTrue(highlighter.hitTest(NormalizedPoint(0.5625f, 0.53125f), 0f, 1000f, 2000f))
+        assertFalse(highlighter.hitTest(NormalizedPoint(0.565f, 0.5f), 0f, 1000f, 2000f))
+        assertTrue(pen.hitTest(NormalizedPoint(0.57f, 0.5f), 0.02f, 1000f, 2000f))
+        assertFalse(pen.hitTest(NormalizedPoint(0.585f, 0.5f), 0.02f, 1000f, 2000f))
+    }
+
+    @Test
+    fun diagonalHighlighterIncludesSquareCapCornersWithoutOvershooting() {
+        val highlighter = stroke.copy(width = 0.125f, kind = InkKind.HIGHLIGHTER)
+
+        assertTrue(highlighter.hitTest(NormalizedPoint(0.83f, 0.75f), 0f, 1000f, 1000f))
+        assertFalse(highlighter.hitTest(NormalizedPoint(0.84f, 0.75f), 0f, 1000f, 1000f))
+        assertFalse(highlighter.copy(kind = InkKind.PEN).hitTest(NormalizedPoint(0.83f, 0.75f), 0f))
+    }
+
+    @Test
+    fun highlighterBendsUseBevelJoinsAndIgnoreDuplicateSamples() {
+        val highlighter = stroke.copy(
+            width = 0.125f,
+            kind = InkKind.HIGHLIGHTER,
+            points = listOf(
+                NormalizedPoint(0.25f, 0.5f),
+                NormalizedPoint(0.5f, 0.5f),
+                NormalizedPoint(0.5f, 0.5f),
+                NormalizedPoint(0.5f, 0.25f),
+            ),
+        )
+
+        assertTrue(highlighter.hitTest(NormalizedPoint(0.53f, 0.53f), 0f, 1000f, 1000f))
+        assertFalse(highlighter.hitTest(NormalizedPoint(0.54f, 0.54f), 0f, 1000f, 1000f))
+        assertTrue(highlighter.copy(kind = InkKind.PEN).hitTest(NormalizedPoint(0.54f, 0.54f), 0f))
+    }
+
+    @Test
+    fun lassoIncludesPaintedWidthWithoutPaddingTheLongAxisTooFar() {
+        val horizontal = stroke.copy(
+            width = 0.125f,
+            points = listOf(NormalizedPoint(0.25f, 0.5f), NormalizedPoint(0.75f, 0.5f)),
+        )
+        val annotations = listOf(horizontal)
+
+        assertEquals(
+            setOf(stroke.id),
+            annotations.lassoSelection(NormalizedRect(0.4f, 0.53125f, 0.6f, 0.54f), 1000f, 2000f),
+        )
+        assertTrue(
+            annotations.lassoSelection(NormalizedRect(0.4f, 0.55f, 0.6f, 0.56f), 1000f, 2000f).isEmpty(),
+        )
+        assertEquals(
+            setOf(stroke.id),
+            annotations.lassoSelection(NormalizedRect(0.4f, 0.55f, 0.6f, 0.56f), 2000f, 1000f),
+        )
+    }
+
+    @Test
+    fun lassoIncludesDiagonalSquareCapsAndPreservesBoundingBoxSelection() {
+        val highlighter = stroke.copy(width = 0.125f, kind = InkKind.HIGHLIGHTER)
+        val cap = NormalizedRect(0.83f, 0.74f, 0.835f, 0.76f)
+
+        assertEquals(setOf(stroke.id), listOf(highlighter).lassoSelection(cap, 1000f, 1000f))
+        assertTrue(listOf(highlighter.copy(kind = InkKind.PEN)).lassoSelection(cap).isEmpty())
+        assertTrue(
+            listOf(highlighter).lassoSelection(NormalizedRect(0.84f, 0.74f, 0.85f, 0.76f)).isEmpty(),
+        )
+        assertEquals(
+            setOf(stroke.id),
+            listOf(stroke).lassoSelection(NormalizedRect(0.25f, 0.7f, 0.3f, 0.75f)),
+        )
+    }
+
+    @Test
+    fun thickInkAtPageEdgeRemainsSelectableAndTopmostHitUsesPageSize() {
+        val edge = stroke.copy(width = 0.125f, points = listOf(NormalizedPoint(1f, 1f)))
+        val bottom = rectangle("bottom", 0.8f, 0.8f, 1f, 1f)
+        val annotations = listOf(bottom, edge)
+
+        assertSame(edge, annotations.topmostHit(NormalizedPoint(0.95f, 0.99f), 0f, 1000f, 2000f))
+        assertSame(bottom, annotations.topmostHit(NormalizedPoint(0.99f, 0.96f), 0f, 1000f, 2000f))
+        assertEquals(
+            setOf(stroke.id),
+            listOf(edge).lassoSelection(NormalizedRect(0.94f, 0.97f, 0.95f, 0.98f), 1000f, 2000f),
+        )
+    }
+
+    @Test
+    fun shapeInteriorsRemainSelectableAndLineHitIncludesOnlyHalfStrokeWidth() {
+        val rectangle = rectangle("shape", 0.25f, 0.25f, 0.75f, 0.75f).copy(width = 0.125f)
+        val line = rectangle.copy(
+            kind = ShapeKind.LINE,
+            start = NormalizedPoint(0.25f, 0.5f),
+            end = NormalizedPoint(0.75f, 0.5f),
+        )
+
+        assertTrue(rectangle.hitTest(NormalizedPoint(0.5f, 0.5f), 0f, 1000f, 2000f))
+        assertTrue(rectangle.copy(kind = ShapeKind.ELLIPSE).hitTest(NormalizedPoint(0.5f, 0.5f), 0f))
+        assertTrue(line.hitTest(NormalizedPoint(0.5f, 0.53125f), 0f, 1000f, 2000f))
+        assertFalse(line.hitTest(NormalizedPoint(0.5f, 0.54f), 0f, 1000f, 2000f))
+    }
+
+    @Test
+    fun arrowHitIncludesBothPaintedHeadArmsWithoutOvershooting() {
+        val arrow = rectangle("arrow", 0.25f, 0.5f, 0.75f, 0.5f).copy(kind = ShapeKind.ARROW, width = 0.08f)
+
+        assertTrue(arrow.hitTest(NormalizedPoint(0.5f, 0.5f), 0f))
+        for (y in listOf(0.444f, 0.556f)) {
+            val point = NormalizedPoint(0.716f, y)
+            assertTrue(arrow.hitTest(point, 0f))
+            assertTrue(arrow.hitTest(point, 0.0125f))
+            assertFalse(arrow.copy(kind = ShapeKind.LINE).hitTest(point, 0.0125f))
+        }
+        assertFalse(arrow.hitTest(NormalizedPoint(0.716f, 0.58f), 0.0125f))
+        assertFalse(arrow.hitTest(NormalizedPoint(0.716f, 0.42f), 0.0125f))
+    }
+
+    @Test
+    fun arrowHeadHitsUsePhysicalPageAxesAndScale() {
+        val horizontal = rectangle("arrow", 0.25f, 0.5f, 0.75f, 0.5f).copy(kind = ShapeKind.ARROW, width = 0.08f)
+        val vertical = horizontal.copy(start = NormalizedPoint(0.5f, 0.25f), end = NormalizedPoint(0.5f, 0.75f))
+
+        for (scale in listOf(1f, 2f)) {
+            assertTrue(horizontal.hitTest(NormalizedPoint(0.716f, 0.528f), 0.0125f, 1000f * scale, 2000f * scale))
+            assertFalse(horizontal.hitTest(NormalizedPoint(0.716f, 0.556f), 0.0125f, 1000f * scale, 2000f * scale))
+            assertTrue(horizontal.hitTest(NormalizedPoint(0.733f, 0.556f), 0.0125f, 2000f * scale, 1000f * scale))
+            assertTrue(vertical.hitTest(NormalizedPoint(0.444f, 0.733f), 0.0125f, 1000f * scale, 2000f * scale))
+            assertFalse(vertical.hitTest(NormalizedPoint(0.42f, 0.733f), 0.0125f, 1000f * scale, 2000f * scale))
+        }
+    }
+
+    @Test
+    fun shortArrowLimitsHeadLengthToQuarterOfShaft() {
+        val arrow = rectangle("arrow", 0.65f, 0.5f, 0.75f, 0.5f).copy(kind = ShapeKind.ARROW, width = 0.008f)
+
+        assertTrue(arrow.hitTest(NormalizedPoint(0.729f, 0.513f), 0f))
+        assertFalse(arrow.hitTest(NormalizedPoint(0.716f, 0.521f), 0f))
+        assertTrue(arrow.copy(start = NormalizedPoint(0.25f, 0.5f)).hitTest(NormalizedPoint(0.716f, 0.521f), 0f))
+    }
+
+    @Test
+    fun hitAndLassoRejectInvalidPageGeometry() {
+        assertThrows(IllegalArgumentException::class.java) {
+            stroke.hitTest(NormalizedPoint(0.5f, 0.5f), 0f, 0f, 1000f)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            stroke.hitTest(NormalizedPoint(0.5f, 0.5f), Float.NaN)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            listOf(stroke).lassoSelection(NormalizedRect(0.1f, 0.1f, 0.9f, 0.9f), 1000f, Float.POSITIVE_INFINITY)
+        }
     }
 
     @Test
@@ -232,6 +419,27 @@ class AnnotationGeometryTest {
         )
 
         assertEquals(NormalizedRect(0.99f, 0.99f, 1f, 1f), ink.normalizedBounds())
+    }
+
+    @Test
+    fun resizingSymbolOntoOppositeCornerKeepsMinimumSize() {
+        val symbol = SymbolAnnotation(
+            id = "symbol",
+            symbolId = "sharp",
+            center = NormalizedPoint(0.5f, 0.5f),
+            size = 0.2f,
+            rotationDegrees = 0f,
+            color = AnnotationColor.BLACK,
+            opacity = 255,
+        )
+
+        val resized = symbol.resized(
+            AnnotationHandle.TOP_LEFT,
+            NormalizedPoint(0.6f, 0.6f),
+        ) as SymbolAnnotation
+
+        assertEquals(0.01f, resized.size, 0f)
+        assertEquals(NormalizedPoint(0.6f, 0.6f), resized.center)
     }
 
     @Test
