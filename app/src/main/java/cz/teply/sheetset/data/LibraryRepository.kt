@@ -8,6 +8,7 @@ import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.settings.AppSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -40,6 +41,11 @@ class LibraryRepository(private val root: File) {
     private val catalogFile = File(root, "catalog.json")
     private val scoresDirectory = File(root, "scores")
     private val annotationsDirectory = File(root, "annotations")
+    private val backupArchive: File
+        get() = File(
+            root.parentFile ?: throw BackupException("Library has no parent directory"),
+            ".${root.name}-backup.zip",
+        )
 
     suspend fun load(): LibraryCatalog = withStorageLock { loadCatalog() }
 
@@ -76,23 +82,27 @@ class LibraryRepository(private val root: File) {
     }
 
     suspend fun restoreBackup(source: InputStream): BackupMetadata? = withStorageLock {
+        val catalog = try {
+            Result.success(loadCatalog())
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
         val archive = stageBackup(source)
-        try {
+        val prepared = try {
             if (isSheetSetBackup(archive)) {
-                restoreLibraryBackup(root, archive.inputStream())
-            } else {
-                val prepared = prepareScorePdfImport(root, loadCatalog(), archive)
-                try {
-                    writeCatalog(prepared.catalog)
-                } catch (error: Exception) {
-                    prepared.createdFiles.forEach(File::delete)
-                    throw error
-                }
-                null
+                return@withStorageLock restoreLibraryBackup(root, archive.inputStream())
             }
+            prepareScorePdfImport(root, catalog.getOrThrow(), archive)
         } finally {
             archive.delete()
         }
+        try {
+            writeCatalog(prepared.catalog)
+        } catch (error: Exception) {
+            cleanupNewScoreFiles(prepared.createdFiles, error)
+            throw error
+        }
+        null
     }
 
     suspend fun createSetlist(name: String): Setlist {
@@ -136,8 +146,14 @@ class LibraryRepository(private val root: File) {
         updateCatalog { it.deleteSetlist(setlistId) }
     }
 
-    suspend fun addScoreToSetlist(setlistId: String, scoreId: String) {
-        updateCatalog { it.addScoreToSetlist(setlistId, scoreId) }
+    suspend fun addScoreToSetlist(setlistId: String, scoreId: String) =
+        addScoresToSetlist(setlistId, listOf(scoreId))
+
+    suspend fun addScoresToSetlist(setlistId: String, scoreIds: List<String>) {
+        if (scoreIds.isEmpty()) return
+        updateCatalog { catalog ->
+            scoreIds.fold(catalog) { current, scoreId -> current.addScoreToSetlist(setlistId, scoreId) }
+        }
     }
 
     suspend fun removeScoreFromSetlist(setlistId: String, index: Int) {
@@ -170,8 +186,8 @@ class LibraryRepository(private val root: File) {
             }
             throw error
         }
-        // AtomicFile can log a failed commit without throwing; trust its recovered contents.
-        if (loadCatalog() != updated) throw IOException("Could not commit score deletion")
+        // A committed catalog makes staged score files safe to delete.
+        loadCatalog()
     }
 
     private fun importLocked(source: PdfImport): Score {
@@ -204,7 +220,7 @@ class LibraryRepository(private val root: File) {
             try {
                 writeCatalog(catalog.copy(scores = catalog.scores + score))
             } catch (error: Exception) {
-                destination.delete()
+                cleanupNewScoreFiles(listOf(destination), error)
                 throw error
             }
             return score
@@ -220,6 +236,10 @@ class LibraryRepository(private val root: File) {
     }
 
     private fun loadCatalog(): LibraryCatalog {
+        val archive = backupArchive
+        if (archive.exists() && (!archive.isFile || !archive.delete())) {
+            throw BackupException("Could not remove interrupted backup archive")
+        }
         recoverLibraryBackup(root)
         val catalog = openAtomicFile(catalogFile)?.bufferedReader(Charsets.UTF_8)?.use {
             CatalogJson.decode(it.readText())
@@ -279,12 +299,23 @@ class LibraryRepository(private val root: File) {
         writeAtomic(catalogFile, CatalogJson.encode(catalog))
     }
 
+    private fun cleanupNewScoreFiles(files: List<File>, error: Exception) {
+        val referenced = try {
+            loadCatalog().scores.mapTo(mutableSetOf(), Score::fileName)
+        } catch (recoveryError: Exception) {
+            error.addSuppressed(recoveryError)
+            return
+        }
+        files.filter { it.name !in referenced }.forEach(File::delete)
+    }
+
     private fun stageBackup(source: InputStream): File {
         val parent = root.parentFile ?: throw BackupException("Library has no parent directory")
         if (!parent.exists() && !parent.mkdirs()) {
             throw BackupException("Could not create backup directory")
         }
-        val archive = File.createTempFile("sheetset-backup-", ".zip", parent)
+        val archive = backupArchive
+        if (!archive.createNewFile()) throw BackupException("Could not create backup archive")
         try {
             FileOutputStream(archive).use { output ->
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -318,7 +349,12 @@ class LibraryRepository(private val root: File) {
     }
 
     private suspend fun <T> withStorageLock(block: () -> T): T = withContext(Dispatchers.IO) {
-        mutex.withLock { synchronized(libraryFilesLock) { block() } }
+        mutex.withLock {
+            synchronized(libraryFilesLock) {
+                coroutineContext.ensureActive()
+                block()
+            }
+        }
     }
 
     private fun annotationFile(scoreId: String): File {
@@ -343,15 +379,27 @@ class LibraryRepository(private val root: File) {
 
     private fun writeAtomic(file: File, text: String) {
         file.parentFile?.mkdirsOrThrow()
+        val incomplete = File("${file.path}.new")
+        if (incomplete.exists() && (!incomplete.isFile || !incomplete.delete())) {
+            throw IOException("Could not remove interrupted ${file.name}")
+        }
         val atomicFile = AtomicFile(file)
+        val bytes = text.toByteArray(Charsets.UTF_8)
         val output = atomicFile.startWrite()
         try {
-            output.write(text.toByteArray(Charsets.UTF_8))
+            output.write(bytes)
             output.fd.sync()
             atomicFile.finishWrite(output)
         } catch (error: Exception) {
             atomicFile.failWrite(output)
             throw error
+        }
+        val committed = openAtomicFile(file)?.use { it.readBytes() }
+        if (
+            committed == null || !committed.contentEquals(bytes) ||
+            File("${file.path}.bak").exists() || File("${file.path}.new").exists()
+        ) {
+            throw IOException("Could not commit ${file.name}")
         }
     }
 
@@ -367,7 +415,12 @@ class LibraryRepository(private val root: File) {
 }
 
 internal fun openAtomicFile(file: File): FileInputStream? = try {
-    AtomicFile(file).openRead()
+    AtomicFile(file).openRead().also { input ->
+        if (File("${file.path}.bak").exists()) {
+            input.close()
+            throw IOException("Could not recover ${file.name}")
+        }
+    }
 } catch (error: FileNotFoundException) {
     if (file.exists() || File("${file.path}.bak").exists()) throw error
     null

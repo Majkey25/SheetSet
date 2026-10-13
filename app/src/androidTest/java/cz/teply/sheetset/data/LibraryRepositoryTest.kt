@@ -2,15 +2,18 @@ package cz.teply.sheetset.data
 
 import android.graphics.pdf.PdfDocument
 import android.system.Os
+import android.util.AtomicFile
 import androidx.test.core.app.ApplicationProvider
 import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.pdf.InkAnnotation
 import cz.teply.sheetset.pdf.InkKind
 import cz.teply.sheetset.pdf.NormalizedPoint
+import cz.teply.sheetset.settings.AppSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -24,6 +27,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -31,6 +35,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicReference
 
 class LibraryRepositoryTest {
     private lateinit var root: File
@@ -112,6 +117,62 @@ class LibraryRepositoryTest {
         repository.saveAnnotations("score-1", annotations)
 
         assertEquals(annotations, LibraryRepository(root).loadAnnotations("score-1"))
+    }
+
+    @Test
+    fun failedAnnotationCommitReportsFailureAndAllowsRetry() = runBlocking {
+        val repository = LibraryRepository(root)
+        val score = createAnnotatedScore(repository)
+        val original = repository.loadAnnotations(score.id)
+        val changed = DocumentAnnotations()
+        val directory = File(root, "annotations")
+        val annotations = File(directory, "${score.id}.json")
+        val incomplete = File("${annotations.path}.new")
+        if (incomplete.exists()) assertTrue(incomplete.delete())
+        val atomicFile = AtomicFile(annotations)
+        val pending = atomicFile.startWrite()
+        val usesNewFile = incomplete.exists()
+        atomicFile.failWrite(pending)
+        annotations.copyTo(File("${annotations.path}.bak"))
+        // Keep the pending file writable while preventing directory changes.
+        if (usesNewFile) incomplete.writeText("")
+        assertTrue(directory.setWritable(false, false))
+        try {
+            assertThrows(IOException::class.java) {
+                runBlocking { repository.saveAnnotations(score.id, changed) }
+            }
+        } finally {
+            assertTrue(directory.setWritable(true, true))
+        }
+
+        assertEquals(original, repository.loadAnnotations(score.id))
+        repository.saveAnnotations(score.id, changed)
+        assertEquals(changed, LibraryRepository(root).loadAnnotations(score.id))
+    }
+
+    @Test
+    fun staleNewFilesAllowSingleSuccessfulWriteAndDirectoryBlockersPreserveCatalog() = runBlocking {
+        val repository = LibraryRepository(root)
+        val score = createAnnotatedScore(repository)
+        val initial = repository.load()
+        val pendingCatalog = File(root, "catalog.json.new").apply { writeText("interrupted catalog") }
+
+        val created = repository.createSetlist("Encore")
+
+        assertEquals(initial.copy(setlists = initial.setlists + created), repository.load())
+        assertFalse(pendingCatalog.exists())
+        val pendingAnnotations = File(root, "annotations/${score.id}.json.new")
+            .apply { writeText("interrupted annotations") }
+        repository.saveAnnotations(score.id, DocumentAnnotations())
+        assertEquals(DocumentAnnotations(), repository.loadAnnotations(score.id))
+        assertFalse(pendingAnnotations.exists())
+
+        val before = repository.load()
+        assertTrue(pendingCatalog.mkdir())
+        val blocker = File(pendingCatalog, "keep").apply { writeText("unknown data") }
+        assertThrows(IOException::class.java) { runBlocking { repository.createSetlist("Blocked") } }
+        assertEquals(before, repository.load())
+        assertEquals("unknown data", blocker.readText())
     }
 
     @Test
@@ -286,6 +347,46 @@ class LibraryRepositoryTest {
     }
 
     @Test
+    fun failedCatalogCommitCannotDeleteStagedFilesBeforeRollback() = runBlocking {
+        val repository = LibraryRepository(root)
+        val score = createAnnotatedScore(repository)
+        val catalog = repository.load()
+        val originals = scoreFiles(score).mapValues { it.value.readBytes() }
+        val staging = stageDeletion(score)
+        val catalogFile = File(root, "catalog.json")
+        val atomicFile = AtomicFile(catalogFile)
+        val output = atomicFile.startWrite()
+        try {
+            assertTrue(root.setWritable(false, false))
+            output.write(CatalogJson.encode(catalog.deleteScore(score.id)).toByteArray(Charsets.UTF_8))
+            output.fd.sync()
+            atomicFile.finishWrite(output)
+
+            if (File("${catalogFile.path}.bak").exists()) {
+                assertThrows(IOException::class.java) { runBlocking { repository.load() } }
+                originals.forEach { (name, bytes) ->
+                    assertArrayEquals(bytes, File(staging, name).readBytes())
+                }
+            } else {
+                // Newer AtomicFile keeps the old base when its .new rename fails.
+                assertEquals(catalog, repository.load())
+            }
+        } finally {
+            assertTrue(root.setWritable(true, true))
+            output.close()
+        }
+
+        assertEquals(catalog, LibraryRepository(root).load())
+        originals.forEach { (name, bytes) ->
+            assertArrayEquals(bytes, scoreFiles(score).getValue(name).readBytes())
+        }
+        assertFalse(staging.exists())
+        repository.deleteScore(score.id)
+        assertTrue(repository.load().scores.isEmpty())
+        scoreFiles(score).values.forEach { assertFalse(it.exists()) }
+    }
+
+    @Test
     fun interruptedDeletionUsesRecoveredCatalogToRestoreAllFiles() = runBlocking {
         val repository = LibraryRepository(root)
         val score = createAnnotatedScore(repository)
@@ -425,6 +526,115 @@ class LibraryRepositoryTest {
         }
         repository.saveAnnotations("score-1", DocumentAnnotations())
         assertTrue(File(root, "annotations/score-1.json").isFile)
+    }
+
+    @Test
+    fun cancelledSaveWaitingOnAnotherRepositoryDoesNotOverwriteAnnotations() = runBlocking {
+        val repository = LibraryRepository(root)
+        val score = createAnnotatedScore(repository)
+        val original = repository.loadAnnotations(score.id)
+        val source = createPdf("second.pdf", pages = 1)
+        val opened = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val workers = Executors.newSingleThreadExecutor()
+        try {
+            val importing = workers.submit<Score> {
+                runBlocking {
+                    repository.importPdf(PdfImport("Second.pdf", "application/pdf", source.length()) {
+                        opened.countDown()
+                        check(release.await(5, TimeUnit.SECONDS)) { "Import was not released" }
+                        source.inputStream()
+                    })
+                }
+            }
+            assertTrue(opened.await(5, TimeUnit.SECONDS))
+            val waitingThread = AtomicReference<Thread>()
+            val saving = launch(Dispatchers.IO) {
+                waitingThread.set(Thread.currentThread())
+                LibraryRepository(root).saveAnnotations(score.id, DocumentAnnotations())
+            }
+            withTimeout(5_000) {
+                while (waitingThread.get()?.state != Thread.State.BLOCKED) delay(10)
+            }
+            saving.cancel()
+            release.countDown()
+            withTimeout(5_000) { saving.join() }
+            assertTrue(saving.isCancelled)
+            importing.get(5, TimeUnit.SECONDS)
+
+            assertEquals(original, LibraryRepository(root).loadAnnotations(score.id))
+        } finally {
+            release.countDown()
+            workers.shutdownNow()
+        }
+    }
+
+    @Test
+    fun loadRemovesOnlyThisLibraryInterruptedBackupArchive() = runBlocking {
+        val repository = LibraryRepository(root)
+        repository.createSetlist("Keep")
+        val catalog = repository.load()
+        val interrupted = File(root.parentFile, ".${root.name}-backup.zip")
+        val foreign = File(root.parentFile, ".${root.name}-other-backup.zip")
+        val legacy = File(root.parentFile, "sheetset-backup-${UUID.randomUUID()}.zip")
+        try {
+            interrupted.writeText("interrupted archive")
+            foreign.writeText("another library")
+            legacy.writeText("legacy archive")
+
+            assertEquals(catalog, LibraryRepository(root).load())
+
+            assertFalse(interrupted.exists())
+            assertEquals("another library", foreign.readText())
+            assertEquals("legacy archive", legacy.readText())
+        } finally {
+            listOf(interrupted, foreign, legacy).forEach(File::delete)
+        }
+    }
+
+    @Test
+    fun nativeBackupCanReplaceCorruptCatalog() = runBlocking {
+        val repository = LibraryRepository(root)
+        val score = createAnnotatedScore(repository)
+        val catalog = repository.load()
+        val annotations = repository.loadAnnotations(score.id)
+        val archive = ByteArrayOutputStream()
+        repository.createBackup(archive, AppSettings(), null)
+        File(root, "catalog.json").writeText("{")
+
+        repository.restoreBackup(archive.toByteArray().inputStream())
+
+        assertEquals(catalog, repository.load())
+        assertEquals(annotations, repository.loadAnnotations(score.id))
+        assertFalse(File(root.parentFile, ".${root.name}-backup.zip").exists())
+    }
+
+    @Test
+    fun bulkAddPreservesOrderAndDuplicatesWithoutPartialUpdates() = runBlocking {
+        val source = createPdf("song.pdf", pages = 1)
+        val repository = LibraryRepository(root)
+        val first = repository.importPdf(
+            PdfImport("First.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val second = repository.importPdf(
+            PdfImport("Second.pdf", "application/pdf", source.length(), source::inputStream),
+        )
+        val setlist = repository.createSetlist("Show")
+        repository.addScoreToSetlist(setlist.id, first.id)
+        val before = repository.load()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                repository.addScoresToSetlist(setlist.id, listOf(second.id, "missing", first.id))
+            }
+        }
+        assertEquals(before, LibraryRepository(root).load())
+        repository.addScoresToSetlist(setlist.id, listOf(second.id, first.id, first.id))
+
+        assertEquals(
+            listOf(first.id, second.id, first.id, first.id),
+            LibraryRepository(root).load().setlists.single().scoreIds,
+        )
     }
 
     @Test

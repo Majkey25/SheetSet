@@ -93,7 +93,7 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun addScores(setlistId: String, scoreIds: List<String>) = launchAction {
-        scoreIds.forEach { scoreId -> repository.addScoreToSetlist(setlistId, scoreId) }
+        repository.addScoresToSetlist(setlistId, scoreIds)
     }
 
     fun removeScore(setlistId: String, index: Int) = launchAction {
@@ -379,18 +379,35 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
             libraryMutationMutex.withLock {
                 mutableState.update { it.copy(loading = true, error = false) }
                 try {
-                    action()
+                    val failed = try {
+                        action()
+                        false
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        true
+                    }
                     val catalog = repository.load()
                     mutableState.update {
+                        // Catalog edits leave positions unchanged; queued page saves may be newer.
+                        val localScores = it.catalog.scores.associateBy(Score::id)
+                        val updatedCatalog = catalog.copy(scores = catalog.scores.map { score ->
+                            val local = localScores[score.id] ?: return@map score
+                            score.copy(
+                                lastPageIndex = local.lastPageIndex,
+                                lastPagePart = local.lastPagePart,
+                                lastViewedAtEpochMs = local.lastViewedAtEpochMs,
+                            )
+                        })
                         val reader = it.reader?.let { current ->
-                            catalog.scores.firstOrNull { score -> score.id == current.score.id }
+                            updatedCatalog.scores.firstOrNull { score -> score.id == current.score.id }
                                 ?.let { score -> current.copy(score = score) }
                         }
                         it.copy(
-                            catalog = catalog,
+                            catalog = updatedCatalog,
                             reader = reader,
                             loading = restoringBackup,
-                            error = false,
+                            error = failed,
                         )
                     }
                 } catch (error: CancellationException) {
@@ -420,30 +437,32 @@ class SheetSetViewModel(application: Application) : AndroidViewModel(application
                 val annotations = annotationSaveMutex.withLock {
                     annotationSaves.pendingAnnotations(score.id) ?: repository.loadAnnotations(score.id)
                 }
-                repository.saveReaderPosition(
-                    score.id,
-                    page = pageIndex,
-                    part = pagePart,
-                    viewedAt = System.currentTimeMillis(),
-                )
-                val catalog = repository.load()
-                val savedScore = catalog.scores.first { it.id == score.id }
-                val pendingAnnotations = annotationSaves.pendingAnnotations(score.id)
-                mutableState.update {
-                    it.copy(
-                        catalog = catalog,
-                        loading = false,
-                        reader = ReaderUiState(
-                            score = savedScore,
-                            file = file,
-                            scoreIds = scoreIds,
-                            scoreIndex = scoreIndex,
-                            pageIndex = pageIndex,
-                            pagePart = pagePart,
-                            annotations = it.reader?.takeIf { reader -> reader.score.id == score.id }?.annotations
-                                ?: pendingAnnotations ?: annotations,
-                        ),
+                libraryMutationMutex.withLock {
+                    repository.saveReaderPosition(
+                        score.id,
+                        page = pageIndex,
+                        part = pagePart,
+                        viewedAt = System.currentTimeMillis(),
                     )
+                    val catalog = repository.load()
+                    val savedScore = catalog.scores.first { it.id == score.id }
+                    val pendingAnnotations = annotationSaves.pendingAnnotations(score.id)
+                    mutableState.update {
+                        it.copy(
+                            catalog = catalog,
+                            loading = false,
+                            reader = ReaderUiState(
+                                score = savedScore,
+                                file = file,
+                                scoreIds = scoreIds,
+                                scoreIndex = scoreIndex,
+                                pageIndex = pageIndex,
+                                pagePart = pagePart,
+                                annotations = it.reader?.takeIf { reader -> reader.score.id == score.id }?.annotations
+                                    ?: pendingAnnotations ?: annotations,
+                            ),
+                        )
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error

@@ -10,9 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.click
@@ -27,6 +31,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.AnnotatedString
+import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.pdf.NormalizedRect
@@ -38,6 +44,7 @@ import cz.teply.sheetset.settings.ReaderLayout
 import cz.teply.sheetset.ui.PDF_PAGE_TEST_TAG
 import cz.teply.sheetset.ui.ReaderScreen
 import cz.teply.sheetset.ui.SheetSetActions
+import cz.teply.sheetset.ui.SheetSetApp
 import cz.teply.sheetset.ui.SheetSetTheme
 import cz.teply.sheetset.ui.WindowLayout
 import java.io.File
@@ -195,6 +202,127 @@ class ReaderWorkflowRegressionTest {
             assertEquals(initial.bounds, text.bounds)
             assertEquals("After rotation", text.text)
         }
+    }
+
+    @Test
+    fun textDraftDoesNotCarryIntoAnotherScoreAfterStateRestoration() {
+        val first = reader()
+        val second = first.copy(
+            score = first.score.copy(id = "score-2", title = "Second song"),
+            scoreIds = listOf("score-2"),
+        )
+        var state = LibraryUiState(
+            catalog = LibraryCatalog(scores = listOf(first.score, second.score)),
+            reader = first,
+        )
+        var saved: Pair<String, DocumentAnnotations>? = null
+        val restoration = StateRestorationTester(composeRule)
+        restoration.setContent {
+            SheetSetTheme {
+                SheetSetApp(
+                    state,
+                    SheetSetActions(saveAnnotations = { id, _, annotations -> saved = id to annotations }),
+                )
+            }
+        }
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
+        composeRule.runOnIdle {
+            requireNotNull(findPdfPage(composeRule.activity.window.decorView))
+                .onRequestText(NormalizedRect(0.2f, 0.2f, 0.7f, 0.4f))
+        }
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("Draft for first score")
+        // Change only the recreation input, leaving the saved composition on the first score.
+        composeRule.runOnIdle { state = state.copy(reader = second) }
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        composeRule.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
+        composeRule.runOnIdle {
+            requireNotNull(findPdfPage(composeRule.activity.window.decorView))
+                .onRequestText(NormalizedRect(0.2f, 0.2f, 0.7f, 0.4f))
+        }
+        composeRule.onNode(hasSetTextAction()).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")),
+        )
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("Draft for second score")
+        composeRule.onNodeWithText("Save").performClick()
+        composeRule.runOnIdle {
+            val (scoreId, annotations) = requireNotNull(saved)
+            assertEquals(second.score.id, scoreId)
+            assertEquals("Draft for second score", (annotations.pages.getValue(0).single() as TextBoxAnnotation).text)
+        }
+    }
+
+    @Test
+    fun textDraftDoesNotCarryIntoAnotherPageAfterStateRestoration() {
+        var state = reader()
+        val restoration = StateRestorationTester(composeRule)
+        restoration.setContent {
+            SheetSetTheme {
+                ReaderScreen(state, AppSettings(), WindowLayout.COMPACT, SheetSetActions())
+            }
+        }
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
+        composeRule.runOnIdle {
+            requireNotNull(findPdfPage(composeRule.activity.window.decorView))
+                .onRequestText(NormalizedRect(0.2f, 0.2f, 0.7f, 0.4f))
+        }
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("Draft for first page")
+        // Change only the recreation input, leaving the saved composition on the first page.
+        composeRule.runOnIdle { state = state.copy(pageIndex = 1) }
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        composeRule.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
+        composeRule.runOnIdle {
+            requireNotNull(findPdfPage(composeRule.activity.window.decorView))
+                .onRequestText(NormalizedRect(0.2f, 0.2f, 0.7f, 0.4f))
+        }
+        composeRule.onNode(hasSetTextAction()).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")),
+        )
+    }
+
+    @Test
+    fun pageChangePreservesActiveAnnotationTool() {
+        var state by mutableStateOf(reader())
+        composeRule.setContent {
+            SheetSetTheme {
+                ReaderScreen(state, AppSettings(), WindowLayout.COMPACT, SheetSetActions())
+            }
+        }
+        composeRule.onNodeWithContentDescription("Annotation").performClick()
+        composeRule.onNodeWithContentDescription("Eraser").performClick()
+
+        composeRule.runOnIdle { state = state.copy(pageIndex = 1) }
+
+        composeRule.onNodeWithContentDescription("Eraser").assertIsDisplayed().assertIsSelected()
+    }
+
+    @Test
+    fun twoPagePreviousIsDisabledAtFirstSpreadUnlessAnotherScorePrecedesIt() {
+        var state by mutableStateOf(reader().copy(pageIndex = 1))
+        var previousLayout: ReaderLayout? = null
+        composeRule.setContent {
+            SheetSetTheme {
+                ReaderScreen(
+                    state,
+                    AppSettings(readerLayout = ReaderLayout.TWO_PAGE),
+                    WindowLayout.MEDIUM,
+                    SheetSetActions(previousPage = { previousLayout = it }),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Previous").assertIsNotEnabled()
+        composeRule.runOnIdle {
+            state = state.copy(scoreIds = listOf("previous-score", state.score.id), scoreIndex = 1)
+        }
+
+        composeRule.onNodeWithContentDescription("Previous").assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals(ReaderLayout.TWO_PAGE, previousLayout) }
     }
 
     @Test

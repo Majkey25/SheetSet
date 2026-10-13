@@ -5,6 +5,7 @@ import android.graphics.pdf.PdfDocument
 import androidx.test.core.app.ApplicationProvider
 import cz.teply.sheetset.pdf.AnnotationColor
 import cz.teply.sheetset.pdf.AnnotationEditorSettings
+import cz.teply.sheetset.pdf.AnnotationJson
 import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.pdf.NormalizedPoint
 import cz.teply.sheetset.pdf.SymbolAnnotation
@@ -61,7 +62,7 @@ class LibraryBackupTest {
             source.addScoreToSetlist(setlist.id, score.id)
             val annotations = DocumentAnnotations(
                 mapOf(
-                    0 to listOf(
+                    score.pageCount - 1 to listOf(
                         SymbolAnnotation(
                             id = "symbol",
                             symbolId = "sharp",
@@ -97,12 +98,111 @@ class LibraryBackupTest {
             assertEquals(source.load(), restored.load())
             assertEquals(annotations, restored.loadAnnotations(score.id))
             assertEquals(expectedEditor, metadata.settings.editor)
-            assertTrue(restored.loadAnnotations(score.id).pages.getValue(0).single() is SymbolAnnotation)
+            assertTrue(restored.loadAnnotations(score.id).pages.getValue(score.pageCount - 1).single() is SymbolAnnotation)
             assertEquals(settings, metadata.settings)
             assertEquals("cs", metadata.languageTag)
             assertEquals(score.pageCount, restored.load().scores.single().pageCount)
             pdf.delete()
         }
+    }
+
+    @Test
+    fun backupRejectsAnnotationsBeyondLastPdfPageBeforeWriting() = runBlocking {
+        val repository = LibraryRepository(sourceRoot)
+        val pdf = createPdf(pages = 2)
+        try {
+            val score = repository.importPdf(PdfImport("Score.pdf", "application/pdf", pdf.length(), pdf::inputStream))
+            repository.saveAnnotations(score.id, DocumentAnnotations(mapOf(score.pageCount to listOf(SymbolAnnotation(
+                "symbol", "sharp", NormalizedPoint(0.2f, 0.3f), 0.08f, 15f, AnnotationColor.RED, 180,
+            )))))
+            val archive = ByteArrayOutputStream()
+
+            assertThrows(BackupException::class.java) {
+                runBlocking { repository.createBackup(archive, AppSettings(), null) }
+            }
+
+            assertEquals(0, archive.size())
+        } finally {
+            pdf.delete()
+        }
+    }
+
+    @Test
+    fun annotationsBeyondLastPdfPageCannotReplaceExistingLibrary() = runBlocking {
+        val repository = LibraryRepository(restoreRoot)
+        val source = LibraryRepository(sourceRoot)
+        val pdf = createPdf(pages = 2)
+        try {
+            val existing = repository.importPdf(PdfImport("Keep.pdf", "application/pdf", pdf.length(), pdf::inputStream))
+            val annotations = DocumentAnnotations(mapOf(0 to listOf(SymbolAnnotation(
+                "symbol", "sharp", NormalizedPoint(0.2f, 0.3f), 0.08f, 15f, AnnotationColor.RED, 180,
+            ))))
+            repository.saveAnnotations(existing.id, annotations)
+            repository.createSetlist("Keep")
+            val original = repository.load()
+            val incoming = source.importPdf(PdfImport("Incoming.pdf", "application/pdf", pdf.length(), pdf::inputStream))
+            val validArchive = ByteArrayOutputStream()
+            source.createBackup(validArchive, AppSettings(), null)
+            val archive = ByteArrayOutputStream().also { output ->
+                ZipOutputStream(output).use { zip ->
+                    zip.putNextEntry(ZipEntry("annotations/${incoming.id}.json"))
+                    val invalidAnnotations = DocumentAnnotations(mapOf(incoming.pageCount to annotations.pages.getValue(0)))
+                    zip.write(AnnotationJson.encode(invalidAnnotations).toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                    ZipInputStream(ByteArrayInputStream(validArchive.toByteArray())).use { input ->
+                        while (true) {
+                            val entry = input.nextEntry ?: break
+                            zip.putNextEntry(ZipEntry(entry.name))
+                            input.copyTo(zip)
+                            zip.closeEntry()
+                        }
+                    }
+                }
+            }
+
+            assertThrows(BackupException::class.java) {
+                runBlocking { repository.restoreBackup(ByteArrayInputStream(archive.toByteArray())) }
+            }
+
+            val reopened = LibraryRepository(restoreRoot)
+            assertEquals(original, reopened.load())
+            assertTrue(pdf.readBytes().contentEquals(reopened.pdfFile(existing).readBytes()))
+            assertEquals(annotations, reopened.loadAnnotations(existing.id))
+        } finally {
+            pdf.delete()
+        }
+    }
+
+    @Test
+    fun fractionalManifestVersionCannotReplaceExistingLibrary() = runBlocking {
+        val repository = LibraryRepository(restoreRoot)
+        repository.createSetlist("Keep")
+        val original = repository.load()
+        val validArchive = ByteArrayOutputStream()
+        LibraryRepository(sourceRoot).createBackup(validArchive, AppSettings(), null)
+        val archive = ByteArrayOutputStream().also { output ->
+            ZipInputStream(ByteArrayInputStream(validArchive.toByteArray())).use { input ->
+                ZipOutputStream(output).use { zip ->
+                    while (true) {
+                        val entry = input.nextEntry ?: break
+                        zip.putNextEntry(ZipEntry(entry.name))
+                        if (entry.name == "manifest.json") {
+                            val manifest = JSONObject(input.readBytes().toString(Charsets.UTF_8)).put("version", 2.5)
+                            zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
+                        } else {
+                            input.copyTo(zip)
+                        }
+                        zip.closeEntry()
+                    }
+                }
+            }
+        }
+
+        assertThrows(BackupException::class.java) {
+            runBlocking { repository.restoreBackup(ByteArrayInputStream(archive.toByteArray())) }
+        }
+
+        assertEquals(original, LibraryRepository(restoreRoot).load())
     }
 
     @Test

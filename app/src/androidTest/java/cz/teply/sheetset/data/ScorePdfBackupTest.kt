@@ -103,6 +103,20 @@ class ScorePdfBackupTest {
 
     @Test
     fun underreportedPdfSizeRejectsImportAndCleansStaging() {
+        assertInvalidPdfEntryRejected(24) { 1 }
+    }
+
+    @Test
+    fun overreportedPdfSizeRejectsImportAndCleansStaging() {
+        assertInvalidPdfEntryRejected(24) { it + 1 }
+    }
+
+    @Test
+    fun incorrectPdfCrcRejectsImportAndCleansStaging() {
+        assertInvalidPdfEntryRejected(16) { it xor 1 }
+    }
+
+    private fun assertInvalidPdfEntryRejected(fieldOffset: Int, invalidValue: (Int) -> Int) {
         runBlocking {
             val library = File(root, "library")
             val repository = LibraryRepository(library)
@@ -127,14 +141,16 @@ class ScorePdfBackupTest {
                     String(archive, pdfHeader + 46, headers.getShort(pdfHeader + 28).toInt(), Charsets.UTF_8),
                 )
                 assertEquals(pdf.length().toInt(), headers.getInt(pdfHeader + 24))
-                headers.putInt(pdfHeader + 24, 1)
-                val archiveFile = File(root, "underreported.zip").apply { writeBytes(archive) }
+                val originalValue = headers.getInt(pdfHeader + fieldOffset)
+                headers.putInt(pdfHeader + fieldOffset, invalidValue(originalValue))
+                val archiveFile = File(root, "invalid.zip").apply { writeBytes(archive) }
                 ZipFile(archiveFile).use { zip ->
                     val entry = zip.getEntry("shared.pdf")
-                    assertEquals(1L, entry.size)
-                    val expanded = zip.getInputStream(entry).use { it.readBytes() }
-                    assertArrayEquals(pdf.readBytes(), expanded)
-                    assertTrue(expanded.size.toLong() > entry.size)
+                    if (entry.size < pdf.length()) {
+                        val expanded = zip.getInputStream(entry).use { it.readBytes() }
+                        assertArrayEquals(pdf.readBytes(), expanded)
+                        assertTrue(expanded.size.toLong() > entry.size)
+                    }
                 }
 
                 assertThrows(BackupException::class.java) {
@@ -144,7 +160,7 @@ class ScorePdfBackupTest {
                 assertEquals(before, repository.load())
                 assertArrayEquals(pdf.readBytes(), repository.pdfFile(existing).readBytes())
                 assertEquals(listOf(existing.fileName), File(library, "scores").list()!!.toList())
-                assertEquals(setOf("library", "underreported.zip"), root.list()!!.toSet())
+                assertEquals(setOf("library", "invalid.zip"), root.list()!!.toSet())
             } finally {
                 pdf.delete()
             }

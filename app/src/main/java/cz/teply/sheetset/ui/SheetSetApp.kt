@@ -40,6 +40,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cz.teply.sheetset.LibraryUiState
 import cz.teply.sheetset.R
+import cz.teply.sheetset.data.MAX_TITLE_LENGTH
 import cz.teply.sheetset.data.Score
 import cz.teply.sheetset.pdf.DocumentAnnotations
 import cz.teply.sheetset.settings.AppSettings
@@ -160,11 +162,13 @@ private fun SheetSetContent(
     }
 
     state.reader?.let { reader ->
-        ReaderScreen(reader, state.settings, windowLayout, actions)
+        key(reader.score.id) {
+            ReaderScreen(reader, state.settings, windowLayout, actions)
+        }
         return
     }
 
-    if (activeSetlist != null && windowLayout != WindowLayout.EXPANDED) {
+    if (selectedTab == 1 && activeSetlist != null && windowLayout != WindowLayout.EXPANDED) {
         SetlistDetail(
             setlist = activeSetlist,
             scores = state.catalog.scores,
@@ -315,7 +319,7 @@ private fun SheetSetContent(
             text = {
                 OutlinedTextField(
                     value = setlistName,
-                    onValueChange = { setlistName = it },
+                    onValueChange = { setlistName = it.take(MAX_TITLE_LENGTH) },
                     label = { Text(stringResource(R.string.setlist_name)) },
                     singleLine = true,
                 )

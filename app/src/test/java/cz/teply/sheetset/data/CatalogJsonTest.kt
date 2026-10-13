@@ -1,5 +1,6 @@
 package cz.teply.sheetset.data
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -42,6 +43,76 @@ class CatalogJsonTest {
         )
 
         assertEquals(catalog, CatalogJson.decode(CatalogJson.encode(catalog)))
+    }
+
+    @Test
+    fun `catalog version must be a JSON number`() {
+        for (version in listOf("null", "true", "\"2\"")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                CatalogJson.decode("""{"version":$version,"scores":[],"setlists":[]}""")
+            }
+        }
+    }
+
+    @Test
+    fun `catalog integer fields reject fractions and wrapped values`() {
+        val catalog = LibraryCatalog(scores = listOf(
+            Score(
+                "score-1", "Song", "score-1.pdf", 3, 7L,
+                bookmarks = listOf(Bookmark("bookmark-1", "Chorus", 1)),
+                lastPageIndex = 2,
+                lastPagePart = 1,
+            ),
+        ))
+        val json = JSONObject(CatalogJson.encode(catalog))
+        val score = json.getJSONArray("scores").getJSONObject(0)
+        val bookmark = score.getJSONArray("bookmarks").getJSONObject(0)
+        val fields = listOf(
+            json to "version",
+            score to "pageCount",
+            score to "lastPageIndex",
+            score to "lastPagePart",
+            bookmark to "pageIndex",
+        )
+
+        assertEquals(catalog, CatalogJson.decode(json.toString()))
+        fields.forEach { (target, key) ->
+            val original = target.getLong(key)
+            listOf<Number>(original + 0.5, original + 4_294_967_296L).forEach { invalid ->
+                target.put(key, invalid)
+                assertThrows("$key=$invalid", IllegalArgumentException::class.java) {
+                    CatalogJson.decode(json.toString())
+                }
+            }
+            target.put(key, original)
+        }
+    }
+
+    @Test
+    fun `catalog timestamps reject negative fractions and preserve maximum long`() {
+        val catalog = LibraryCatalog(
+            scores = listOf(Score(
+                "score-1", "Song", "score-1.pdf", 1, Long.MAX_VALUE,
+                lastViewedAtEpochMs = Long.MAX_VALUE,
+            )),
+            setlists = listOf(Setlist("set-1", "Show", createdAtEpochMs = Long.MAX_VALUE)),
+        )
+        val json = JSONObject(CatalogJson.encode(catalog))
+        val score = json.getJSONArray("scores").getJSONObject(0)
+        val setlist = json.getJSONArray("setlists").getJSONObject(0)
+
+        assertEquals(catalog, CatalogJson.decode(json.toString()))
+        listOf(
+            score to "importedAtEpochMs",
+            score to "lastViewedAtEpochMs",
+            setlist to "createdAtEpochMs",
+        ).forEach { (target, key) ->
+            target.put(key, -0.5)
+            assertThrows(key, IllegalArgumentException::class.java) {
+                CatalogJson.decode(json.toString())
+            }
+            target.put(key, Long.MAX_VALUE)
+        }
     }
 
     @Test

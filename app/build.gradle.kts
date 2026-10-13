@@ -20,8 +20,8 @@ android {
         applicationId = "com.majkeylab.sheetset"
         minSdk = 29
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.5.0-alpha.12"
+        versionCode = 18
+        versionName = "0.5.0-alpha.13"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

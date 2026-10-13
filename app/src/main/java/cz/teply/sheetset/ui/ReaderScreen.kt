@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -144,10 +145,12 @@ fun ReaderScreen(
     var objectOpacity by remember(reader.score.id) { mutableIntStateOf(255) }
     var objectWidth by remember(reader.score.id) { mutableIntStateOf(2) }
     var straightLine by remember(reader.score.id) { mutableStateOf(false) }
-    var textBounds by rememberSaveable(reader.score.id, reader.pageIndex, stateSaver = textBoundsSaver) {
-        mutableStateOf<NormalizedRect?>(null)
+    var textBounds by key(reader.score.id, reader.pageIndex) {
+        rememberSaveable(stateSaver = textBoundsSaver) { mutableStateOf<NormalizedRect?>(null) }
     }
-    var editingTextId by rememberSaveable(reader.score.id, reader.pageIndex) { mutableStateOf<String?>(null) }
+    var editingTextId by key(reader.score.id, reader.pageIndex) {
+        rememberSaveable { mutableStateOf<String?>(null) }
+    }
     var symbolPoint by remember { mutableStateOf<NormalizedPoint?>(null) }
     var selectedSymbolId by remember { mutableStateOf("sharp") }
     var colorPanelOpen by remember { mutableStateOf(false) }
@@ -597,30 +600,32 @@ fun ReaderScreen(
         )
     }
 
-    textBounds?.let { bounds ->
-        TextAnnotationDialog(
-            initial = editingText,
-            bounds = bounds,
-            defaultSize = settings.textSize,
-            defaultColor = objectColor,
-            defaultOpacity = objectOpacity,
-            quickColors = editor.quickColors,
-            recentColors = editor.recentColors,
-            onDismiss = {
-                textBounds = null
-                editingTextId = null
-            },
-            onConfirm = { annotation ->
-                if (editingText == null) {
-                    addAnnotation(annotation)
-                } else {
-                    updateHistory(history.update(annotation))
-                }
-                saveRecentColor(annotation.color)
-                textBounds = null
-                editingTextId = null
-            },
-        )
+    key(reader.score.id, reader.pageIndex) {
+        textBounds?.let { bounds ->
+            TextAnnotationDialog(
+                initial = editingText,
+                bounds = bounds,
+                defaultSize = settings.textSize,
+                defaultColor = objectColor,
+                defaultOpacity = objectOpacity,
+                quickColors = editor.quickColors,
+                recentColors = editor.recentColors,
+                onDismiss = {
+                    textBounds = null
+                    editingTextId = null
+                },
+                onConfirm = { annotation ->
+                    if (editingText == null) {
+                        addAnnotation(annotation)
+                    } else {
+                        updateHistory(history.update(annotation))
+                    }
+                    saveRecentColor(annotation.color)
+                    textBounds = null
+                    editingTextId = null
+                },
+            )
+        }
     }
 
     symbolPoint?.let { point ->
@@ -752,8 +757,11 @@ private fun ReaderNavigationBar(
     sliderInteractionSource: MutableInteractionSource,
     onAnnotate: () -> Unit,
 ) {
-    val previousEnabled = reader.scoreIndex > 0 || reader.pageIndex > 0 ||
-        (layout == ReaderLayout.HALF && reader.pagePart == 1)
+    val previousEnabled = reader.scoreIndex > 0 || when (layout) {
+        ReaderLayout.SINGLE -> reader.pageIndex > 0
+        ReaderLayout.HALF -> reader.pageIndex > 0 || reader.pagePart == 1
+        ReaderLayout.TWO_PAGE -> reader.pageIndex - reader.pageIndex % 2 > 0
+    }
     val nextEnabled = reader.scoreIndex < reader.scoreIds.lastIndex || when (layout) {
         ReaderLayout.SINGLE -> reader.pageIndex < reader.score.pageCount - 1
         ReaderLayout.HALF -> reader.pagePart == 0 || reader.pageIndex < reader.score.pageCount - 1

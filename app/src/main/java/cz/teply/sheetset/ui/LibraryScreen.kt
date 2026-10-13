@@ -46,6 +46,7 @@ import cz.teply.sheetset.R
 import cz.teply.sheetset.data.LibraryCatalog
 import cz.teply.sheetset.data.MAX_LABEL_LENGTH
 import cz.teply.sheetset.data.MAX_LABELS
+import cz.teply.sheetset.data.MAX_TITLE_LENGTH
 import cz.teply.sheetset.data.Score
 
 @Composable
@@ -93,7 +94,7 @@ fun LibraryScreen(
                 OutlinedTextField(
                     modifier = Modifier.weight(1f),
                     value = query,
-                    onValueChange = { query = it },
+                    onValueChange = { query = it.take(MAX_TITLE_LENGTH) },
                     label = { Text(stringResource(R.string.search_pdfs)) },
                     singleLine = true,
                 )
@@ -402,7 +403,7 @@ internal fun NameDialog(
         text = {
             OutlinedTextField(
                 value = value,
-                onValueChange = { value = it },
+                onValueChange = { value = it.take(MAX_TITLE_LENGTH) },
                 label = { Text(label) },
                 singleLine = true,
             )

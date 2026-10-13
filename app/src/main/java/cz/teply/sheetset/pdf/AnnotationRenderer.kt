@@ -183,25 +183,19 @@ object AnnotationRenderer {
         when (annotation.kind) {
             ShapeKind.LINE -> canvas.drawLine(startX, startY, endX, endY, paint)
             ShapeKind.ARROW -> {
-                canvas.drawLine(startX, startY, endX, endY, paint)
                 val angle = atan2(endY - startY, endX - startX)
                 val length = hypot(endX - startX, endY - startY)
                 val head = min(length * 0.25f, min(page.width(), page.height()) * 0.04f)
                 val spread = 0.55f
-                canvas.drawLine(
-                    endX,
-                    endY,
-                    endX - cos(angle - spread) * head,
-                    endY - sin(angle - spread) * head,
-                    paint,
-                )
-                canvas.drawLine(
-                    endX,
-                    endY,
-                    endX - cos(angle + spread) * head,
-                    endY - sin(angle + spread) * head,
-                    paint,
-                )
+                val path = Path().apply {
+                    moveTo(startX, startY)
+                    lineTo(endX, endY)
+                    moveTo(endX, endY)
+                    lineTo(endX - cos(angle - spread) * head, endY - sin(angle - spread) * head)
+                    moveTo(endX, endY)
+                    lineTo(endX - cos(angle + spread) * head, endY - sin(angle + spread) * head)
+                }
+                canvas.drawPath(path, paint)
             }
             ShapeKind.RECTANGLE -> canvas.drawRect(shapeBounds(annotation, page), paint)
             ShapeKind.ELLIPSE -> canvas.drawOval(shapeBounds(annotation, page), paint)

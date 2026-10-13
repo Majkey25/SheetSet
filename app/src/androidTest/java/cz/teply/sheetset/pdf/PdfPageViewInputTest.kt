@@ -224,6 +224,41 @@ class PdfPageViewInputTest {
     }
 
     @Test
+    fun viewStylusPointerUpDoesNotTurnPageFromRemainingFinger() {
+        var nextCount = 0
+        scenario.onActivity {
+            view.layout(0, 0, 300, 300)
+            view.tool = ReaderTool.VIEW
+            view.pageFit = PageFit.PAGE
+            view.editorSettings = AnnotationEditorSettings.defaults().copy(palmRejection = true)
+            view.onNextPage = { nextCount++ }
+        }
+        val stylus = Point(250f, 150f)
+        val finger = Point(50f, 150f)
+        val downTime = SystemClock.uptimeMillis()
+
+        send(event(downTime, downTime, MotionEvent.ACTION_DOWN, Pointer(10, STYLUS, stylus)))
+        send(
+            event(
+                downTime, downTime + 10,
+                MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                Pointer(10, STYLUS, stylus), Pointer(11, FINGER, finger),
+            ),
+        )
+        send(
+            event(
+                downTime, downTime + 20, MotionEvent.ACTION_POINTER_UP,
+                Pointer(10, STYLUS, stylus), Pointer(11, FINGER, finger),
+            ),
+        )
+        send(event(downTime, downTime + 30, MotionEvent.ACTION_UP, Pointer(11, FINGER, finger)))
+
+        assertEquals("The remaining finger must not finish the stylus gesture", 0, nextCount)
+        tap(stylus)
+        assertEquals("A fresh finger gesture must still turn the page", 1, nextCount)
+    }
+
+    @Test
     fun enteringHalfPageModeRealignsUnchangedTopPart() {
         val tallSource = createPdf(ApplicationProvider.getApplicationContext(), pageHeight = 1_200)
         try {
@@ -256,6 +291,21 @@ class PdfPageViewInputTest {
         assertEquals(Color.rgb(18, 18, 18), pageCenterColor())
         scenario.onActivity { view.showPage(source, 0) }
         awaitRenderedPage()
+    }
+
+    @Test
+    fun pageRenderingCompletesBeforeViewIsAttached() {
+        scenario.onActivity { activity ->
+            view = PdfPageView(activity)
+            view.layout(0, 0, 300, 300)
+            view.showPage(source, 0)
+            assertFalse(view.isAttachedToWindow)
+        }
+        try {
+            awaitRenderedPage()
+        } finally {
+            scenario.onActivity { activity -> activity.setContentView(view) }
+        }
     }
 
     @Test

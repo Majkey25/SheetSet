@@ -6,6 +6,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.Locale
 import java.util.UUID
+import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
@@ -50,7 +51,7 @@ internal fun prepareScorePdfImport(
             val stagedPdfs = linkedMapOf<String, Pair<File, Int>>()
             pdfEntries.toSortedMap().forEach { (name, entry) ->
                 val file = File(staging, "${stagedPdfs.size}.pdf")
-                zip.getInputStream(entry).use { input -> input.copyBounded(file, entry.size) }
+                zip.getInputStream(entry).use { input -> input.copyBounded(file, entry) }
                 stagedPdfs[name] = file to validatePdfFile(file)
             }
 
@@ -162,27 +163,35 @@ private fun validateFlatEntryName(name: String) {
 private fun ZipFile.readBounded(entry: ZipEntry, limit: Long): ByteArray =
     getInputStream(entry).use { input ->
         val output = ByteArrayOutputStream()
-        input.copyBounded(output::write, minOf(limit, entry.size))
+        input.copyBounded(output::write, entry, limit)
         output.toByteArray()
     }
 
-private fun InputStream.copyBounded(destination: File, limit: Long) {
+private fun InputStream.copyBounded(destination: File, entry: ZipEntry) {
     FileOutputStream(destination).use { output ->
-        copyBounded(output::write, limit)
+        copyBounded(output::write, entry, MAX_PDF_BYTES)
         output.fd.sync()
     }
 }
 
-private inline fun InputStream.copyBounded(write: (ByteArray, Int, Int) -> Unit, limit: Long) {
+private inline fun InputStream.copyBounded(
+    write: (ByteArray, Int, Int) -> Unit,
+    entry: ZipEntry,
+    limit: Long,
+) {
     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    val checksum = CRC32()
     var copied = 0L
     while (true) {
         val read = read(buffer)
         if (read < 0) break
         copied += read
-        if (copied > limit) throw BackupException("Backup entry is too large")
+        if (copied > limit || copied > entry.size) throw BackupException("Backup entry is too large")
+        checksum.update(buffer, 0, read)
         write(buffer, 0, read)
     }
+    if (copied != entry.size) throw BackupException("Backup entry size does not match metadata")
+    if (checksum.value != entry.crc) throw BackupException("Backup entry checksum is invalid")
 }
 
 private fun copyScore(

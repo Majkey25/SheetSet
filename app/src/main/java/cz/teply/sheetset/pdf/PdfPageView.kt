@@ -7,6 +7,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -45,6 +47,7 @@ enum class ReaderTool {
 
 class PdfPageView(context: Context) : View(context) {
     private val executor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val pagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val handleStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -85,7 +88,7 @@ class PdfPageView(context: Context) : View(context) {
     private var downY = 0f
     private var lastX = 0f
     private var lastY = 0f
-    private var viewGestureActive = false
+    private var activeViewPointerId: Int? = null
     private var lastTapAt = 0L
     private var lastTapX = 0f
     private var lastTapY = 0f
@@ -112,7 +115,7 @@ class PdfPageView(context: Context) : View(context) {
         set(value) {
             if (field == value) return
             field = value
-            viewGestureActive = false
+            activeViewPointerId = null
             activeEditorPointerId = null
             eyedropperActive = false
             resetGesture()
@@ -321,7 +324,7 @@ class PdfPageView(context: Context) : View(context) {
         val centroidX = focus.first
         val centroidY = focus.second
         if (!multiTouchActive || event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
-            viewGestureActive = false
+            activeViewPointerId = null
             activeEditorPointerId = null
             resetGesture()
             eyedropperActive = false
@@ -420,7 +423,7 @@ class PdfPageView(context: Context) : View(context) {
     }
 
     private fun cancelPointerGesture() {
-        viewGestureActive = false
+        activeViewPointerId = null
         activeEditorPointerId = null
         multiTouchActive = false
         eyedropperActive = false
@@ -432,7 +435,7 @@ class PdfPageView(context: Context) : View(context) {
         annotation: SymbolAnnotation,
         page: RectF,
     ) {
-        val handle = annotation.resizeHandles().getValue(AnnotationHandle.ROTATION)
+        val handle = annotation.resizeHandles(page.width(), page.height()).getValue(AnnotationHandle.ROTATION)
         val x = page.left + handle.x * page.width()
         val y = page.top + handle.y * page.height()
         val radius = max(6f, min(page.width(), page.height()) * 0.007f)
@@ -492,33 +495,47 @@ class PdfPageView(context: Context) : View(context) {
         var clicked = false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                viewGestureActive = true
-                downX = event.x
-                downY = event.y
-                lastX = event.x
-                lastY = event.y
+                val index = event.actionIndex
+                activeViewPointerId = event.getPointerId(index)
+                downX = event.getX(index)
+                downY = event.getY(index)
+                lastX = downX
+                lastY = downY
             }
-            MotionEvent.ACTION_MOVE -> if (viewGestureActive && canPan()) {
-                viewport = viewport.copy(
-                    panX = viewport.panX + event.x - lastX,
-                    panY = viewport.panY + event.y - lastY,
-                )
-                lastX = event.x
-                lastY = event.y
-                clampPan()
-                invalidate()
+            MotionEvent.ACTION_MOVE -> {
+                val index = activeViewPointerId?.let(event::findPointerIndex) ?: -1
+                if (index < 0) {
+                    activeViewPointerId = null
+                } else if (canPan()) {
+                    val x = event.getX(index)
+                    val y = event.getY(index)
+                    viewport = viewport.copy(
+                        panX = viewport.panX + x - lastX,
+                        panY = viewport.panY + y - lastY,
+                    )
+                    lastX = x
+                    lastY = y
+                    clampPan()
+                    invalidate()
+                }
             }
-            MotionEvent.ACTION_UP -> if (viewGestureActive) {
-                viewGestureActive = false
-                clicked = finishViewGesture(event)
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.getPointerId(event.actionIndex) == activeViewPointerId) activeViewPointerId = null
+            }
+            MotionEvent.ACTION_UP -> {
+                val ownerId = activeViewPointerId
+                activeViewPointerId = null
+                if (event.getPointerId(event.actionIndex) == ownerId) {
+                    clicked = finishViewGesture(event.getX(event.actionIndex), event.getY(event.actionIndex))
+                }
             }
         }
         return clicked
     }
 
-    private fun finishViewGesture(event: MotionEvent): Boolean {
-        val dx = event.x - downX
-        val dy = event.y - downY
+    private fun finishViewGesture(x: Float, y: Float): Boolean {
+        val dx = x - downX
+        val dy = y - downY
         if (
             pageTurnSwipes &&
             viewport.zoom == 1f &&
@@ -534,7 +551,7 @@ class PdfPageView(context: Context) : View(context) {
         if (
             viewport.zoom > 1f &&
             now - lastTapAt < 300 &&
-            hypot(event.x - lastTapX, event.y - lastTapY) < 60f
+            hypot(x - lastTapX, y - lastTapY) < 60f
         ) {
             viewport = PdfViewport(zoom = 1f, panX = 0f, panY = 0f)
             lastTapAt = 0L
@@ -542,15 +559,15 @@ class PdfPageView(context: Context) : View(context) {
             return false
         }
         lastTapAt = now
-        lastTapX = event.x
-        lastTapY = event.y
+        lastTapX = x
+        lastTapY = y
         if (!pageTurnTaps) return true
         return when {
-            event.x < width / 3f -> {
+            x < width / 3f -> {
                 onPreviousPage()
                 false
             }
-            event.x > width * 2f / 3f -> {
+            x > width * 2f / 3f -> {
                 onNextPage()
                 false
             }
@@ -725,6 +742,7 @@ class PdfPageView(context: Context) : View(context) {
     private fun updateSelectionGesture(point: NormalizedPoint) {
         val original = gestureOriginal ?: return
         val start = dragStart ?: return
+        val page = bitmap ?: return
         val handle = resizeHandle
         gesturePreview = if (handle == null) {
             annotations.translateSelection(
@@ -733,7 +751,7 @@ class PdfPageView(context: Context) : View(context) {
                 point.y - start.y,
             ).filter { it.id in selectedAnnotationIds }.associateBy(PageAnnotation::id)
         } else {
-            mapOf(original.id to original.resized(handle, point))
+            mapOf(original.id to original.resized(handle, point, page.width.toFloat(), page.height.toFloat()))
         }
     }
 
@@ -963,7 +981,7 @@ class PdfPageView(context: Context) : View(context) {
             if (request != generation) return@execute
             try {
                 val rendered = render(file, requestedPage)
-                post {
+                val posted = mainHandler.post {
                     if (request == generation) {
                         bitmap?.recycle()
                         bitmap = rendered
@@ -976,8 +994,9 @@ class PdfPageView(context: Context) : View(context) {
                         rendered.recycle()
                     }
                 }
+                if (!posted) rendered.recycle()
             } catch (_: Exception) {
-                post { if (request == generation) onRenderError() }
+                mainHandler.post { if (request == generation) onRenderError() }
             }
         }
     }
@@ -1014,9 +1033,12 @@ class PdfPageView(context: Context) : View(context) {
     private fun PageAnnotation.handleAt(
         point: NormalizedPoint,
         radius: Float,
-    ): AnnotationHandle? = resizeHandles().minByOrNull { (_, handlePoint) ->
-        distance(point, handlePoint)
-    }?.takeIf { (_, handlePoint) -> distance(point, handlePoint) <= radius }?.key
+    ): AnnotationHandle? {
+        val page = bitmap ?: return null
+        return resizeHandles(page.width.toFloat(), page.height.toFloat()).minByOrNull { (_, handlePoint) ->
+            distance(point, handlePoint)
+        }?.takeIf { (_, handlePoint) -> distance(point, handlePoint) <= radius }?.key
+    }
 
     private fun DrawingPreset.normalizedWidth(): Float = when (kind) {
         DrawingPresetKind.HIGHLIGHTER -> width.normalizedHighlighterWidth()

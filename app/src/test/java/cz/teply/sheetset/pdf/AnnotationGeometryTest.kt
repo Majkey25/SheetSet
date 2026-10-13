@@ -178,6 +178,55 @@ class AnnotationGeometryTest {
     }
 
     @Test
+    fun closedShapeHitsIncludePaintedWidthAndPhysicalTolerance() {
+        for (kind in listOf(ShapeKind.RECTANGLE, ShapeKind.ELLIPSE)) {
+            val shape = rectangle("shape", 0.25f, 0.25f, 0.75f, 0.75f).copy(kind = kind, width = 0.2f)
+            for (scale in listOf(1f, 2f)) {
+                assertTrue(shape.hitTest(NormalizedPoint(0.17f, 0.5f), 0f, 1000f * scale, 2000f * scale))
+                assertTrue(shape.hitTest(NormalizedPoint(0.5f, 0.21f), 0f, 1000f * scale, 2000f * scale))
+                assertFalse(shape.hitTest(NormalizedPoint(0.5f, 0.19f), 0f, 1000f * scale, 2000f * scale))
+                assertTrue(shape.hitTest(NormalizedPoint(0.13f, 0.5f), 0.025f, 1000f * scale, 2000f * scale))
+                assertFalse(shape.hitTest(NormalizedPoint(0.12f, 0.5f), 0.025f, 1000f * scale, 2000f * scale))
+                assertTrue(shape.hitTest(NormalizedPoint(0.5f, 0.17f), 0f, 2000f * scale, 1000f * scale))
+                assertFalse(shape.hitTest(NormalizedPoint(0.19f, 0.5f), 0f, 2000f * scale, 1000f * scale))
+            }
+        }
+    }
+
+    @Test
+    fun rectangleStrokeUsesRoundCornersAndDoesNotOverselectThinEdges() {
+        val shape = rectangle("shape", 0.25f, 0.25f, 0.75f, 0.75f).copy(width = 0.2f)
+
+        assertTrue(shape.hitTest(NormalizedPoint(0.18f, 0.18f), 0f, 1000f, 1000f))
+        assertFalse(shape.hitTest(NormalizedPoint(0.17f, 0.17f), 0f, 1000f, 1000f))
+        assertTrue(shape.hitTest(NormalizedPoint(0.165f, 0.165f), 0.025f, 1000f, 1000f))
+        assertFalse(shape.hitTest(NormalizedPoint(0.16f, 0.16f), 0.025f, 1000f, 1000f))
+        val thin = shape.copy(width = 0.004f)
+        assertTrue(thin.hitTest(NormalizedPoint(0.2485f, 0.5f), 0f, 1000f, 2000f))
+        assertFalse(thin.hitTest(NormalizedPoint(0.2475f, 0.5f), 0f, 1000f, 2000f))
+    }
+
+    @Test
+    fun narrowEllipseHitsUseDistanceToCurveInsteadOfExpandedAxes() {
+        val ellipse = rectangle("ellipse", 0.1f, 0.475f, 0.9f, 0.525f)
+            .copy(kind = ShapeKind.ELLIPSE, width = 0.02f)
+
+        // Points are 9, 11, 24 and 26 pixels outward along the normal at the 45-degree parameter.
+        assertTrue(ellipse.hitTest(NormalizedPoint(0.783959f, 0.522143f), 0f, 1000f, 2000f))
+        assertFalse(ellipse.hitTest(NormalizedPoint(0.784207f, 0.523135f), 0f, 1000f, 2000f))
+        assertTrue(ellipse.hitTest(NormalizedPoint(0.785820f, 0.529585f), 0.015f, 1000f, 2000f))
+        assertFalse(ellipse.hitTest(NormalizedPoint(0.786068f, 0.530577f), 0.015f, 1000f, 2000f))
+        assertTrue(ellipse.hitTest(NormalizedPoint(0.5f, 0.5f), 0f, 1000f, 2000f))
+        assertTrue(
+            ellipse.copy(start = ellipse.end, end = ellipse.start)
+                .hitTest(NormalizedPoint(0.783959f, 0.522143f), 0f, 1000f, 2000f),
+        )
+        assertFalse(
+            ellipse.copy(end = ellipse.start).hitTest(ellipse.start, 0f, 1000f, 2000f),
+        )
+    }
+
+    @Test
     fun arrowHitIncludesBothPaintedHeadArmsWithoutOvershooting() {
         val arrow = rectangle("arrow", 0.25f, 0.5f, 0.75f, 0.5f).copy(kind = ShapeKind.ARROW, width = 0.08f)
 
@@ -280,6 +329,25 @@ class AnnotationGeometryTest {
             listOf(NormalizedRect(0.2f, 0.3f, 0.8f, 0.9f)),
             manualMarkup(NormalizedPoint(0.8f, 0.9f), NormalizedPoint(0.2f, 0.3f)),
         )
+    }
+
+    @Test
+    fun markupResizeAtPageBoundaryContainsFloatingPointRounding() {
+        val markup = MarkupAnnotation(
+            id = "markup",
+            kind = MarkupKind.UNDERLINE,
+            bounds = listOf(NormalizedRect(0.01f, 0.01f, 0.19f, 0.19f)),
+        )
+
+        val resized = markup.resized(
+            AnnotationHandle.BOTTOM_RIGHT,
+            NormalizedPoint(1f, 1f),
+        ) as MarkupAnnotation
+
+        assertEquals(listOf(NormalizedRect(0.01f, 0.01f, 1f, 1f)), resized.bounds)
+        val tiny = markup.copy(bounds = listOf(NormalizedRect(0f, 0f, Float.MIN_VALUE, Float.MIN_VALUE)))
+        val enlarged = tiny.resized(NormalizedPoint(0.2f, 0.3f), NormalizedPoint(0.8f, 0.9f)) as MarkupAnnotation
+        assertEquals(listOf(NormalizedRect(0.2f, 0.3f, 0.8f, 0.9f)), enlarged.bounds)
     }
 
     @Test
@@ -461,6 +529,78 @@ class AnnotationGeometryTest {
                 .rotationDegrees,
             0.001f,
         )
+    }
+
+    @Test
+    fun symbolRotationAndHandleUsePhysicalPageAxes() {
+        val symbol = SymbolAnnotation(
+            id = "symbol",
+            symbolId = "sharp",
+            center = NormalizedPoint(0.5f, 0.5f),
+            size = 0.2f,
+            rotationDegrees = 0f,
+            color = AnnotationColor.BLACK,
+            opacity = 255,
+        )
+
+        for ((width, height, point) in listOf(
+            Triple(1000f, 2000f, NormalizedPoint(0.6f, 0.45f)),
+            Triple(2000f, 1000f, NormalizedPoint(0.55f, 0.4f)),
+        )) {
+            val rotated = symbol.resized(AnnotationHandle.ROTATION, point, width, height) as SymbolAnnotation
+            assertEquals(45f, rotated.rotationDegrees, 0.001f)
+            val handle = rotated.resizeHandles(width, height).getValue(AnnotationHandle.ROTATION)
+            val dx = (handle.x - symbol.center.x) * width
+            val dy = (handle.y - symbol.center.y) * height
+            assertEquals(dx, -dy, 0.001f)
+            assertEquals(100f, kotlin.math.hypot(dx, dy), 0.001f)
+            assertEquals(
+                45f,
+                (symbol.resized(AnnotationHandle.ROTATION, handle, width, height) as SymbolAnnotation)
+                    .rotationDegrees,
+                0.001f,
+            )
+        }
+        assertSame(symbol, symbol.resized(AnnotationHandle.ROTATION, symbol.center, 1000f, 2000f))
+        assertThrows(IllegalArgumentException::class.java) { symbol.resizeHandles(0f, 1000f) }
+        assertThrows(IllegalArgumentException::class.java) {
+            symbol.resized(AnnotationHandle.ROTATION, symbol.center, 1000f, Float.NaN)
+        }
+    }
+
+    @Test
+    fun clippedRotationHandlePreservesAngleAtPageEdges() {
+        for ((width, height) in listOf(1000f to 1000f, 1000f to 2000f, 2000f to 1000f)) {
+            for ((center, angle) in listOf(
+                NormalizedPoint(0.98f, 0.5f) to 45f,
+                NormalizedPoint(0.5f, 0.02f) to 315f,
+                NormalizedPoint(0.02f, 0.5f) to 225f,
+                NormalizedPoint(0.5f, 0.98f) to 135f,
+                NormalizedPoint(1f, 0.5f) to 45f,
+                NormalizedPoint(1f, 0.5f) to 0f,
+                NormalizedPoint(0.5f, 0f) to 90f,
+            )) {
+                val symbol = SymbolAnnotation(
+                    id = "symbol",
+                    symbolId = "sharp",
+                    center = center,
+                    size = 0.2f,
+                    rotationDegrees = angle,
+                    color = AnnotationColor.BLACK,
+                    opacity = 255,
+                )
+                val handle = symbol.resizeHandles(width, height).getValue(AnnotationHandle.ROTATION)
+                val rotated = symbol.resized(AnnotationHandle.ROTATION, handle, width, height) as SymbolAnnotation
+
+                assertEquals(angle, rotated.rotationDegrees, 0.001f)
+                if (center.x == 1f && angle == 45f) {
+                    assertEquals(center, handle)
+                    assertSame(symbol, rotated)
+                } else {
+                    assertFalse(center == handle)
+                }
+            }
+        }
     }
 
     private fun rectangle(

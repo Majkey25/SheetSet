@@ -23,6 +23,33 @@ import java.util.UUID
 
 class PdfExporterTest {
     @Test
+    fun transparentArrowKeepsOpacityAtTip() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val typeface = requireNotNull(ResourcesCompat.getFont(context, R.font.noto_music_regular))
+        val bitmap = Bitmap.createBitmap(1_000, 1_000, Bitmap.Config.ARGB_8888)
+        try {
+            bitmap.eraseColor(Color.TRANSPARENT)
+            AnnotationRenderer.draw(
+                Canvas(bitmap),
+                ShapeAnnotation(
+                    id = "arrow",
+                    kind = ShapeKind.ARROW,
+                    start = NormalizedPoint(0.1f, 0.5f),
+                    end = NormalizedPoint(0.9f, 0.5f),
+                    width = 0.02f,
+                    opacity = 128,
+                ),
+                RectF(0f, 0f, 1_000f, 1_000f),
+                typeface,
+            )
+            assertEquals("Arrow body opacity", 128, Color.alpha(bitmap.getPixel(500, 500)))
+            assertEquals("Arrow tip opacity", 128, Color.alpha(bitmap.getPixel(900, 500)))
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    @Test
     fun exportKeepsPreviewTextWrappingAndStrokeWidthsAcrossPageScales() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val typeface = requireNotNull(ResourcesCompat.getFont(context, R.font.noto_music_regular))

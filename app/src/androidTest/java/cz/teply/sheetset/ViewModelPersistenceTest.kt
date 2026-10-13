@@ -27,6 +27,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -156,6 +157,103 @@ class ViewModelPersistenceTest {
             superseded.join()
         }
         assertEquals(1, viewModel.state.value.reader?.pageIndex)
+    }
+
+    @Test
+    fun delayedBookmarkRefreshPreservesLatestPositionAfterReaderCloses() = runBlocking {
+        instrumentation.runOnMainSync { viewModel.openScore(score) }
+        awaitState { it.reader != null && !it.loading }
+        val mutex = repositoryMutex()
+        mutex.lock()
+        try {
+            instrumentation.runOnMainSync {
+                viewModel.addBookmark("Keep this passage")
+                viewModel.nextPage(ReaderLayout.SINGLE)
+                viewModel.closeReader()
+            }
+        } finally {
+            mutex.unlock()
+        }
+        val mutationMutex = SheetSetViewModel::class.java.getDeclaredField("libraryMutationMutex")
+            .apply { isAccessible = true }.get(viewModel) as Mutex
+        withTimeout(5_000) { mutationMutex.lock() }
+        mutationMutex.unlock()
+
+        val savedScore = repository.load().scores.single()
+        assertEquals(1, savedScore.lastPageIndex)
+        assertEquals(1, savedScore.bookmarks.size)
+        val visibleScore = viewModel.state.value.catalog.scores.single()
+        assertEquals(savedScore, visibleScore)
+        instrumentation.runOnMainSync { viewModel.openScore(visibleScore) }
+        assertEquals(1, awaitState { it.reader != null && !it.loading }.reader?.pageIndex)
+    }
+
+    @Test
+    fun repeatedScoreOpenCannotOvertakeQueuedPositionSave() = runBlocking {
+        instrumentation.runOnMainSync { viewModel.createSetlist("Repeated score position") }
+        val setlistId = awaitState { !it.loading && it.catalog.setlists.size == 1 }.catalog.setlists.single().id
+        instrumentation.runOnMainSync { viewModel.addScores(setlistId, listOf(score.id, score.id)) }
+        awaitState { !it.loading && it.catalog.setlists.single().scoreIds.size == 2 }
+        instrumentation.runOnMainSync { viewModel.openSetlistScore(setlistId, 0) }
+        awaitState { it.reader != null && !it.loading }
+        val field = SheetSetViewModel::class.java.getDeclaredField("libraryMutationMutex")
+            .apply { isAccessible = true }
+        val mutex = field.get(viewModel) as Mutex
+        val lockCalls = AtomicInteger()
+        val openingQueued = CompletableDeferred<Unit>()
+        field.set(viewModel, object : Mutex by mutex {
+            override suspend fun lock(owner: Any?) {
+                if (lockCalls.incrementAndGet() == 2) openingQueued.complete(Unit)
+                mutex.lock(owner)
+            }
+        })
+        mutex.lock()
+        try {
+            val opening: Job
+            try {
+                instrumentation.runOnMainSync {
+                    viewModel.nextPage(ReaderLayout.SINGLE)
+                    viewModel.nextPage(ReaderLayout.SINGLE)
+                }
+                opening = readerOpenJob()
+                withTimeout(5_000) {
+                    // Release when opening queues correctly or incorrectly bypasses the pending save.
+                    select<Unit> {
+                        openingQueued.onAwait { }
+                        opening.onJoin { }
+                    }
+                }
+            } finally {
+                mutex.unlock()
+            }
+            withTimeout(5_000) {
+                opening.join()
+                mutex.lock()
+            }
+            mutex.unlock()
+            val reader = requireNotNull(viewModel.state.value.reader)
+            assertEquals(1, reader.scoreIndex)
+            assertEquals(0, reader.pageIndex)
+            assertEquals(0, repository.load().scores.single().lastPageIndex)
+            assertEquals(0, viewModel.state.value.catalog.scores.single().lastPageIndex)
+            assertFalse(viewModel.state.value.error)
+        } finally {
+            field.set(viewModel, mutex)
+        }
+    }
+
+    @Test
+    fun failedSecondImportStillPublishesFirstCommittedScore() = runBlocking {
+        val valid = File(root, "source.pdf")
+        val malformed = File(root, "malformed.pdf").apply { writeText("Not a PDF") }
+        instrumentation.runOnMainSync {
+            viewModel.importPdfs(listOf(Uri.fromFile(valid), Uri.fromFile(malformed)))
+        }
+        val failed = awaitState { it.error && !it.loading }
+        val committed = repository.load()
+        assertEquals(2, committed.scores.size)
+        assertEquals(committed, failed.catalog)
+        assertTrue(committed.scores.all { repository.pdfFile(it).isFile })
     }
 
     @Test

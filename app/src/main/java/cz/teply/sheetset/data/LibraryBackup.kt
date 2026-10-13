@@ -83,9 +83,11 @@ internal fun writeLibraryBackup(
             throw BackupException("Backup PDF page count changed")
         }
     }
+    val scoresById = catalog.scores.associateBy(Score::id)
     files.filter { it.parentFile?.name == "annotations" }.forEach { file ->
-        openAtomicFile(file)?.bufferedReader(Charsets.UTF_8)?.use { AnnotationJson.decode(it.readText()) }
-            ?: throw BackupException("Annotations file is missing")
+        openAtomicFile(file)?.bufferedReader(Charsets.UTF_8)?.use {
+            validateAnnotationPages(it.readText(), scoresById.getValue(file.nameWithoutExtension).pageCount)
+        } ?: throw BackupException("Annotations file is missing")
     }
     var totalBytes = 0L
     ZipOutputStream(BufferedOutputStream(BackupOutputStream(destination))).use { zip ->
@@ -193,7 +195,7 @@ private fun validateStaging(staging: File): BackupMetadata {
         throw BackupException("Backup manifest or catalog is missing")
     }
     val manifest = JSONObject(manifestFile.readText(Charsets.UTF_8))
-    val version = manifest.optInt("version", -1)
+    val version = manifest.requiredInt("version")
     if (manifest.optString("format") != BACKUP_FORMAT || version !in 1..BACKUP_VERSION) {
         throw BackupException("Unsupported backup format")
     }
@@ -216,15 +218,22 @@ private fun validateStaging(staging: File): BackupMetadata {
         val pageCount = validatePdfFile(file)
         if (pageCount != score.pageCount) throw BackupException("Backup PDF page count changed")
     }
-    val scoreIds = catalog.scores.map(Score::id).toSet()
+    val scoresById = catalog.scores.associateBy(Score::id)
     File(staging, "annotations").listFiles().orEmpty().filter(File::isFile).forEach { file ->
         val scoreId = file.name.removeSuffix(".json")
-        if (file.name != "$scoreId.json" || scoreId !in scoreIds) {
+        val score = scoresById[scoreId]
+        if (file.name != "$scoreId.json" || score == null) {
             throw BackupException("Backup contains orphan annotations")
         }
-        AnnotationJson.decode(file.readText(Charsets.UTF_8))
+        validateAnnotationPages(file.readText(Charsets.UTF_8), score.pageCount)
     }
     return BackupMetadata(settings, languageTag)
+}
+
+private fun validateAnnotationPages(raw: String, pageCount: Int) {
+    if (AnnotationJson.decode(raw).pages.keys.any { it !in 0 until pageCount }) {
+        throw BackupException("Backup contains annotations outside PDF pages")
+    }
 }
 
 private fun swapDirectories(root: File, staging: File, previous: File) {
